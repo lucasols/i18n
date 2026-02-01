@@ -2,7 +2,7 @@
 import eslint from '@eslint/js';
 import { extendedLintPlugin } from '@ls-stack/extended-lint';
 import eslintUnicornPlugin from 'eslint-plugin-unicorn';
-import vitest from 'eslint-plugin-vitest';
+import vitest from '@vitest/eslint-plugin';
 import tseslint from 'typescript-eslint';
 
 const isCI = process.env.CI === 'true';
@@ -17,12 +17,15 @@ export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
   {
+    ignores: ['**/dist/**', '**/node_modules/**'],
+  },
+  {
     linterOptions: {
       reportUnusedDisableDirectives: true,
     },
     languageOptions: {
       parserOptions: {
-        project: './tsconfig.json',
+        projectService: true,
         tsconfigRootDir: import.meta.dirname,
       },
       globals: { process: true },

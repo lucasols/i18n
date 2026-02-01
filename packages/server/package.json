@@ -1,0 +1,44 @@
+{
+  "name": "@ls-stack/server-i18n",
+  "description": "Super simple server-side i18n library",
+  "version": "0.5.0",
+  "license": "MIT",
+  "scripts": {
+    "tsc": "tsc -p tsconfig.prod.json",
+    "build:no-test": "tsup",
+    "test-cli:check": "pnpm build:no-test && node dist/cli.js --default en --config-dir ../../cli-test/config --src-dir ../../cli-test/src",
+    "test-cli:fix": "pnpm test-cli:check --fix"
+  },
+  "files": [
+    "dist"
+  ],
+  "bin": {
+    "ls-stack-i18n": "./dist/cli.js"
+  },
+  "repository": "https://github.com/lucasols/i18n",
+  "author": "Lucas Santos",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    }
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=21.5.0"
+  },
+  "dependencies": {
+    "@ls-stack/i18n-core": "workspace:*",
+    "@ls-stack/utils": "^3.3.0",
+    "type-flag": "^3.0.0"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  },
+  "peerDependencies": {
+    "typescript": "^5.8.3"
+  }
+}

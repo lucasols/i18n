@@ -1,0 +1,33 @@
+{
+  "name": "@ls-stack/i18n-core",
+  "private": true,
+  "version": "0.5.0",
+  "description": "Shared i18n core logic",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "types": "./dist/index.d.ts"
+    },
+    "./cli": {
+      "import": "./dist/cli/index.js",
+      "types": "./dist/cli/index.d.ts"
+    }
+  },
+  "scripts": {
+    "tsc": "tsc -p tsconfig.prod.json",
+    "build:no-test": "tsup"
+  },
+  "devDependencies": {
+    "typescript": "^5.8.3"
+  },
+  "peerDependencies": {
+    "typescript": "^5.8.3"
+  },
+  "dependencies": {
+    "readdirp": "^4.1.2"
+  }
+}

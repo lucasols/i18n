@@ -1,8 +1,9 @@
-import { expect, test } from 'vitest';
-
 import { runCmd } from '@ls-stack/utils/runShellCmd';
 import { readFileSync, writeFileSync } from 'fs';
 import path from 'path';
+import { expect, test } from 'vitest';
+
+const rootDir = path.resolve(import.meta.dirname, '../../..');
 
 async function run({
   fixConfigs,
@@ -11,22 +12,23 @@ async function run({
   fixConfigs?: boolean;
   defaultLocale?: string;
 } = {}) {
+  const cliPath = path.join(rootDir, 'packages/server/src/cli.ts');
   const { out, error } = await runCmd(
-    null,
+    rootDir,
     [
       'pnpm',
       'exec',
-      'tsm',
+      'tsx',
       '--no-warnings',
-      'src/cli.ts',
+      cliPath,
       '--config-dir',
-      './cli-test/config',
+      path.join(rootDir, 'cli-test/config'),
       '--src-dir',
-      './cli-test/src',
+      path.join(rootDir, 'cli-test/src'),
       '--no-color',
       fixConfigs ? '--fix' : '',
       defaultLocale ? `--default` : '',
-      defaultLocale || '',
+      defaultLocale ?? '',
     ].filter(Boolean),
     { silent: true },
   );
@@ -41,32 +43,26 @@ async function run({
 }
 
 function getPtConfig() {
-  return readFileSync(
-    path.join(process.cwd(), 'cli-test/config/pt.json'),
-    'utf-8',
-  );
+  return readFileSync(path.join(rootDir, 'cli-test/config/pt.json'), 'utf-8');
 }
 
 function getEnConfig() {
-  return readFileSync(
-    path.join(process.cwd(), 'cli-test/config/en.json'),
-    'utf-8',
-  );
+  return readFileSync(path.join(rootDir, 'cli-test/config/en.json'), 'utf-8');
 }
 
 function updateConfigFiles({
   pt,
   en,
 }: {
-  pt: Record<string, any>;
-  en: Record<string, any>;
+  pt: Record<string, unknown>;
+  en: Record<string, unknown>;
 }) {
   writeFileSync(
-    path.join(process.cwd(), 'cli-test/config/pt.json'),
+    path.join(rootDir, 'cli-test/config/pt.json'),
     JSON.stringify(pt, null, 2),
   );
   writeFileSync(
-    path.join(process.cwd(), 'cli-test/config/en.json'),
+    path.join(rootDir, 'cli-test/config/en.json'),
     JSON.stringify(en, null, 2),
   );
 }

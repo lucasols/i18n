@@ -1,7 +1,6 @@
-/* eslint-disable @typescript-eslint/no-unsafe-enum-comparison */
 import ts from 'typescript';
 
-function getHashFromTemplate(template: ts.TemplateLiteral) {
+function getHashFromTemplate(template: ts.TemplateLiteral): string | null {
   if (ts.isNoSubstitutionTemplateLiteral(template)) {
     return template.text;
   }
@@ -53,24 +52,27 @@ export function getI18nUsagesInCode(
     if (ts.isTaggedTemplateExpression(node)) {
       const tteNode = node;
 
+      const isTripleUnderscore = (id: ts.Identifier | ts.PrivateIdentifier) =>
+        ts.idText(id as ts.Identifier) === '___';
+      const isTripleUnderscoreP = (id: ts.Identifier | ts.PrivateIdentifier) =>
+        ts.idText(id as ts.Identifier) === '___p';
+
       if (
-        (ts.isIdentifier(tteNode.tag) && tteNode.tag.escapedText === '___') ||
+        (ts.isIdentifier(tteNode.tag) && isTripleUnderscore(tteNode.tag)) ||
         (ts.isPropertyAccessExpression(tteNode.tag) &&
-          tteNode.tag.name.escapedText === '___')
+          isTripleUnderscore(tteNode.tag.name))
       ) {
         const template = tteNode.template;
 
         const hash = getHashFromTemplate(template);
 
         if (hash) stringTranslations.add(hash);
-      }
-      //
-      else if (ts.isCallExpression(tteNode.tag)) {
+      } else if (ts.isCallExpression(tteNode.tag)) {
         if (
           (ts.isIdentifier(tteNode.tag.expression) &&
-            tteNode.tag.expression.escapedText === '___p') ||
+            isTripleUnderscoreP(tteNode.tag.expression)) ||
           (ts.isPropertyAccessExpression(tteNode.tag.expression) &&
-            tteNode.tag.expression.name.escapedText === '___p')
+            isTripleUnderscoreP(tteNode.tag.expression.name))
         ) {
           const hash = getHashFromTemplate(tteNode.template);
 

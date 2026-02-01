@@ -1,5 +1,5 @@
-import { test, describe, expect, beforeAll } from 'vitest';
-import { i18nitialize } from '../src/main.js';
+import { beforeAll, describe, expect, test } from 'vitest';
+import { i18nitialize } from '../src/index.js';
 
 let i18n = i18nitialize({
   locales: {
@@ -116,7 +116,7 @@ describe('translation', () => {
       const { __p } = i18n.with('pt');
 
       expect(__p(1)`# unknown`).toBe('# unknown');
-    })
+    });
 
     test('using invalid method should throw an error', () => {
       const { __ } = i18n.with('pt');

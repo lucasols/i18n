@@ -4,11 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-A simple TypeScript i18n library (`@ls-stack/i18n`) that provides:
-- Tagged template literal translations using `__` and `__p` methods
-- Pluralization support with zero/one/+2/many variants
-- Translation variations using `~~` suffix syntax
-- CLI tool for checking/fixing translation files
+A TypeScript i18n library monorepo containing three packages:
+- **@ls-stack/i18n-core** (internal, not published) - Shared core logic
+- **@ls-stack/server-i18n** - Server-side i18n with sync loading
+- **@ls-stack/i18n** - Browser/React i18n with async loading
+
+## Monorepo Structure
+
+```
+i18n/
+├── packages/
+│   ├── core/           # Shared logic (types, hash, interpolation, pluralization, CLI)
+│   ├── server/         # Server-side i18n (@ls-stack/server-i18n)
+│   └── browser/        # Browser/React i18n (@ls-stack/i18n)
+├── cli-test/           # CLI test fixtures
+├── pnpm-workspace.yaml
+├── vitest.workspace.ts
+└── eslint.config.js
+```
 
 ## Commands
 
@@ -20,47 +33,43 @@ pnpm test
 pnpm test:run
 
 # Run a single test file
-pnpm vitest run tests/translation.test.ts
+pnpm vitest run packages/server/tests/translation.test.ts
 
 # Lint (type-check + ESLint)
 pnpm lint
 
-# Type-check only
-pnpm tsc
-
-# ESLint only
-pnpm eslint
-
-# Build (runs tests and lint first)
+# Build all packages (runs tests and lint first)
 pnpm build
 
 # Build without tests
 pnpm build:no-test
 
-# Test CLI tool
-pnpm test-cli:check
-pnpm test-cli:fix
+# Test CLI tool (from server package)
+pnpm --filter @ls-stack/server-i18n test-cli:check
+pnpm --filter @ls-stack/server-i18n test-cli:fix
 ```
 
-## Architecture
+## Key Features
 
-### Library (src/main.ts)
-- `i18nitialize()` - Initialize with locale configurations, returns object with `with(localeId)` method
-- `I18n` class - Provides `__` for simple translations and `__p(num)` for pluralization
-- Translations use template literal hashes as keys (e.g., `"hello {1}"` for `__\`hello ${name}\``)
+### Server Package (@ls-stack/server-i18n)
+- `i18nitialize(options).with(localeId)` returns `I18n` class with `__` and `__p` methods
+- Sync loading, translations passed directly
+- CLI binary: `ls-stack-i18n`
 
-### CLI (src/cli.ts)
-- Binary: `ls-stack-i18n`
-- Scans source files for `___` and `___p` tagged templates (note: triple underscore in source, but methods are `__` and `__p`)
-- Validates JSON translation files in config directory against found usages
-- Options: `--config-dir`, `--src-dir`, `--default`, `--fix`, `--no-color`
-
-### Translation Parser (src/findMissingTranslations.ts)
-- Uses TypeScript compiler API to parse source files
-- Extracts translation hashes from tagged template expressions
-- Identifies `___` (string) and `___p()` (plural) usages
+### Browser Package (@ls-stack/i18n)
+- Global `__`, `__p`, `__jsx`, `__pjsx` functions
+- `i18nitialize` returns controller: `{ onChange, setLocale, getActiveLocale, isLoaded, getRegionLocale }`
+- Async lazy-loading with retry
+- Intl formatters: `__date`, `__num`, `__currency`, `__relativeTime`, `__relativeTimeFromNow`, `__list`, `__formattedTimeDuration`
+- localStorage persistence
+- CLI binary: `ls-stack-i18n`
 
 ### Translation Hash Format
-- Simple: Template string with `{n}` placeholders for interpolations (e.g., `"hello {1}"`)
-- Plural: Same format, translations are objects with `zero`, `one`, `+2`, `many`, `manyLimit` keys
-- Variations: Append `~~variant` to create alternative translations (stripped from fallback)
+- Simple: Template string with `{n}` placeholders (e.g., `"hello {1}"`)
+- Plural: Objects with `zero`, `one`, `+2`, `many`, `manyLimit` keys
+- Variations: Append `~~variant` to create alternative translations
+
+### CLI Tool
+- Scans source files for `___` and `___p` tagged templates (triple underscore in source)
+- Validates JSON translation files against found usages
+- Options: `--config-dir`, `--src-dir`, `--default`, `--fix`, `--no-color`
