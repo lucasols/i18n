@@ -1,7 +1,7 @@
 import { readFileSync, writeFileSync } from 'fs';
 import path from 'path';
 import { readdirp } from 'readdirp';
-import { getI18nUsagesInCode } from './findMissingTranslations.js';
+import { getI18nUsagesInCode } from './findMissingTranslations';
 
 export type ValidationOptions = {
   configDir: string;

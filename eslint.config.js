@@ -1,8 +1,8 @@
 // @ts-check
 import eslint from '@eslint/js';
 import { extendedLintPlugin } from '@ls-stack/extended-lint';
-import eslintUnicornPlugin from 'eslint-plugin-unicorn';
 import vitest from '@vitest/eslint-plugin';
+import eslintUnicornPlugin from 'eslint-plugin-unicorn';
 import tseslint from 'typescript-eslint';
 
 const isCI = process.env.CI === 'true';
@@ -16,9 +16,6 @@ const ERROR_IN_CI_ONLY = isCI ? ERROR : 0;
 export default tseslint.config(
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
-  {
-    ignores: ['**/dist/**', '**/node_modules/**'],
-  },
   {
     linterOptions: {
       reportUnusedDisableDirectives: true,
@@ -121,5 +118,8 @@ export default tseslint.config(
       /* extended-lint */
       '@lucasols/extended-lint/no-unused-type-props-in-args': ERROR_IN_CI,
     },
+  },
+  {
+    ignores: ['**/dist/**', '**/node_modules/**'],
   },
 );

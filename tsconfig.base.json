@@ -2,8 +2,8 @@
   "compileOnSave": false,
   "compilerOptions": {
     "target": "ESNext",
-    "moduleResolution": "NodeNext",
-    "module": "NodeNext",
+    "moduleResolution": "bundler",
+    "module": "ESNext",
     "jsx": "preserve",
     "skipLibCheck": true,
     "noEmit": true,

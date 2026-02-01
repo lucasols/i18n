@@ -1,5 +1,5 @@
 import type { Locale } from '@ls-stack/i18n-core';
-import type { I18nState, LocaleConfig } from './types.js';
+import type { I18nState, LocaleConfig } from './types';
 
 let localesConfig: LocaleConfig<string>[] = [];
 let state: I18nState<string> = {

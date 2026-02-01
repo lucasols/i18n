@@ -6,8 +6,8 @@ import {
   getState,
   setLocale,
   subscribe,
-} from './state.js';
-import type { I18nController, LocaleConfig } from './types.js';
+} from './state';
+import type { I18nController, LocaleConfig } from './types';
 
 export type I18nOptions<T extends string> = {
   locales: LocaleConfig<T>[];
@@ -53,7 +53,7 @@ export function i18nitialize<T extends string>(
   return controller;
 }
 
-export { __, __jsx, __p, __pjsx } from './translate.js';
+export { __, __jsx, __p, __pjsx } from './translate';
 export {
   __currency,
   __date,
@@ -62,7 +62,7 @@ export {
   __num,
   __relativeTime,
   __relativeTimeFromNow,
-} from './formatters.js';
+} from './formatters';
 
 export type {
   I18nController,
@@ -73,4 +73,4 @@ export type {
   LocaleLoader,
   PluralTranslation,
   TranslationValue,
-} from './types.js';
+} from './types';

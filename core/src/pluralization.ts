@@ -1,4 +1,4 @@
-import type { PluralTranslation } from './types.js';
+import type { PluralTranslation } from './types';
 
 export function selectPluralForm(
   num: number,

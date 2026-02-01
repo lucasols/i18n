@@ -7,17 +7,18 @@ describe('browser translation', () => {
 
   describe('basic translation with async loading', () => {
     test('before loading, returns fallback', async () => {
-      const { __, i18nitialize } = await import('../src/main.js');
+      const { __, i18nitialize } = await import('../src/main');
 
       i18nitialize({
         locales: [
           {
             id: 'pt',
-            loader: async () => ({
-              default: {
-                hello: 'olá',
-              },
-            }),
+            loader: () =>
+              Promise.resolve({
+                default: {
+                  hello: 'olá',
+                },
+              }),
           },
         ],
       });
@@ -26,17 +27,18 @@ describe('browser translation', () => {
     });
 
     test('after loading, returns translation', async () => {
-      const { __, i18nitialize } = await import('../src/main.js');
+      const { __, i18nitialize } = await import('../src/main');
 
       const controller = i18nitialize({
         locales: [
           {
             id: 'pt',
-            loader: async () => ({
-              default: {
-                hello: 'olá',
-              },
-            }),
+            loader: () =>
+              Promise.resolve({
+                default: {
+                  hello: 'olá',
+                },
+              }),
           },
         ],
       });
@@ -49,17 +51,18 @@ describe('browser translation', () => {
 
   describe('interpolation', () => {
     test('simple interpolation', async () => {
-      const { __, i18nitialize } = await import('../src/main.js');
+      const { __, i18nitialize } = await import('../src/main');
 
       const controller = i18nitialize({
         locales: [
           {
             id: 'pt',
-            loader: async () => ({
-              default: {
-                'hello {1}': 'olá {1}',
-              },
-            }),
+            loader: () =>
+              Promise.resolve({
+                default: {
+                  'hello {1}': 'olá {1}',
+                },
+              }),
           },
         ],
       });
@@ -72,23 +75,24 @@ describe('browser translation', () => {
 
   describe('pluralization', () => {
     test('plural translations work after loading', async () => {
-      const { __p, i18nitialize } = await import('../src/main.js');
+      const { __p, i18nitialize } = await import('../src/main');
 
       const controller = i18nitialize({
         locales: [
           {
             id: 'pt',
-            loader: async () => ({
-              default: {
-                '# apples': {
-                  one: 'uma maçã',
-                  '+2': '# maçãs',
-                  zero: 'nenhuma maçã',
-                  many: 'muitas maçãs',
-                  manyLimit: 10,
+            loader: () =>
+              Promise.resolve({
+                default: {
+                  '# apples': {
+                    one: 'uma maçã',
+                    '+2': '# maçãs',
+                    zero: 'nenhuma maçã',
+                    many: 'muitas maçãs',
+                    manyLimit: 10,
+                  },
                 },
-              },
-            }),
+              }),
           },
         ],
       });
@@ -104,17 +108,17 @@ describe('browser translation', () => {
 
   describe('controller', () => {
     test('onChange notifies on locale change', async () => {
-      const { i18nitialize } = await import('../src/main.js');
+      const { i18nitialize } = await import('../src/main');
 
       const controller = i18nitialize({
         locales: [
           {
             id: 'en',
-            loader: async () => ({ default: {} }),
+            loader: () => Promise.resolve({ default: {} }),
           },
           {
             id: 'pt',
-            loader: async () => ({ default: { hello: 'olá' } }),
+            loader: () => Promise.resolve({ default: { hello: 'olá' } }),
           },
         ],
       });
@@ -139,13 +143,13 @@ describe('formatters', () => {
   });
 
   test('__date formats dates', async () => {
-    const { __date, i18nitialize } = await import('../src/main.js');
+    const { __date, i18nitialize } = await import('../src/main');
 
     const controller = i18nitialize({
       locales: [
         {
           id: 'en',
-          loader: async () => ({ default: {} }),
+          loader: () => Promise.resolve({ default: {} }),
           regionLocale: 'en-US',
           currencyCode: 'USD',
         },
@@ -159,13 +163,13 @@ describe('formatters', () => {
   });
 
   test('__num formats numbers', async () => {
-    const { __num, i18nitialize } = await import('../src/main.js');
+    const { __num, i18nitialize } = await import('../src/main');
 
     const controller = i18nitialize({
       locales: [
         {
           id: 'en',
-          loader: async () => ({ default: {} }),
+          loader: () => Promise.resolve({ default: {} }),
           regionLocale: 'en-US',
         },
       ],
@@ -177,13 +181,13 @@ describe('formatters', () => {
   });
 
   test('__currency formats currency', async () => {
-    const { __currency, i18nitialize } = await import('../src/main.js');
+    const { __currency, i18nitialize } = await import('../src/main');
 
     const controller = i18nitialize({
       locales: [
         {
           id: 'en',
-          loader: async () => ({ default: {} }),
+          loader: () => Promise.resolve({ default: {} }),
           regionLocale: 'en-US',
           currencyCode: 'USD',
         },
@@ -196,13 +200,13 @@ describe('formatters', () => {
   });
 
   test('__relativeTime formats relative time', async () => {
-    const { __relativeTime, i18nitialize } = await import('../src/main.js');
+    const { __relativeTime, i18nitialize } = await import('../src/main');
 
     const controller = i18nitialize({
       locales: [
         {
           id: 'en',
-          loader: async () => ({ default: {} }),
+          loader: () => Promise.resolve({ default: {} }),
           regionLocale: 'en-US',
         },
       ],
@@ -214,13 +218,13 @@ describe('formatters', () => {
   });
 
   test('__list formats lists', async () => {
-    const { __list, i18nitialize } = await import('../src/main.js');
+    const { __list, i18nitialize } = await import('../src/main');
 
     const controller = i18nitialize({
       locales: [
         {
           id: 'en',
-          loader: async () => ({ default: {} }),
+          loader: () => Promise.resolve({ default: {} }),
           regionLocale: 'en-US',
         },
       ],
@@ -232,7 +236,7 @@ describe('formatters', () => {
   });
 
   test('__formattedTimeDuration formats duration', async () => {
-    const { __formattedTimeDuration } = await import('../src/main.js');
+    const { __formattedTimeDuration } = await import('../src/main');
 
     const duration = 3661000; // 1 hour, 1 minute, 1 second
     const formatted = __formattedTimeDuration(duration);
@@ -240,7 +244,7 @@ describe('formatters', () => {
   });
 
   test('__formattedTimeDuration with days', async () => {
-    const { __formattedTimeDuration } = await import('../src/main.js');
+    const { __formattedTimeDuration } = await import('../src/main');
 
     const duration = 90061000; // 1 day, 1 hour, 1 minute, 1 second
     const formatted = __formattedTimeDuration(duration);

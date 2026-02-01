@@ -1,4 +1,4 @@
-import { getActiveLocaleConfig } from './state.js';
+import { getActiveLocaleConfig } from './state';
 
 function getRegionLocale(): string {
   const config = getActiveLocaleConfig();

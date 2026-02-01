@@ -4,8 +4,8 @@ import {
   selectPluralForm,
 } from '@ls-stack/i18n-core';
 import { createElement, Fragment, type ReactNode } from 'react';
-import { getState } from './state.js';
-import type { JsxInterpolation } from './types.js';
+import { getState } from './state';
+import type { JsxInterpolation } from './types';
 
 export function __(
   strings: TemplateStringsArray,
