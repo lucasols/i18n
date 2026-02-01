@@ -5,13 +5,8 @@ import vitest from '@vitest/eslint-plugin';
 import eslintUnicornPlugin from 'eslint-plugin-unicorn';
 import tseslint from 'typescript-eslint';
 
-const isCI = process.env.CI === 'true';
-
 const OFF = 0;
-const WARN = 1;
 const ERROR = 2;
-const ERROR_IN_CI = isCI ? ERROR : WARN;
-const ERROR_IN_CI_ONLY = isCI ? ERROR : 0;
 
 export default tseslint.config(
   eslint.configs.recommended,
@@ -36,20 +31,20 @@ export default tseslint.config(
     },
 
     rules: {
-      'no-warning-comments': [ERROR_IN_CI, { terms: ['FIX:'] }],
-      'no-constant-binary-expression': ERROR_IN_CI,
-      'object-shorthand': ERROR_IN_CI,
-      'no-useless-rename': ERROR_IN_CI,
-      'no-param-reassign': ERROR_IN_CI,
-      'prefer-template': ERROR_IN_CI,
-      'prefer-const': [ERROR_IN_CI, { destructuring: 'all' }],
+      'no-warning-comments': [ERROR, { terms: ['FIX:'] }],
+      'no-constant-binary-expression': ERROR,
+      'object-shorthand': ERROR,
+      'no-useless-rename': ERROR,
+      'no-param-reassign': ERROR,
+      'prefer-template': ERROR,
+      'prefer-const': [ERROR, { destructuring: 'all' }],
 
       'no-prototype-builtins': OFF,
       'no-inner-declarations': OFF,
       'no-undef': OFF,
-      'no-console': [ERROR_IN_CI, { allow: ['warn', 'error', 'info'] }],
+      'no-console': [ERROR, { allow: ['warn', 'error', 'info'] }],
       'no-restricted-imports': [
-        ERROR_IN_CI,
+        ERROR,
         {
           patterns: [
             {
@@ -60,7 +55,7 @@ export default tseslint.config(
         },
       ],
       'no-restricted-syntax': [
-        ERROR_IN_CI_ONLY,
+        ERROR,
         {
           selector: 'CallExpression[callee.property.name="only"]',
           message: 'No test.only',
@@ -71,12 +66,12 @@ export default tseslint.config(
         },
       ],
       'no-implicit-coercion': [
-        ERROR_IN_CI,
+        ERROR,
         { disallowTemplateShorthand: true, allow: ['!!'] },
       ],
 
       /* typescript */
-      '@typescript-eslint/no-unnecessary-condition': ERROR_IN_CI,
+      '@typescript-eslint/no-unnecessary-condition': ERROR,
       '@typescript-eslint/naming-convention': [
         'error',
         {
@@ -84,9 +79,9 @@ export default tseslint.config(
           format: ['PascalCase'],
         },
       ],
-      '@typescript-eslint/no-unused-expressions': ERROR_IN_CI,
+      '@typescript-eslint/no-unused-expressions': ERROR,
       '@typescript-eslint/no-unused-vars': [
-        ERROR_IN_CI,
+        ERROR,
         {
           argsIgnorePattern: '^_',
           ignoreRestSiblings: true,
@@ -95,25 +90,14 @@ export default tseslint.config(
         },
       ],
       '@typescript-eslint/no-shadow': [
-        ERROR_IN_CI,
+        ERROR,
         { ignoreOnInitialization: true, allow: ['expect'] },
       ],
-      '@typescript-eslint/no-unsafe-call': ERROR_IN_CI,
-      '@typescript-eslint/only-throw-error': OFF,
-      '@typescript-eslint/no-non-null-assertion': OFF,
-      '@typescript-eslint/no-empty-function': OFF,
-      '@typescript-eslint/no-explicit-any': OFF,
-      '@typescript-eslint/no-floating-promises': OFF,
-      '@typescript-eslint/no-unsafe-assignment': OFF,
-      '@typescript-eslint/no-misused-promises': OFF,
-      '@typescript-eslint/restrict-template-expressions': OFF,
-      '@typescript-eslint/unbound-method': OFF,
-      '@typescript-eslint/no-unsafe-return': OFF,
-      '@typescript-eslint/no-unsafe-member-access': OFF,
+      '@typescript-eslint/no-unsafe-call': ERROR,
 
       /* vitest */
-      'vitest/expect-expect': ERROR_IN_CI,
-      'vitest/no-identical-title': ERROR_IN_CI,
+      'vitest/expect-expect': ERROR,
+      'vitest/no-identical-title': ERROR,
 
       /* extended-lint */
       '@lucasols/extended-lint/no-unused-type-props-in-args': ERROR,

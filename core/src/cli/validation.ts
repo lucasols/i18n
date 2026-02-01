@@ -1,6 +1,7 @@
+import { __LEGIT_CAST__ } from '@ls-stack/utils/saferTyping';
 import { readFileSync, writeFileSync } from 'fs';
 import path from 'path';
-import { readdirp } from 'readdirp';
+import { readdirp, type EntryInfo } from 'readdirp';
 import { getI18nUsagesInCode } from './findMissingTranslations';
 
 export type ValidationOptions = {
@@ -46,13 +47,15 @@ export async function validateTranslations(
   const allPluralTranslationHashs = new Set<string>();
   let hasError = false;
 
-  const srcPath = path.isAbsolute(srcDir) ? srcDir : path.join(process.cwd(), srcDir);
-  for await (const entry of readdirp(srcPath, {
+  const srcPath =
+    path.isAbsolute(srcDir) ? srcDir : path.join(process.cwd(), srcDir);
+  for await (const entry_ of readdirp(srcPath, {
     fileFilter: (entry) =>
       entry.path.endsWith('.ts') || entry.path.endsWith('.tsx'),
     directoryFilter: (entry) =>
       !entry.path.includes('node_modules') && !entry.path.includes('.git'),
   })) {
+    const entry = entry_ as EntryInfo;
     const fullPath: string = entry.fullPath;
     const basename: string = entry.basename;
 
@@ -77,19 +80,23 @@ export async function validateTranslations(
     return { hasError: true };
   }
 
-  const configPath = path.isAbsolute(configDir) ? configDir : path.join(process.cwd(), configDir);
-  for await (const entry of readdirp(configPath, {
+  const configPath =
+    path.isAbsolute(configDir) ? configDir : (
+      path.join(process.cwd(), configDir)
+    );
+  for await (const entry_ of readdirp(configPath, {
     fileFilter: (entry) => entry.path.endsWith('.json'),
     directoryFilter: (entry) =>
       !entry.path.includes('node_modules') && !entry.path.includes('.git'),
   })) {
+    const entry = entry_ as EntryInfo;
     const invalidPluralTranslations: string[] = [];
 
     const fullPath: string = entry.fullPath;
     const basename: string = entry.basename;
 
-    const localeTranslations: Record<string, TranslationValue> = JSON.parse(
-      readFileSync(fullPath, 'utf-8'),
+    const localeTranslations = __LEGIT_CAST__<Record<string, TranslationValue>>(
+      JSON.parse(readFileSync(fullPath, 'utf-8')),
     );
 
     const isDefaultLocale = basename === `${defaultLocale}.json`;
@@ -150,15 +157,17 @@ export async function validateTranslations(
           const parts: string[] = [];
 
           if (missingHashs.size) {
-            const countStr = noColor
-              ? String(missingHashs.size)
+            const countStr =
+              noColor ?
+                String(missingHashs.size)
               : colorFn('red', String(missingHashs.size));
             parts.push(`missing ${countStr}`);
           }
 
           if (extraHashs.size) {
-            const countStr = noColor
-              ? String(extraHashs.size)
+            const countStr =
+              noColor ?
+                String(extraHashs.size)
               : colorFn('red', String(extraHashs.size));
             parts.push(`extra ${countStr}`);
           }
@@ -177,14 +186,19 @@ export async function validateTranslations(
         } else {
           delete localeTranslations[''];
 
-          if (!localeTranslations[MISSING_TRANSLATIONS_KEY] && missingHashs.size > 0) {
-            localeTranslations[MISSING_TRANSLATIONS_KEY] = MISSING_TRANSLATION_VALUE;
+          if (
+            !localeTranslations[MISSING_TRANSLATIONS_KEY] &&
+            missingHashs.size > 0
+          ) {
+            localeTranslations[MISSING_TRANSLATIONS_KEY] =
+              MISSING_TRANSLATION_VALUE;
           }
 
           if (missingHashs.size > 0) {
             for (const hash of missingHashs) {
-              localeTranslations[hash] = allPluralTranslationHashs.has(hash)
-                ? {
+              localeTranslations[hash] =
+                allPluralTranslationHashs.has(hash) ?
+                  {
                     zero: 'No x',
                     one: '1 x',
                     '+2': '# x',
