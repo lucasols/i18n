@@ -22,7 +22,7 @@
   "bin": {
     "ls-stack-i18n": "./dist/cli.js"
   },
-  "repository": "github:lucasols/utils",
+  "repository": "https://github.com/lucasols/i18n",
   "author": "Lucas Santos",
   "type": "module",
   "main": "./dist/main.cjs",
