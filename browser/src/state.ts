@@ -1,4 +1,4 @@
-import type { Locale } from '@ls-stack/i18n-core';
+import { retryOnError } from '@ls-stack/utils/retryOnError';
 import type { I18nState, LocaleConfig } from './types';
 
 let localesConfig: LocaleConfig<string>[] = [];
@@ -59,22 +59,6 @@ function updateState(newState: Partial<I18nState<string>>) {
   notifyListeners();
 }
 
-async function loadWithRetry(
-  loader: () => Promise<{ default: Locale }>,
-  attempts: number,
-): Promise<Locale> {
-  try {
-    const result = await loader();
-    return result.default;
-  } catch (error) {
-    if (attempts > 1) {
-      await new Promise((resolve) => setTimeout(resolve, retryDelay));
-      return loadWithRetry(loader, attempts - 1);
-    }
-    throw error;
-  }
-}
-
 export async function setLocale(localeId: string): Promise<void> {
   const localeConfig = localesConfig.find((l) => l.id === localeId);
 
@@ -89,7 +73,11 @@ export async function setLocale(localeId: string): Promise<void> {
   });
 
   try {
-    const translations = await loadWithRetry(localeConfig.loader, retryAttempts);
+    const translations = await retryOnError(
+      async () => (await localeConfig.loader()).default,
+      retryAttempts,
+      { delayBetweenRetriesMs: retryDelay },
+    );
 
     updateState({
       translations,
