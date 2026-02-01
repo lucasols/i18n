@@ -1,8 +1,8 @@
 {
   "files": [],
   "references": [
-    { "path": "./packages/core" },
-    { "path": "./packages/server" },
-    { "path": "./packages/browser" }
+    { "path": "./core" },
+    { "path": "./server" },
+    { "path": "./browser" }
   ]
 }

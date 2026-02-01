@@ -9,7 +9,7 @@
     "test:run": "vitest run",
     "lint": "pnpm tsc && pnpm eslint",
     "tsc": "pnpm -r tsc",
-    "eslint": "CI=true eslint packages/*/src/ --color --max-warnings=0",
+    "eslint": "CI=true eslint core/src/ server/src/ browser/src/ --color --max-warnings=0",
     "build": "pnpm test:run && pnpm lint && pnpm build:no-test",
     "build:no-test": "pnpm -r build:no-test",
     "pre-publish": "./scripts/check-if-is-sync.sh && pnpm build"

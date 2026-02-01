@@ -6,7 +6,7 @@
   "scripts": {
     "tsc": "tsc -p tsconfig.prod.json",
     "build:no-test": "tsup",
-    "test-cli:check": "pnpm build:no-test && node dist/cli.js --default en --config-dir ../../cli-test/config --src-dir ../../cli-test/src",
+    "test-cli:check": "pnpm build:no-test && node dist/cli.js --default en --config-dir ../cli-test/config --src-dir ../cli-test/src",
     "test-cli:fix": "pnpm test-cli:check --fix"
   },
   "files": [

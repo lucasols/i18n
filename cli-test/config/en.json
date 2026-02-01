@@ -1,14 +1,16 @@
 {
-  "Hello World": "Olá Mundo",
-  "Hello {1}": "Olá {1}",
-  "Hello {1} {2}": "Olá {1} {2}",
-  "Hello World~~2": "Olá Mundo~~2",
-  "Imported usage": "Uso importado",
   "# Hello {1}": {
-    "zero": "Nenhuma x",
+    "zero": "No x",
     "one": "1 x",
     "+2": "# x",
-    "many": "Muitas x",
+    "many": "A lot of x",
+    "manyLimit": 50
+  },
+  "# Hello World": {
+    "zero": "No x",
+    "one": "1 x",
+    "+2": "# x",
+    "many": "A lot of x",
     "manyLimit": 50
   }
 }

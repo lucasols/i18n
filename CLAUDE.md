@@ -13,10 +13,9 @@ A TypeScript i18n library monorepo containing three packages:
 
 ```
 i18n/
-├── packages/
-│   ├── core/           # Shared logic (types, hash, interpolation, pluralization, CLI)
-│   ├── server/         # Server-side i18n (@ls-stack/server-i18n)
-│   └── browser/        # Browser/React i18n (@ls-stack/i18n)
+├── core/               # Shared logic (types, hash, interpolation, pluralization, CLI)
+├── server/             # Server-side i18n (@ls-stack/server-i18n)
+├── browser/            # Browser/React i18n (@ls-stack/i18n)
 ├── cli-test/           # CLI test fixtures
 ├── pnpm-workspace.yaml
 ├── vitest.workspace.ts
@@ -33,7 +32,7 @@ pnpm test
 pnpm test:run
 
 # Run a single test file
-pnpm vitest run packages/server/tests/translation.test.ts
+pnpm vitest run server/tests/translation.test.ts
 
 # Lint (type-check + ESLint)
 pnpm lint

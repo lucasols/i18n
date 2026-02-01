@@ -3,7 +3,7 @@ import { readFileSync, writeFileSync } from 'fs';
 import path from 'path';
 import { expect, test } from 'vitest';
 
-const rootDir = path.resolve(import.meta.dirname, '../../..');
+const rootDir = path.resolve(import.meta.dirname, '../..');
 
 async function run({
   fixConfigs,
@@ -12,7 +12,7 @@ async function run({
   fixConfigs?: boolean;
   defaultLocale?: string;
 } = {}) {
-  const cliPath = path.join(rootDir, 'packages/server/src/cli.ts');
+  const cliPath = path.join(rootDir, 'server/src/cli.ts');
   const { out, error } = await runCmd(
     rootDir,
     [

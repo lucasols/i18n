@@ -66,7 +66,7 @@ importers:
         specifier: ^2.1.4
         version: 2.1.4(@types/node@22.9.0)(@vitest/ui@2.1.4)
 
-  packages/browser:
+  browser:
     dependencies:
       '@ls-stack/i18n-core':
         specifier: workspace:*
@@ -88,7 +88,7 @@ importers:
         specifier: ^5.8.3
         version: 5.8.3
 
-  packages/core:
+  core:
     dependencies:
       readdirp:
         specifier: ^4.1.2
@@ -98,7 +98,7 @@ importers:
         specifier: ^5.8.3
         version: 5.8.3
 
-  packages/server:
+  server:
     dependencies:
       '@ls-stack/i18n-core':
         specifier: workspace:*
