@@ -1,4 +1,4 @@
-import { i18nitialize } from '../../server/src/index.js';
+import { i18nitialize } from '../../server/src/main.js';
 
 const i18n = i18nitialize({
   locales: {

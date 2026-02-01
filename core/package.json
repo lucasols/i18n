@@ -5,21 +5,11 @@
   "description": "Shared i18n core logic",
   "license": "MIT",
   "type": "module",
-  "main": "./dist/index.js",
-  "types": "./dist/index.d.ts",
+  "main": "./src/main.ts",
+  "types": "./src/main.ts",
   "exports": {
-    ".": {
-      "import": "./dist/index.js",
-      "types": "./dist/index.d.ts"
-    },
-    "./cli": {
-      "import": "./dist/cli/index.js",
-      "types": "./dist/cli/index.d.ts"
-    }
-  },
-  "scripts": {
-    "tsc": "tsc -p tsconfig.prod.json",
-    "build:no-test": "tsup"
+    ".": "./src/main.ts",
+    "./cli": "./src/cli/main.ts"
   },
   "devDependencies": {
     "typescript": "^5.8.3"

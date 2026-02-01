@@ -7,7 +7,7 @@ describe('browser translation', () => {
 
   describe('basic translation with async loading', () => {
     test('before loading, returns fallback', async () => {
-      const { __, i18nitialize } = await import('../src/index.js');
+      const { __, i18nitialize } = await import('../src/main.js');
 
       i18nitialize({
         locales: [
@@ -26,7 +26,7 @@ describe('browser translation', () => {
     });
 
     test('after loading, returns translation', async () => {
-      const { __, i18nitialize } = await import('../src/index.js');
+      const { __, i18nitialize } = await import('../src/main.js');
 
       const controller = i18nitialize({
         locales: [
@@ -49,7 +49,7 @@ describe('browser translation', () => {
 
   describe('interpolation', () => {
     test('simple interpolation', async () => {
-      const { __, i18nitialize } = await import('../src/index.js');
+      const { __, i18nitialize } = await import('../src/main.js');
 
       const controller = i18nitialize({
         locales: [
@@ -72,7 +72,7 @@ describe('browser translation', () => {
 
   describe('pluralization', () => {
     test('plural translations work after loading', async () => {
-      const { __p, i18nitialize } = await import('../src/index.js');
+      const { __p, i18nitialize } = await import('../src/main.js');
 
       const controller = i18nitialize({
         locales: [
@@ -104,7 +104,7 @@ describe('browser translation', () => {
 
   describe('controller', () => {
     test('onChange notifies on locale change', async () => {
-      const { i18nitialize } = await import('../src/index.js');
+      const { i18nitialize } = await import('../src/main.js');
 
       const controller = i18nitialize({
         locales: [
@@ -139,7 +139,7 @@ describe('formatters', () => {
   });
 
   test('__date formats dates', async () => {
-    const { __date, i18nitialize } = await import('../src/index.js');
+    const { __date, i18nitialize } = await import('../src/main.js');
 
     const controller = i18nitialize({
       locales: [
@@ -159,7 +159,7 @@ describe('formatters', () => {
   });
 
   test('__num formats numbers', async () => {
-    const { __num, i18nitialize } = await import('../src/index.js');
+    const { __num, i18nitialize } = await import('../src/main.js');
 
     const controller = i18nitialize({
       locales: [
@@ -177,7 +177,7 @@ describe('formatters', () => {
   });
 
   test('__currency formats currency', async () => {
-    const { __currency, i18nitialize } = await import('../src/index.js');
+    const { __currency, i18nitialize } = await import('../src/main.js');
 
     const controller = i18nitialize({
       locales: [
@@ -196,7 +196,7 @@ describe('formatters', () => {
   });
 
   test('__relativeTime formats relative time', async () => {
-    const { __relativeTime, i18nitialize } = await import('../src/index.js');
+    const { __relativeTime, i18nitialize } = await import('../src/main.js');
 
     const controller = i18nitialize({
       locales: [
@@ -214,7 +214,7 @@ describe('formatters', () => {
   });
 
   test('__list formats lists', async () => {
-    const { __list, i18nitialize } = await import('../src/index.js');
+    const { __list, i18nitialize } = await import('../src/main.js');
 
     const controller = i18nitialize({
       locales: [
@@ -232,7 +232,7 @@ describe('formatters', () => {
   });
 
   test('__formattedTimeDuration formats duration', async () => {
-    const { __formattedTimeDuration } = await import('../src/index.js');
+    const { __formattedTimeDuration } = await import('../src/main.js');
 
     const duration = 3661000; // 1 hour, 1 minute, 1 second
     const formatted = __formattedTimeDuration(duration);
@@ -240,7 +240,7 @@ describe('formatters', () => {
   });
 
   test('__formattedTimeDuration with days', async () => {
-    const { __formattedTimeDuration } = await import('../src/index.js');
+    const { __formattedTimeDuration } = await import('../src/main.js');
 
     const duration = 90061000; // 1 day, 1 hour, 1 minute, 1 second
     const formatted = __formattedTimeDuration(duration);
