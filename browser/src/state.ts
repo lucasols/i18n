@@ -125,3 +125,18 @@ export function getPersistedLocale(): string | null {
 export function getDefaultLocale(): string | null {
   return localesConfig[0]?.id ?? null;
 }
+
+export function resetState(): void {
+  localesConfig = [];
+  state = {
+    activeLocale: null,
+    isLoading: false,
+    isLoaded: false,
+    loadError: null,
+    translations: null,
+  };
+  listeners.clear();
+  persistenceKey = null;
+  retryAttempts = 3;
+  retryDelay = 1000;
+}

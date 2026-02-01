@@ -54,6 +54,7 @@ export function i18nitialize<T extends string>(
 }
 
 export { __, __jsx, __p, __pjsx } from './translate';
+export { resetState } from './state';
 export {
   __currency,
   __date,

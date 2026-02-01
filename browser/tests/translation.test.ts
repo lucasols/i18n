@@ -1,14 +1,13 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { beforeEach, describe, expect, test } from 'vitest';
+import { __, __p, i18nitialize, resetState } from '../src/main';
 
 describe('browser translation', () => {
   beforeEach(() => {
-    vi.resetModules();
+    resetState();
   });
 
   describe('basic translation with async loading', () => {
-    test('before loading, returns fallback', async () => {
-      const { __, i18nitialize } = await import('../src/main');
-
+    test('before loading, returns fallback', () => {
       i18nitialize({
         locales: [
           {
@@ -27,8 +26,6 @@ describe('browser translation', () => {
     });
 
     test('after loading, returns translation', async () => {
-      const { __, i18nitialize } = await import('../src/main');
-
       const controller = i18nitialize({
         locales: [
           {
@@ -51,8 +48,6 @@ describe('browser translation', () => {
 
   describe('interpolation', () => {
     test('simple interpolation', async () => {
-      const { __, i18nitialize } = await import('../src/main');
-
       const controller = i18nitialize({
         locales: [
           {
@@ -75,8 +70,6 @@ describe('browser translation', () => {
 
   describe('pluralization', () => {
     test('plural translations work after loading', async () => {
-      const { __p, i18nitialize } = await import('../src/main');
-
       const controller = i18nitialize({
         locales: [
           {

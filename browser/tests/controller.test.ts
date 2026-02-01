@@ -1,13 +1,12 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { beforeEach, describe, expect, test } from 'vitest';
+import { i18nitialize, resetState } from '../src/main';
 
 describe('controller', () => {
   beforeEach(() => {
-    vi.resetModules();
+    resetState();
   });
 
   test('onChange notifies on locale change', async () => {
-    const { i18nitialize } = await import('../src/main');
-
     const controller = i18nitialize({
       locales: [
         {

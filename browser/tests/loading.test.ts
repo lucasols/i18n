@@ -1,15 +1,14 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { __, i18nitialize, resetState } from '../src/main';
 
 describe('translation loading', () => {
   beforeEach(() => {
-    vi.resetModules();
+    resetState();
     vi.useRealTimers();
   });
 
   describe('loading states', () => {
-    test('isLoaded is false before loading', async () => {
-      const { i18nitialize } = await import('../src/main');
-
+    test('isLoaded is false before loading', () => {
       const controller = i18nitialize({
         locales: [
           {
@@ -23,8 +22,6 @@ describe('translation loading', () => {
     });
 
     test('isLoaded is true after loading', async () => {
-      const { i18nitialize } = await import('../src/main');
-
       const controller = i18nitialize({
         locales: [
           {
@@ -40,8 +37,6 @@ describe('translation loading', () => {
     });
 
     test('getActiveLocale is set immediately when setLocale called', async () => {
-      const { i18nitialize } = await import('../src/main');
-
       let resolveLoader: (value: { default: Record<string, never> }) => void;
       const loaderPromise = new Promise<{ default: Record<string, never> }>((resolve) => {
         resolveLoader = resolve;
@@ -72,8 +67,6 @@ describe('translation loading', () => {
     });
 
     test('getActiveLocale returns locale id after loading', async () => {
-      const { i18nitialize } = await import('../src/main');
-
       const controller = i18nitialize({
         locales: [
           {
@@ -91,8 +84,6 @@ describe('translation loading', () => {
 
   describe('locale switching', () => {
     test('can switch between locales', async () => {
-      const { __, i18nitialize } = await import('../src/main');
-
       const controller = i18nitialize({
         locales: [
           {
@@ -114,8 +105,6 @@ describe('translation loading', () => {
     });
 
     test('switching locales updates activeLocale', async () => {
-      const { i18nitialize } = await import('../src/main');
-
       const controller = i18nitialize({
         locales: [
           {
@@ -139,8 +128,6 @@ describe('translation loading', () => {
 
   describe('error handling', () => {
     test('throws error for unknown locale', async () => {
-      const { i18nitialize } = await import('../src/main');
-
       const controller = i18nitialize({
         locales: [
           {
@@ -156,8 +143,6 @@ describe('translation loading', () => {
     });
 
     test('throws error when loader fails after retries', async () => {
-      const { i18nitialize } = await import('../src/main');
-
       const controller = i18nitialize({
         locales: [
           {
@@ -176,7 +161,6 @@ describe('translation loading', () => {
   describe('retry logic', () => {
     test('retries on failure before succeeding', async () => {
       vi.useFakeTimers();
-      const { i18nitialize } = await import('../src/main');
 
       let attempts = 0;
       const controller = i18nitialize({
@@ -215,7 +199,6 @@ describe('translation loading', () => {
 
     test('respects retryDelay between attempts', async () => {
       vi.useFakeTimers();
-      const { i18nitialize } = await import('../src/main');
 
       const timestamps: number[] = [];
       let attempts = 0;
@@ -257,8 +240,6 @@ describe('translation loading', () => {
 
   describe('regionLocale', () => {
     test('getRegionLocale returns regionLocale from config', async () => {
-      const { i18nitialize } = await import('../src/main');
-
       const controller = i18nitialize({
         locales: [
           {
@@ -275,8 +256,6 @@ describe('translation loading', () => {
     });
 
     test('getRegionLocale falls back to locale id', async () => {
-      const { i18nitialize } = await import('../src/main');
-
       const controller = i18nitialize({
         locales: [
           {
@@ -291,9 +270,7 @@ describe('translation loading', () => {
       expect(controller.getRegionLocale()).toBe('en');
     });
 
-    test('getRegionLocale uses locale id during auto-load', async () => {
-      const { i18nitialize } = await import('../src/main');
-
+    test('getRegionLocale uses locale id during auto-load', () => {
       const controller = i18nitialize({
         locales: [
           {

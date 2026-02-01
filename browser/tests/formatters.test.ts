@@ -1,13 +1,21 @@
-import { beforeEach, describe, expect, test, vi } from 'vitest';
+import { beforeEach, describe, expect, test } from 'vitest';
+import {
+  __currency,
+  __date,
+  __formattedTimeDuration,
+  __list,
+  __num,
+  __relativeTime,
+  i18nitialize,
+  resetState,
+} from '../src/main';
 
 describe('formatters', () => {
   beforeEach(() => {
-    vi.resetModules();
+    resetState();
   });
 
   test('__date formats dates', async () => {
-    const { __date, i18nitialize } = await import('../src/main');
-
     const controller = i18nitialize({
       locales: [
         {
@@ -26,8 +34,6 @@ describe('formatters', () => {
   });
 
   test('__num formats numbers', async () => {
-    const { __num, i18nitialize } = await import('../src/main');
-
     const controller = i18nitialize({
       locales: [
         {
@@ -44,8 +50,6 @@ describe('formatters', () => {
   });
 
   test('__currency formats currency', async () => {
-    const { __currency, i18nitialize } = await import('../src/main');
-
     const controller = i18nitialize({
       locales: [
         {
@@ -63,8 +67,6 @@ describe('formatters', () => {
   });
 
   test('__relativeTime formats relative time', async () => {
-    const { __relativeTime, i18nitialize } = await import('../src/main');
-
     const controller = i18nitialize({
       locales: [
         {
@@ -81,8 +83,6 @@ describe('formatters', () => {
   });
 
   test('__list formats lists', async () => {
-    const { __list, i18nitialize } = await import('../src/main');
-
     const controller = i18nitialize({
       locales: [
         {
@@ -98,17 +98,13 @@ describe('formatters', () => {
     expect(formatted).toBe('apple, banana, and cherry');
   });
 
-  test('__formattedTimeDuration formats duration', async () => {
-    const { __formattedTimeDuration } = await import('../src/main');
-
+  test('__formattedTimeDuration formats duration', () => {
     const duration = 3661000; // 1 hour, 1 minute, 1 second
     const formatted = __formattedTimeDuration(duration);
     expect(formatted).toBe('01:01:01');
   });
 
-  test('__formattedTimeDuration with days', async () => {
-    const { __formattedTimeDuration } = await import('../src/main');
-
+  test('__formattedTimeDuration with days', () => {
     const duration = 90061000; // 1 day, 1 hour, 1 minute, 1 second
     const formatted = __formattedTimeDuration(duration);
     expect(formatted).toBe('1d 01:01:01');
