@@ -1,101 +1,99 @@
 import { beforeEach, describe, expect, test } from 'vitest';
 import { __, __p, i18nitialize, resetState } from '../src/main';
 
-describe('browser translation', () => {
-  beforeEach(() => {
-    resetState();
+beforeEach(() => {
+  resetState();
+});
+
+describe('basic translation with async loading', () => {
+  test('before loading, returns fallback', () => {
+    i18nitialize({
+      locales: [
+        {
+          id: 'pt',
+          loader: () =>
+            Promise.resolve({
+              default: {
+                hello: 'olá',
+              },
+            }),
+        },
+      ],
+    });
+
+    expect(__`hello`).toBe('hello');
   });
 
-  describe('basic translation with async loading', () => {
-    test('before loading, returns fallback', () => {
-      i18nitialize({
-        locales: [
-          {
-            id: 'pt',
-            loader: () =>
-              Promise.resolve({
-                default: {
-                  hello: 'olá',
-                },
-              }),
-          },
-        ],
-      });
-
-      expect(__`hello`).toBe('hello');
+  test('after loading, returns translation', async () => {
+    const controller = i18nitialize({
+      locales: [
+        {
+          id: 'pt',
+          loader: () =>
+            Promise.resolve({
+              default: {
+                hello: 'olá',
+              },
+            }),
+        },
+      ],
     });
 
-    test('after loading, returns translation', async () => {
-      const controller = i18nitialize({
-        locales: [
-          {
-            id: 'pt',
-            loader: () =>
-              Promise.resolve({
-                default: {
-                  hello: 'olá',
-                },
-              }),
-          },
-        ],
-      });
+    await controller.setLocale('pt');
 
-      await controller.setLocale('pt');
-
-      expect(__`hello`).toBe('olá');
-    });
+    expect(__`hello`).toBe('olá');
   });
+});
 
-  describe('interpolation', () => {
-    test('simple interpolation', async () => {
-      const controller = i18nitialize({
-        locales: [
-          {
-            id: 'pt',
-            loader: () =>
-              Promise.resolve({
-                default: {
-                  'hello {1}': 'olá {1}',
-                },
-              }),
-          },
-        ],
-      });
-
-      await controller.setLocale('pt');
-
-      expect(__`hello ${'world'}`).toBe('olá world');
+describe('interpolation', () => {
+  test('simple interpolation', async () => {
+    const controller = i18nitialize({
+      locales: [
+        {
+          id: 'pt',
+          loader: () =>
+            Promise.resolve({
+              default: {
+                'hello {1}': 'olá {1}',
+              },
+            }),
+        },
+      ],
     });
+
+    await controller.setLocale('pt');
+
+    expect(__`hello ${'world'}`).toBe('olá world');
   });
+});
 
-  describe('pluralization', () => {
-    test('plural translations work after loading', async () => {
-      const controller = i18nitialize({
-        locales: [
-          {
-            id: 'pt',
-            loader: () =>
-              Promise.resolve({
-                default: {
-                  '# apples': {
-                    one: 'uma maçã',
-                    '+2': '# maçãs',
-                    zero: 'nenhuma maçã',
-                    many: 'muitas maçãs',
-                    manyLimit: 10,
-                  },
+describe('pluralization', () => {
+  test('plural translations work after loading', async () => {
+    const controller = i18nitialize({
+      locales: [
+        {
+          id: 'pt',
+          loader: () =>
+            Promise.resolve({
+              default: {
+                '# apples': {
+                  one: 'uma maçã',
+                  '+2': '# maçãs',
+                  zero: 'nenhuma maçã',
+                  many: 'muitas maçãs',
+                  manyLimit: 10,
                 },
-              }),
-          },
-        ],
-      });
-
-      await controller.setLocale('pt');
-
-      expect(__p(1)`# apples`).toBe('uma maçã');
-      expect(__p(2)`# apples`).toBe('2 maçãs');
-      expect(__p(0)`# apples`).toBe('nenhuma maçã');
-      expect(__p(11)`# apples`).toBe('muitas maçãs');
+              },
+            }),
+        },
+      ],
     });
+
+    await controller.setLocale('pt');
+
+    expect(__p(1)`# apples`).toBe('uma maçã');
+    expect(__p(2)`# apples`).toBe('2 maçãs');
+    expect(__p(0)`# apples`).toBe('nenhuma maçã');
+    expect(__p(11)`# apples`).toBe('muitas maçãs');
   });
 });

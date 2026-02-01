@@ -116,7 +116,8 @@ export default tseslint.config(
       'vitest/no-identical-title': ERROR_IN_CI,
 
       /* extended-lint */
-      '@lucasols/extended-lint/no-unused-type-props-in-args': ERROR_IN_CI,
+      '@lucasols/extended-lint/no-unused-type-props-in-args': ERROR,
+      '@lucasols/extended-lint/no-unnecessary-describe': ERROR,
     },
   },
   {
