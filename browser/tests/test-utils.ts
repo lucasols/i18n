@@ -20,10 +20,14 @@ export function createTestController<
   loadingTime?: number;
   persistenceKey?: string;
 }) {
+  const invokedLoaderIds: string[] = [];
+
   const normalizedLocales = typedObjectEntries(locales).map(
     ([id, localeOrError]) => ({
       id: id as keyof L & string,
       loader: async (): Promise<{ default: Locale }> => {
+        invokedLoaderIds.push(id as string);
+
         await sleep(loadingTime);
 
         if (isPromise(localeOrError)) {
@@ -42,10 +46,14 @@ export function createTestController<
 
   const firstLocaleId = normalizedLocales[0].id;
 
-  return i18nitialize({
+  const controller = i18nitialize({
     persistenceKey,
     ...options,
     fallbackLocale: fallbackLocale ?? firstLocaleId,
     locales: normalizedLocales,
+  });
+
+  return Object.assign(controller, {
+    invokedLoaderIds,
   });
 }

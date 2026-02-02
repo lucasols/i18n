@@ -143,7 +143,6 @@ export async function setLocale(localeId: string): Promise<void> {
   loadingLocaleId = localeId;
 
   updateState({
-    activeLocale: localeId,
     isLoading: true,
     loadError: null,
   });
@@ -166,6 +165,7 @@ export async function setLocale(localeId: string): Promise<void> {
       loadedLocaleId = localeId;
 
       updateState({
+        activeLocale: localeId,
         translations,
         isLoading: false,
         isLoaded: true,

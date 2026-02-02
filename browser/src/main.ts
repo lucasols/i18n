@@ -53,7 +53,7 @@ export function i18nitialize<T extends string>(
     setLocale: setLocaleWithFallback,
     getLoadedLocale: () => {
       const state = getState();
-      return state.isLoaded ? (state.activeLocale as T | null) : null;
+      return state.activeLocale as T | null;
     },
     getRegionLocale: () => getRegionLocale(),
     onLoad: (callback: (localeId: T) => void) =>

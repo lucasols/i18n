@@ -81,6 +81,26 @@ describe('locale switching', () => {
     expect(controller.getLoadedLocale()).toBe('pt');
   });
 
+  test('getLoadedLocale stays on previous locale while new locale loads', async () => {
+    vi.useFakeTimers();
+
+    const controller = createTestController({
+      locales: { en: {}, pt: {} },
+    });
+
+    // Wait for initial load of fallback locale
+    await vi.advanceTimersByTimeAsync(100);
+
+    const loadPromise = controller.setLocale('pt');
+
+    expect(controller.getLoadedLocale()).toBe('en');
+
+    await vi.advanceTimersByTimeAsync(100);
+    await loadPromise;
+
+    expect(controller.getLoadedLocale()).toBe('pt');
+  });
+
   test('calling setLocale with current locale is a no-op', async () => {
     const controller = createTestController({
       locales: { en: {} },
@@ -143,6 +163,32 @@ describe('error handling', () => {
 
     expect(caughtError).toBeDefined();
     expect(caughtError?.message).toBe('Network error');
+  });
+
+  test('keeps previous locale after failed load', async () => {
+    vi.useFakeTimers();
+
+    const controller = createTestController({
+      locales: { en: {}, pt: new Error('Network error') },
+      retryAttempts: 1,
+      retryDelay: 0,
+    });
+
+    // Wait for initial load of fallback locale
+    await vi.advanceTimersByTimeAsync(100);
+
+    let caughtError: Error | undefined;
+    const loadPromise = controller.setLocale('pt').catch((e: Error) => {
+      caughtError = e;
+    });
+
+    // First attempt (100ms) + 1 retry (100ms) = 200ms
+    await vi.advanceTimersByTimeAsync(200);
+    await loadPromise;
+
+    expect(caughtError).toBeDefined();
+    expect(caughtError?.message).toBe('Network error');
+    expect(controller.getLoadedLocale()).toBe('en');
   });
 });
 

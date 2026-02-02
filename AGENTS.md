@@ -22,11 +22,8 @@ i18n/
 ## Commands
 
 ```bash
-# Run tests with UI
-pnpm test
-
 # Run tests once (CI mode)
-pnpm test:run
+pnpm test
 
 # Run a single test file
 pnpm vitest run server/tests/translation.test.ts
@@ -44,6 +41,10 @@ pnpm build:no-test
 pnpm --filter @ls-stack/server-i18n test-cli:check
 pnpm --filter @ls-stack/server-i18n test-cli:fix
 ```
+
+## Testing
+
+Tests should be run via `pnpm test` only, due to required environment variables.
 
 ## Key Features
 
