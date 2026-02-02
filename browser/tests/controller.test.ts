@@ -1,12 +1,13 @@
 import { beforeEach, expect, test } from 'vitest';
-import { i18nitialize, resetState } from '../src/main';
+import { resetState } from '../src/main';
+import { createTestController } from './test-utils';
 
 beforeEach(() => {
   resetState();
 });
 
-test('onChange notifies on locale change', async () => {
-  const controller = i18nitialize({
+test('onChange notifies on locale change with locale id', async () => {
+  const controller = createTestController({
     locales: [
       {
         id: 'en',
@@ -19,14 +20,33 @@ test('onChange notifies on locale change', async () => {
     ],
   });
 
-  let callCount = 0;
-  controller.onChange(() => {
-    callCount++;
+  const receivedLocales: string[] = [];
+  controller.onChange((localeId) => {
+    receivedLocales.push(localeId);
   });
 
   await controller.setLocale('pt');
 
-  expect(callCount).toBeGreaterThan(0);
-  expect(controller.getActiveLocale()).toBe('pt');
-  expect(controller.isLoaded()).toBe(true);
+  expect(receivedLocales).toContain('pt');
+  expect(controller.getLoadedLocale()).toBe('pt');
+});
+
+test('onChange does not call callback immediately when subscribing', async () => {
+  const controller = createTestController({
+    locales: [
+      {
+        id: 'en',
+        loader: () => Promise.resolve({ default: {} }),
+      },
+    ],
+  });
+
+  await controller.setLocale('en');
+
+  const receivedLocales: string[] = [];
+  controller.onChange((localeId) => {
+    receivedLocales.push(localeId);
+  });
+
+  expect(receivedLocales).toEqual([]);
 });
