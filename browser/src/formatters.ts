@@ -1,26 +1,103 @@
-import { getActiveLocaleConfig } from './state';
+import { getActiveLocaleConfig, getRegionLocale, getState } from './state';
+import type {
+  DateTimeFormats,
+  DurationUnit,
+  RelativeTimeFormat,
+  RelativeTimeUnits,
+} from './types';
 
-function getRegionLocale(): string {
-  const config = getActiveLocaleConfig();
-  return config?.regionLocale ?? config?.id ?? 'en-US';
+type PartialRecord<K extends string, V> = { [P in K]?: V };
+
+interface IntlDurationFormatOptions {
+  style?: 'narrow' | 'short' | 'long';
+}
+
+interface IntlDurationFormat {
+  format(duration: PartialRecord<DurationUnit, number>): string;
+}
+
+interface IntlDurationFormatConstructor {
+  new (locale?: string, options?: IntlDurationFormatOptions): IntlDurationFormat;
+}
+
+declare global {
+  // eslint-disable-next-line @typescript-eslint/no-namespace
+  namespace Intl {
+    const DurationFormat: IntlDurationFormatConstructor | undefined;
+  }
+}
+
+const intlCache = {
+  date: new Map<string, Intl.DateTimeFormat>(),
+  number: new Map<string, Intl.NumberFormat>(),
+  relative: new Map<string, Intl.RelativeTimeFormat>(),
+  list: new Map<string, Intl.ListFormat>(),
+  duration: new Map<string, IntlDurationFormat>(),
+};
+
+export function clearIntlCache(): void {
+  intlCache.date.clear();
+  intlCache.number.clear();
+  intlCache.relative.clear();
+  intlCache.list.clear();
+  intlCache.duration.clear();
+}
+
+function getCacheKey(options: unknown): string {
+  if (options === undefined) return '';
+  return JSON.stringify(options);
+}
+
+function toDate(value: Date | string | number): Date {
+  if (value instanceof Date) {
+    return value;
+  }
+  if (typeof value === 'string' && value.length === 10) {
+    return new Date(`${value}T00:00`);
+  }
+  return new Date(value);
 }
 
 export function __date(
-  date: Date | number,
-  options?: Intl.DateTimeFormatOptions,
+  date: Date | string | number,
+  format?: DateTimeFormats,
 ): string {
   const regionLocale = getRegionLocale();
+  const cacheKey = `${regionLocale}:${getCacheKey(format)}`;
 
-  return new Intl.DateTimeFormat(regionLocale, options).format(date);
+  let formatter = intlCache.date.get(cacheKey);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(regionLocale, format);
+    intlCache.date.set(cacheKey, formatter);
+  }
+
+  const dateInstance = toDate(date);
+
+  if (Number.isNaN(dateInstance.getTime())) {
+    return 'Invalid Date';
+  }
+
+  return formatter.format(dateInstance);
 }
 
 export function __num(
-  num: number,
+  num: number | null,
   options?: Intl.NumberFormatOptions,
 ): string {
-  const regionLocale = getRegionLocale();
+  if (num === null) {
+    return '';
+  }
 
-  return new Intl.NumberFormat(regionLocale, options).format(num);
+  const regionLocale = getRegionLocale();
+  const cacheKey = `${regionLocale}:${getCacheKey(options)}`;
+
+  let formatter = intlCache.number.get(cacheKey);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(regionLocale, options);
+    intlCache.number.set(cacheKey, formatter);
+  }
+
+  return formatter.format(num);
 }
 
 export function __currency(
@@ -32,54 +109,197 @@ export function __currency(
   const config = getActiveLocaleConfig();
   const currency = currencyCode ?? config?.currencyCode ?? 'USD';
 
-  return new Intl.NumberFormat(regionLocale, {
+  const fullOptions: Intl.NumberFormatOptions = {
     style: 'currency',
     currency,
     ...options,
-  }).format(num);
+  };
+
+  const cacheKey = `${regionLocale}:${getCacheKey(fullOptions)}`;
+
+  let formatter = intlCache.number.get(cacheKey);
+  if (!formatter) {
+    formatter = new Intl.NumberFormat(regionLocale, fullOptions);
+    intlCache.number.set(cacheKey, formatter);
+  }
+
+  return formatter.format(num);
+}
+
+function getUnit(
+  from: Date | string | number | undefined,
+  to: Date | string | number | undefined,
+): { value: number; unit: RelativeTimeUnits } {
+  const fromDate = toDate(from ?? new Date());
+  const toDate_ = toDate(to ?? new Date());
+
+  const diffMs = fromDate.getTime() - toDate_.getTime();
+  const diffSecs = diffMs / 1000;
+
+  if (Math.abs(diffSecs) < 60) {
+    return { value: Math.round(diffSecs), unit: 'second' };
+  }
+
+  const diffMins = diffSecs / 60;
+  if (Math.abs(diffMins) < 60) {
+    return { value: Math.floor(diffMins), unit: 'minute' };
+  }
+
+  const diffHours = diffMins / 60;
+  if (Math.abs(diffHours) < 24) {
+    return { value: Math.floor(diffHours), unit: 'hour' };
+  }
+
+  const diffDays = diffHours / 24;
+
+  const fromYear = fromDate.getFullYear();
+  const toYear = toDate_.getFullYear();
+  const yearDiff = fromYear - toYear;
+
+  if (Math.abs(yearDiff) > 0) {
+    return { value: yearDiff, unit: 'year' };
+  }
+
+  const fromMonth = fromDate.getMonth();
+  const toMonth = toDate_.getMonth();
+  const monthDiff = fromMonth - toMonth + (fromYear - toYear) * 12;
+
+  if (Math.abs(monthDiff) > 0) {
+    return { value: monthDiff, unit: 'month' };
+  }
+
+  return { value: Math.floor(diffDays), unit: 'day' };
 }
 
 export function __relativeTime(
-  value: number,
-  unit: Intl.RelativeTimeFormatUnit,
-  options?: Intl.RelativeTimeFormatOptions,
+  value: { from?: Date | string | number; to?: Date | string | number },
+  unit: RelativeTimeUnits | 'auto' = 'auto',
+  format?: RelativeTimeFormat,
+  zeroFallback = -1,
 ): string {
   const regionLocale = getRegionLocale();
+  const cacheKey = `${regionLocale}:${getCacheKey(format)}`;
 
-  return new Intl.RelativeTimeFormat(regionLocale, options).format(value, unit);
-}
-
-type TimeUnit = {
-  value: number;
-  unit: Intl.RelativeTimeFormatUnit;
-};
-
-const TIME_UNITS: TimeUnit[] = [
-  { value: 60, unit: 'second' },
-  { value: 60, unit: 'minute' },
-  { value: 24, unit: 'hour' },
-  { value: 7, unit: 'day' },
-  { value: 4.34524, unit: 'week' },
-  { value: 12, unit: 'month' },
-  { value: Infinity, unit: 'year' },
-];
-
-export function __relativeTimeFromNow(
-  date: Date | number,
-  options?: Intl.RelativeTimeFormatOptions,
-): string {
-  const now = Date.now();
-  const timestamp = typeof date === 'number' ? date : date.getTime();
-  let diff = (timestamp - now) / 1000;
-
-  for (const { value, unit } of TIME_UNITS) {
-    if (Math.abs(diff) < value) {
-      return __relativeTime(Math.round(diff), unit, options);
-    }
-    diff /= value;
+  let formatter = intlCache.relative.get(cacheKey);
+  if (!formatter) {
+    formatter = new Intl.RelativeTimeFormat(regionLocale, format);
+    intlCache.relative.set(cacheKey, formatter);
   }
 
-  return __relativeTime(Math.round(diff), 'year', options);
+  let diff: number;
+  let formatUnit: Intl.RelativeTimeFormatUnit;
+
+  if (unit === 'auto') {
+    const autoUnit = getUnit(value.from, value.to);
+    formatUnit = autoUnit.unit;
+    diff = autoUnit.value || zeroFallback;
+  } else {
+    formatUnit = unit;
+    const fromDate = toDate(value.from ?? new Date());
+    const toDateVal = toDate(value.to ?? new Date());
+    const diffMs = fromDate.getTime() - toDateVal.getTime();
+
+    switch (unit) {
+      case 'second':
+        diff = Math.round(diffMs / 1000);
+        break;
+      case 'minute':
+        diff = Math.round(diffMs / (1000 * 60));
+        break;
+      case 'hour':
+        diff = Math.round(diffMs / (1000 * 60 * 60));
+        break;
+      case 'day':
+        diff = Math.round(diffMs / (1000 * 60 * 60 * 24));
+        break;
+      case 'week':
+        diff = Math.round(diffMs / (1000 * 60 * 60 * 24 * 7));
+        break;
+      case 'month':
+        diff = Math.round(diffMs / (1000 * 60 * 60 * 24 * 30));
+        break;
+      case 'quarter':
+        diff = Math.round(diffMs / (1000 * 60 * 60 * 24 * 91));
+        break;
+      case 'year':
+        diff = Math.round(diffMs / (1000 * 60 * 60 * 24 * 365));
+        break;
+      default:
+        diff = 0;
+    }
+    diff = diff || zeroFallback;
+  }
+
+  if (Number.isNaN(diff)) {
+    return 'Invalid Date';
+  }
+
+  return formatter.format(diff, formatUnit);
+}
+
+export function __relativeTimeFromNow(
+  date: Date | string | number,
+  options: {
+    format?: RelativeTimeFormat;
+    unit?: RelativeTimeUnits;
+    useDateForLongerDiffs?: DateTimeFormats;
+    longDiffDaysThreshold?: number;
+    now?: Date;
+  } = {},
+): string {
+  const {
+    format,
+    unit,
+    useDateForLongerDiffs,
+    longDiffDaysThreshold = 7,
+    now = new Date(),
+  } = options;
+
+  if (useDateForLongerDiffs) {
+    const dateValue = toDate(date);
+    const diffMs = now.getTime() - dateValue.getTime();
+    const diffDays = Math.abs(diffMs / (1000 * 60 * 60 * 24));
+
+    if (diffDays > longDiffDaysThreshold) {
+      return __date(date, useDateForLongerDiffs);
+    }
+  }
+
+  return __relativeTime({ from: date, to: now }, unit, format);
+}
+
+export function __timeDuration(value: {
+  from?: Date | string;
+  to?: Date | string;
+  ms?: number;
+  short?: boolean;
+}): { formatted: string; unit: RelativeTimeUnits } {
+  const { translations } = getState();
+
+  if (!translations) {
+    return { formatted: '?', unit: 'second' };
+  }
+
+  const msBaseTime = 1736058575000;
+
+  const autoUnit =
+    value.ms !== undefined
+      ? getUnit(new Date(msBaseTime + value.ms), new Date(msBaseTime))
+      : getUnit(value.to, value.from);
+
+  const formatUnit = autoUnit.unit;
+  const diff = autoUnit.value;
+
+  const formatted = __num(Math.abs(diff), {
+    style: 'unit',
+    unit: formatUnit,
+    unitDisplay: value.short ? 'short' : 'long',
+  });
+
+  return {
+    formatted,
+    unit: formatUnit,
+  };
 }
 
 type ListFormatOptions = {
@@ -90,87 +310,126 @@ type ListFormatOptions = {
 
 export function __list(items: string[], options?: ListFormatOptions): string {
   const regionLocale = getRegionLocale();
-  const ListFormat = Intl.ListFormat as
-    | (new (
-        locales?: string | string[],
-        options?: ListFormatOptions,
-      ) => { format(list: string[]): string })
-    | undefined;
+  const cacheKey = `${regionLocale}:${getCacheKey(options)}`;
 
-  if (!ListFormat) {
-    const separator = options?.type === 'disjunction' ? ' or ' : ', ';
-    return items.join(separator);
+  let formatter = intlCache.list.get(cacheKey);
+  if (!formatter) {
+    formatter = new Intl.ListFormat(regionLocale, options);
+    intlCache.list.set(cacheKey, formatter);
   }
 
-  return new ListFormat(regionLocale, options).format(items);
+  return formatter.format(items);
 }
 
-type DurationComponents = {
-  days?: number;
-  hours?: number;
-  minutes?: number;
-  seconds?: number;
+const unitsOrder: DurationUnit[] = [
+  'years',
+  'months',
+  'days',
+  'hours',
+  'minutes',
+  'seconds',
+  'milliseconds',
+];
+
+const ptUnitSingularMap: Record<DurationUnit, string> = {
+  years: 'ano',
+  months: 'm',
+  days: 'd',
+  hours: 'h',
+  minutes: 'min',
+  seconds: 's',
+  milliseconds: 'ms',
 };
 
-export function __formattedTimeDuration(
-  durationMs: number,
-  options?: {
-    showSeconds?: boolean;
-    showDays?: boolean;
-    padWithZeros?: boolean;
-  },
+const ptUnitMapPlural: Record<DurationUnit, string> = {
+  years: 'a',
+  months: 'm',
+  days: 'd',
+  hours: 'h',
+  minutes: 'min',
+  seconds: 's',
+  milliseconds: 'ms',
+};
+
+function msToTimeString(
+  durationObj: PartialRecord<DurationUnit, number>,
+  hoursMinLength = 2,
 ): string {
   const {
-    showSeconds = true,
-    showDays = true,
-    padWithZeros = true,
-  } = options ?? {};
+    hours = 0,
+    minutes = 0,
+    seconds = 0,
+    days = 0,
+    months = 0,
+    years = 0,
+  } = durationObj;
 
-  const totalSeconds = Math.floor(durationMs / 1000);
-  const totalMinutes = Math.floor(totalSeconds / 60);
-  const totalHours = Math.floor(totalMinutes / 60);
-  const totalDays = Math.floor(totalHours / 24);
+  const pad = (val: number, maxLength = 2) =>
+    val.toString().padStart(maxLength, '0');
 
-  const components: DurationComponents = {};
+  return `${pad(years)}y ${pad(months)}m ${pad(days)}d ${pad(hours, hoursMinLength)}:${pad(minutes)}:${pad(seconds)}`;
+}
 
-  if (showDays && totalDays > 0) {
-    components.days = totalDays;
-    components.hours = totalHours % 24;
-  } else {
-    components.hours = totalHours;
+export function __formattedTimeDuration(
+  durationObj: PartialRecord<DurationUnit, number>,
+  options: {
+    maxUnitsToShow?: number;
+    style?: 'narrow' | 'short' | 'long';
+  } = {},
+): string {
+  const { maxUnitsToShow, style = 'narrow' } = options;
+
+  const regionLocale = getRegionLocale();
+
+  const durationObjToUse: PartialRecord<DurationUnit, number> = maxUnitsToShow
+    ? {}
+    : durationObj;
+
+  if (maxUnitsToShow) {
+    let unitsAdded = 0;
+    for (const unit of unitsOrder) {
+      const value = durationObj[unit];
+
+      if (value === 0 || value === undefined) continue;
+
+      durationObjToUse[unit] = value;
+
+      unitsAdded++;
+
+      if (unitsAdded >= maxUnitsToShow) break;
+    }
   }
 
-  components.minutes = totalMinutes % 60;
+  if (style === 'narrow' && regionLocale.startsWith('pt')) {
+    let formatted = '';
 
-  if (showSeconds) {
-    components.seconds = totalSeconds % 60;
+    for (const unit of unitsOrder) {
+      const value = durationObjToUse[unit];
+
+      if (value === 0 || value === undefined) continue;
+
+      formatted += `${value}${
+        (value === 1 ? ptUnitSingularMap : ptUnitMapPlural)[unit]
+      } `;
+    }
+
+    return formatted.trimEnd();
   }
 
-  const pad = (n: number) => (padWithZeros ? String(n).padStart(2, '0') : String(n));
+  try {
+    if (typeof Intl !== 'undefined' && Intl.DurationFormat) {
+      const cacheKey = `${regionLocale}:${style}`;
+      let formatter = intlCache.duration.get(cacheKey);
+      if (!formatter) {
+        formatter = new Intl.DurationFormat(regionLocale, { style });
+        intlCache.duration.set(cacheKey, formatter);
+      }
 
-  const parts: string[] = [];
-
-  if (components.days !== undefined && components.days > 0) {
-    parts.push(`${components.days}d`);
+      return formatter.format(durationObjToUse);
+    }
+  } catch {
+    // fallback to old implementation
   }
 
-  if (parts.length > 0 || components.hours > 0) {
-    parts.push(pad(components.hours));
-  }
-
-  parts.push(pad(components.minutes));
-
-  if (components.seconds !== undefined) {
-    parts.push(pad(components.seconds));
-  }
-
-  if (parts.length === 0) {
-    return showSeconds ? '0:00' : '0:00';
-  }
-
-  if (components.days !== undefined && components.days > 0) {
-    return `${parts[0]} ${parts.slice(1).join(':')}`;
-  }
-
-  return parts.join(':');
+  return msToTimeString(durationObjToUse);
 }

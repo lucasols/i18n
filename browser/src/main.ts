@@ -1,20 +1,25 @@
+import { clearIntlCache } from './formatters';
 import {
   configure,
-  getActiveLocaleConfig,
   getDefaultLocale,
+  getLocalesConfig,
   getPersistedLocale,
+  getRegionLocale,
   getState,
+  registerClearIntlCache,
   setLocale,
+  setMockedRegionLocale,
   subscribe,
 } from './state';
 import type { I18nController, LocaleConfig } from './types';
 
 export type I18nOptions<T extends string> = {
   locales: LocaleConfig<T>[];
-  persistenceKey?: string;
+  persistenceKey: string;
   retryAttempts?: number;
   retryDelay?: number;
-  defaultLocale?: T;
+  fallbackLocale?: T;
+  dev?: boolean;
 };
 
 export function i18nitialize<T extends string>(
@@ -25,27 +30,42 @@ export function i18nitialize<T extends string>(
     persistenceKey: options.persistenceKey,
     retryAttempts: options.retryAttempts,
     retryDelay: options.retryDelay,
+    dev: options.dev,
   });
 
+  registerClearIntlCache(clearIntlCache);
+
+  const setLocaleWithFallback = async (localeId: T): Promise<void> => {
+    const locales = getLocalesConfig();
+    const localeExists = locales.some((l) => l.id === localeId);
+
+    if (!localeExists && options.fallbackLocale) {
+      await setLocale(options.fallbackLocale);
+      return;
+    }
+
+    await setLocale(localeId);
+  };
+
   const controller: I18nController<T> = {
-    setLocale: async (localeId: T) => {
-      await setLocale(localeId);
+    setLocale: setLocaleWithFallback,
+    getLoadedLocale: () => {
+      const state = getState();
+      return state.isLoaded ? (state.activeLocale as T | null) : null;
     },
-    getActiveLocale: () => getState().activeLocale as T | null,
-    getRegionLocale: () => {
-      const config = getActiveLocaleConfig();
-      return config?.regionLocale ?? config?.id ?? 'en-US';
-    },
-    isLoaded: () => getState().isLoaded,
-    onChange: (callback: () => void) => subscribe(callback),
+    getRegionLocale: () => getRegionLocale(),
+    onLoad: (callback: (localeId: T) => void) =>
+      subscribe(callback as (localeId: string) => void),
+    __mockRegionLocale: setMockedRegionLocale,
   };
 
   const persistedLocale = getPersistedLocale() as T | null;
-  const defaultLocale = options.defaultLocale ?? (getDefaultLocale() as T | null);
-  const initialLocale = persistedLocale ?? defaultLocale;
+  const fallbackLocale =
+    options.fallbackLocale ?? (getDefaultLocale() as T | null);
+  const initialLocale = persistedLocale ?? fallbackLocale;
 
   if (initialLocale) {
-    setLocale(initialLocale).catch((error) => {
+    setLocaleWithFallback(initialLocale).catch((error) => {
       console.error('Failed to load initial locale:', error);
     });
   }
@@ -53,8 +73,6 @@ export function i18nitialize<T extends string>(
   return controller;
 }
 
-export { __, __jsx, __p, __pjsx } from './translate';
-export { resetState } from './state';
 export {
   __currency,
   __date,
@@ -63,9 +81,14 @@ export {
   __num,
   __relativeTime,
   __relativeTimeFromNow,
+  __timeDuration,
 } from './formatters';
+export { resetState } from './state';
+export { __, __jsx, __p, __pjsx } from './translate';
 
 export type {
+  DateTimeFormats,
+  DurationUnit,
   I18nController,
   I18nState,
   JsxInterpolation,
@@ -73,5 +96,7 @@ export type {
   LocaleConfig,
   LocaleLoader,
   PluralTranslation,
+  RelativeTimeFormat,
+  RelativeTimeUnits,
   TranslationValue,
 } from './types';

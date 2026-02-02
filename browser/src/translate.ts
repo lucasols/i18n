@@ -25,6 +25,9 @@ export function __(
   const selectedTranslation = translations[hash];
 
   if (selectedTranslation === undefined) {
+    if (fallbackTranslation.startsWith('$')) {
+      return '…';
+    }
     return fallbackTranslation;
   }
 
@@ -60,6 +63,9 @@ export function __p(num: number) {
     const selectedTranslation = translations[hash];
 
     if (selectedTranslation === undefined) {
+      if (fallbackTranslation.startsWith('$')) {
+        return '…';
+      }
       return fallbackTranslation;
     }
 
@@ -135,6 +141,9 @@ export function __jsx(
   const selectedTranslation = translations[hash];
 
   if (selectedTranslation === undefined) {
+    if (fallbackTranslation.startsWith('$')) {
+      return '…';
+    }
     return interpolateJsx(fallbackTranslation, exprs);
   }
 
@@ -174,6 +183,9 @@ export function __pjsx(num: number) {
     const selectedTranslation = translations[hash];
 
     if (selectedTranslation === undefined) {
+      if (fallbackTranslation.startsWith('$')) {
+        return '…';
+      }
       return interpolateJsx(fallbackTranslation, exprs);
     }
 

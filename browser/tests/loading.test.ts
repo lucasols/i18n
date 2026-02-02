@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { __, i18nitialize, resetState } from '../src/main';
+import { __, resetState } from '../src/main';
+import { createTestController } from './test-utils';
 
 beforeEach(() => {
   resetState();
@@ -7,8 +8,8 @@ beforeEach(() => {
 });
 
 describe('loading states', () => {
-  test('isLoaded is false before loading', () => {
-    const controller = i18nitialize({
+  test('getLoadedLocale is null before loading', () => {
+    const controller = createTestController({
       locales: [
         {
           id: 'en',
@@ -17,11 +18,11 @@ describe('loading states', () => {
       ],
     });
 
-    expect(controller.isLoaded()).toBe(false);
+    expect(controller.getLoadedLocale()).toBe(null);
   });
 
-  test('isLoaded is true after loading', async () => {
-    const controller = i18nitialize({
+  test('getLoadedLocale returns locale after loading', async () => {
+    const controller = createTestController({
       locales: [
         {
           id: 'en',
@@ -32,10 +33,10 @@ describe('loading states', () => {
 
     await controller.setLocale('en');
 
-    expect(controller.isLoaded()).toBe(true);
+    expect(controller.getLoadedLocale()).toBe('en');
   });
 
-  test('getActiveLocale is set immediately when setLocale called', async () => {
+  test('getLoadedLocale returns null while loading, locale after loaded', async () => {
     let resolveLoader: (value: { default: Record<string, never> }) => void;
     const loaderPromise = new Promise<{ default: Record<string, never> }>(
       (resolve) => {
@@ -43,7 +44,7 @@ describe('loading states', () => {
       },
     );
 
-    const controller = i18nitialize({
+    const controller = createTestController({
       locales: [
         {
           id: 'en',
@@ -58,17 +59,16 @@ describe('loading states', () => {
 
     const setLocalePromise = controller.setLocale('pt');
 
-    expect(controller.getActiveLocale()).toBe('pt');
-    expect(controller.isLoaded()).toBe(false);
+    expect(controller.getLoadedLocale()).toBe(null);
 
     resolveLoader!({ default: {} });
     await setLocalePromise;
 
-    expect(controller.isLoaded()).toBe(true);
+    expect(controller.getLoadedLocale()).toBe('pt');
   });
 
-  test('getActiveLocale returns locale id after loading', async () => {
-    const controller = i18nitialize({
+  test('getLoadedLocale returns locale id after loading', async () => {
+    const controller = createTestController({
       locales: [
         {
           id: 'en',
@@ -79,13 +79,13 @@ describe('loading states', () => {
 
     await controller.setLocale('en');
 
-    expect(controller.getActiveLocale()).toBe('en');
+    expect(controller.getLoadedLocale()).toBe('en');
   });
 });
 
 describe('locale switching', () => {
   test('can switch between locales', async () => {
-    const controller = i18nitialize({
+    const controller = createTestController({
       locales: [
         {
           id: 'en',
@@ -106,7 +106,7 @@ describe('locale switching', () => {
   });
 
   test('switching locales updates activeLocale', async () => {
-    const controller = i18nitialize({
+    const controller = createTestController({
       locales: [
         {
           id: 'en',
@@ -120,16 +120,16 @@ describe('locale switching', () => {
     });
 
     await controller.setLocale('en');
-    expect(controller.getActiveLocale()).toBe('en');
+    expect(controller.getLoadedLocale()).toBe('en');
 
     await controller.setLocale('pt');
-    expect(controller.getActiveLocale()).toBe('pt');
+    expect(controller.getLoadedLocale()).toBe('pt');
   });
 });
 
 describe('error handling', () => {
-  test('throws error for unknown locale', async () => {
-    const controller = i18nitialize({
+  test('throws error for unknown locale without fallback', async () => {
+    const controller = createTestController({
       locales: [
         {
           id: 'en',
@@ -143,8 +143,23 @@ describe('error handling', () => {
     );
   });
 
+  test('uses fallbackLocale for unknown locale', async () => {
+    const controller = createTestController({
+      locales: [
+        {
+          id: 'en',
+          loader: () => Promise.resolve({ default: {} }),
+        },
+      ],
+      fallbackLocale: 'en',
+    });
+
+    await controller.setLocale('unknown' as 'en');
+    expect(controller.getLoadedLocale()).toBe('en');
+  });
+
   test('throws error when loader fails after retries', async () => {
-    const controller = i18nitialize({
+    const controller = createTestController({
       locales: [
         {
           id: 'en',
@@ -164,7 +179,7 @@ describe('retry logic', () => {
     vi.useFakeTimers();
 
     let attempts = 0;
-    const controller = i18nitialize({
+    const controller = createTestController({
       locales: [
         {
           id: 'dummy',
@@ -195,7 +210,7 @@ describe('retry logic', () => {
     await loadPromise;
 
     expect(attempts).toBe(3);
-    expect(controller.isLoaded()).toBe(true);
+    expect(controller.getLoadedLocale()).toBe('en');
   });
 
   test('respects retryDelay between attempts', async () => {
@@ -204,7 +219,7 @@ describe('retry logic', () => {
     const timestamps: number[] = [];
     let attempts = 0;
 
-    const controller = i18nitialize({
+    const controller = createTestController({
       locales: [
         {
           id: 'dummy',
@@ -239,9 +254,33 @@ describe('retry logic', () => {
   });
 });
 
+describe('loading guard', () => {
+  test('duplicate setLocale calls are no-ops', async () => {
+    let loadCount = 0;
+    const controller = createTestController({
+      locales: [
+        {
+          id: 'en',
+          loader: () => {
+            loadCount++;
+            return Promise.resolve({ default: {} });
+          },
+        },
+      ],
+    });
+
+    const promise1 = controller.setLocale('en');
+    const promise2 = controller.setLocale('en');
+
+    await Promise.all([promise1, promise2]);
+
+    expect(loadCount).toBe(1);
+  });
+});
+
 describe('regionLocale', () => {
   test('getRegionLocale returns regionLocale from config', async () => {
-    const controller = i18nitialize({
+    const controller = createTestController({
       locales: [
         {
           id: 'en',
@@ -256,8 +295,8 @@ describe('regionLocale', () => {
     expect(controller.getRegionLocale()).toBe('en-US');
   });
 
-  test('getRegionLocale falls back to locale id', async () => {
-    const controller = i18nitialize({
+  test('getRegionLocale infers region from navigator.languages or falls back to locale id', async () => {
+    const controller = createTestController({
       locales: [
         {
           id: 'en',
@@ -268,19 +307,70 @@ describe('regionLocale', () => {
 
     await controller.setLocale('en');
 
-    expect(controller.getRegionLocale()).toBe('en');
+    const regionLocale = controller.getRegionLocale();
+    expect(regionLocale.startsWith('en')).toBe(true);
   });
 
-  test('getRegionLocale uses locale id during auto-load', () => {
-    const controller = i18nitialize({
+  test('__mockRegionLocale overrides region locale', async () => {
+    const controller = createTestController({
       locales: [
         {
-          id: 'fr',
+          id: 'en',
           loader: () => Promise.resolve({ default: {} }),
         },
       ],
     });
 
-    expect(controller.getRegionLocale()).toBe('fr');
+    await controller.setLocale('en');
+    controller.__mockRegionLocale('en-GB');
+
+    expect(controller.getRegionLocale()).toBe('en-GB');
+  });
+});
+
+describe('onLoad', () => {
+  test('notifies when locale is fully loaded', async () => {
+    const controller = createTestController({
+      locales: [
+        {
+          id: 'en',
+          loader: () => Promise.resolve({ default: {} }),
+        },
+        {
+          id: 'pt',
+          loader: () => Promise.resolve({ default: { hello: 'olá' } }),
+        },
+      ],
+    });
+
+    const receivedLocales: string[] = [];
+    controller.onLoad((localeId) => {
+      receivedLocales.push(localeId);
+    });
+
+    await controller.setLocale('pt');
+
+    expect(receivedLocales).toContain('pt');
+    expect(controller.getLoadedLocale()).toBe('pt');
+  });
+
+  test('does not call callback immediately when subscribing', async () => {
+    const controller = createTestController({
+      locales: [
+        {
+          id: 'en',
+          loader: () => Promise.resolve({ default: {} }),
+        },
+      ],
+    });
+
+    await controller.setLocale('en');
+
+    const receivedLocales: string[] = [];
+    controller.onLoad((localeId) => {
+      receivedLocales.push(localeId);
+    });
+
+    expect(receivedLocales).toEqual([]);
   });
 });

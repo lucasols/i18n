@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test } from 'vitest';
-import { __, __p, i18nitialize, resetState } from '../src/main';
+import { __, __p, resetState } from '../src/main';
+import { createTestController } from './test-utils';
 
 beforeEach(() => {
   resetState();
@@ -7,7 +8,7 @@ beforeEach(() => {
 
 describe('basic translation with async loading', () => {
   test('before loading, returns fallback', () => {
-    i18nitialize({
+    createTestController({
       locales: [
         {
           id: 'pt',
@@ -25,7 +26,7 @@ describe('basic translation with async loading', () => {
   });
 
   test('after loading, returns translation', async () => {
-    const controller = i18nitialize({
+    const controller = createTestController({
       locales: [
         {
           id: 'pt',
@@ -47,7 +48,7 @@ describe('basic translation with async loading', () => {
 
 describe('interpolation', () => {
   test('simple interpolation', async () => {
-    const controller = i18nitialize({
+    const controller = createTestController({
       locales: [
         {
           id: 'pt',
@@ -69,7 +70,7 @@ describe('interpolation', () => {
 
 describe('pluralization', () => {
   test('plural translations work after loading', async () => {
-    const controller = i18nitialize({
+    const controller = createTestController({
       locales: [
         {
           id: 'pt',
@@ -95,5 +96,44 @@ describe('pluralization', () => {
     expect(__p(2)`# apples`).toBe('2 maçãs');
     expect(__p(0)`# apples`).toBe('nenhuma maçã');
     expect(__p(11)`# apples`).toBe('muitas maçãs');
+  });
+});
+
+describe('$ prefix handling', () => {
+  test('returns ellipsis for translations starting with $', async () => {
+    const controller = createTestController({
+      locales: [
+        {
+          id: 'en',
+          loader: () =>
+            Promise.resolve({
+              default: {},
+            }),
+        },
+      ],
+    });
+
+    await controller.setLocale('en');
+
+    expect(__`$placeholder_text`).toBe('…');
+    expect(__`$pending_translation`).toBe('…');
+  });
+
+  test('returns ellipsis for $ prefix even with interpolation', async () => {
+    const controller = createTestController({
+      locales: [
+        {
+          id: 'en',
+          loader: () =>
+            Promise.resolve({
+              default: {},
+            }),
+        },
+      ],
+    });
+
+    await controller.setLocale('en');
+
+    expect(__`$pending ${'value'}`).toBe('…');
   });
 });

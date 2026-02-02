@@ -16,17 +16,61 @@ export type I18nState<T extends string = string> = {
   isLoaded: boolean;
   loadError: Error | null;
   translations: Locale | null;
+  regionLocale: string | null;
 };
 
 export type I18nController<T extends string = string> = {
   setLocale: (localeId: T) => Promise<void>;
-  getActiveLocale: () => T | null;
+  getLoadedLocale: () => T | null;
   getRegionLocale: () => string;
-  isLoaded: () => boolean;
-  onChange: (callback: () => void) => () => void;
+  onLoad: (callback: (localeId: T) => void) => () => void;
+  useLoadedLocale: () => {
+    isLoading: boolean;
+    loadError: Error | null;
+    loadedLocale: T | null;
+  };
+  __mockRegionLocale: (locale: string) => void;
 };
 
 export type JsxInterpolation = string | number | ReactNode;
+
+export type DateTimeFormats = {
+  weekday?: 'narrow' | 'short' | 'long';
+  era?: 'narrow' | 'short' | 'long';
+  year?: 'numeric' | '2-digit';
+  month?: 'numeric' | '2-digit' | 'narrow' | 'short' | 'long';
+  day?: 'numeric' | '2-digit';
+  hour?: 'numeric' | '2-digit';
+  minute?: 'numeric' | '2-digit';
+  second?: 'numeric' | '2-digit';
+  timeZoneName?: 'short' | 'long';
+  dateStyle?: 'full' | 'long' | 'medium' | 'short';
+  timeStyle?: 'full' | 'long' | 'medium' | 'short';
+};
+
+export type RelativeTimeFormat = {
+  numeric?: 'always' | 'auto';
+  style?: 'long' | 'narrow';
+};
+
+export type RelativeTimeUnits =
+  | 'year'
+  | 'quarter'
+  | 'month'
+  | 'week'
+  | 'day'
+  | 'hour'
+  | 'minute'
+  | 'second';
+
+export type DurationUnit =
+  | 'years'
+  | 'months'
+  | 'days'
+  | 'hours'
+  | 'minutes'
+  | 'seconds'
+  | 'milliseconds';
 
 export type {
   Locale,
