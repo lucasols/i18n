@@ -5,12 +5,12 @@
   "version": "0.5.0",
   "license": "MIT",
   "scripts": {
-    "test": "vitest --ui",
-    "test:run": "vitest run",
+    "test": "NODE_OPTIONS='--no-webstorage' vitest run",
+    "test:ui": "NODE_OPTIONS='--no-webstorage' vitest --ui",
     "lint": "pnpm tsc && pnpm eslint",
     "tsc": "pnpm -r tsc",
     "eslint": "CI=true eslint core/src/ server/src/ server/tests/ browser/src/ browser/tests/ --color --max-warnings=0",
-    "build": "pnpm test:run && pnpm lint && pnpm build:no-test",
+    "build": "pnpm test && pnpm lint && pnpm build:no-test",
     "build:no-test": "pnpm -r build:no-test",
     "pre-publish": "./scripts/check-if-is-sync.sh && pnpm build"
   },

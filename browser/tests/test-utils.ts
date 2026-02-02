@@ -3,19 +3,26 @@ import { sleep } from '@ls-stack/utils/sleep';
 import { typedObjectEntries } from '@ls-stack/utils/typingFnUtils';
 import { i18nitialize, type I18nOptions, type Locale } from '../src/main';
 
-export function createTestController<T extends string>({
+export function createTestController<
+  L extends Record<string, Locale | Error | Promise<Locale>>,
+>({
   fallbackLocale,
   locales,
   loadingTime = 100,
+  persistenceKey = 'test',
   ...options
-}: Omit<I18nOptions<T>, 'persistenceKey' | 'fallbackLocale' | 'locales'> & {
-  fallbackLocale?: T;
-  locales: Record<T, Locale | Error | Promise<Locale>>;
+}: Omit<
+  I18nOptions<keyof L & string>,
+  'persistenceKey' | 'fallbackLocale' | 'locales'
+> & {
+  fallbackLocale?: keyof L & string;
+  locales: L;
   loadingTime?: number;
+  persistenceKey?: string;
 }) {
   const normalizedLocales = typedObjectEntries(locales).map(
     ([id, localeOrError]) => ({
-      id,
+      id: id as keyof L & string,
       loader: async (): Promise<{ default: Locale }> => {
         await sleep(loadingTime);
 
@@ -36,7 +43,7 @@ export function createTestController<T extends string>({
   const firstLocaleId = normalizedLocales[0].id;
 
   return i18nitialize({
-    persistenceKey: 'test',
+    persistenceKey,
     ...options,
     fallbackLocale: fallbackLocale ?? firstLocaleId,
     locales: normalizedLocales,

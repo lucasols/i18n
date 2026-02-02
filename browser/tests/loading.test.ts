@@ -1,3 +1,6 @@
+/**
+ * @vitest-environment happy-dom
+ */
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { sleep } from '@ls-stack/utils/sleep';
 import { __, i18nitialize, resetState } from '../src/main';
@@ -6,6 +9,7 @@ import { createTestController } from './test-utils';
 beforeEach(() => {
   resetState();
   vi.useRealTimers();
+  localStorage.clear();
 });
 
 describe('loading states', () => {
@@ -262,5 +266,73 @@ describe('onLoad', () => {
     });
 
     expect(receivedLocales).toEqual([]);
+  });
+});
+
+describe('persistenceKey', () => {
+  test('persists locale to localStorage after successful load', async () => {
+    const key = 'test-persistence-save';
+
+    const controller = createTestController({
+      locales: { en: {}, pt: {} },
+      persistenceKey: key,
+    });
+
+    await controller.setLocale('pt');
+
+    expect(localStorage.getItem(key)).toBe('pt');
+  });
+
+  test('loads persisted locale on initialization', async () => {
+    vi.useFakeTimers();
+
+    const key = 'test-persistence-load';
+    localStorage.setItem(key, 'pt');
+
+    const controller = createTestController({
+      locales: { en: {}, pt: {} },
+      fallbackLocale: 'en',
+      persistenceKey: key,
+    });
+
+    // Wait for automatic initialization to complete
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(controller.getLoadedLocale()).toBe('pt');
+  });
+
+  test('falls back to fallbackLocale when no persisted locale', async () => {
+    vi.useFakeTimers();
+
+    const key = 'test-persistence-no-stored';
+
+    const controller = createTestController({
+      locales: { en: {}, pt: {} },
+      fallbackLocale: 'en',
+      persistenceKey: key,
+    });
+
+    // Wait for automatic initialization to complete
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(controller.getLoadedLocale()).toBe('en');
+  });
+
+  test('falls back to fallbackLocale when persisted locale is invalid', async () => {
+    vi.useFakeTimers();
+
+    const key = 'test-persistence-invalid';
+    localStorage.setItem(key, 'invalid-locale');
+
+    const controller = createTestController({
+      locales: { en: {}, pt: {} },
+      fallbackLocale: 'en',
+      persistenceKey: key,
+    });
+
+    // Wait for automatic initialization to complete (falls back to 'en')
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(controller.getLoadedLocale()).toBe('en');
   });
 });
