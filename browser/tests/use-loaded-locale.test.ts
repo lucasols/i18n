@@ -132,47 +132,6 @@ test('updates when locale changes', async () => {
 
   await vi.advanceTimersByTimeAsync(100);
 
-  await act(async () => {
-    const promise = controller.setLocale('pt');
-    await vi.advanceTimersByTimeAsync(100);
-    await promise;
-  });
-
-  expect(logger.snapshot).toMatchInlineSnapshot(`
-    "
-    -> isLoading: en ⋅ loadError: null ⋅ loadedLocale: null ⋅ translation: Hello
-    -> isLoading: null ⋅ loadError: null ⋅ loadedLocale: en ⋅ translation: Hello EN
-    -> isLoading: pt ⋅ loadError: null ⋅ loadedLocale: en ⋅ translation: Hello EN
-    -> isLoading: null ⋅ loadError: null ⋅ loadedLocale: pt ⋅ translation: Olá PT
-    "
-  `);
-});
-
-test('re-renders during loading transitions', async () => {
-  vi.useFakeTimers();
-
-  const controller = createTestController({
-    locales: {
-      en: { Hello: 'Hello EN' },
-      pt: { Hello: 'Olá PT' },
-    },
-  });
-
-  const logger = createLoggerStore();
-
-  renderHook(() => {
-    const state = controller.useLoadedLocale();
-    logger.add({
-      isLoading: state.isLoading?.locale ?? null,
-      loadError: state.loadError,
-      loadedLocale: state.loadedLocale,
-      translation: __`Hello`,
-    });
-    return state;
-  });
-
-  await vi.advanceTimersByTimeAsync(100);
-
   logger.addMark('start loading pt');
 
   act(() => {
