@@ -18,16 +18,10 @@ beforeEach(() => {
 
 test('__date formats dates', async () => {
   const controller = createTestController({
-    locales: [
-      {
-        id: 'en',
-        loader: () => Promise.resolve({ default: {} }),
-        regionLocale: 'en-US',
-        currencyCode: 'USD',
-      },
-    ],
+    locales: { en: {} },
   });
   await controller.setLocale('en');
+  controller.__mockRegionLocale('en-US');
 
   const date = new Date('2024-01-15T12:00:00Z');
   const formatted = __date(date, { dateStyle: 'short' });
@@ -36,15 +30,10 @@ test('__date formats dates', async () => {
 
 test('__date accepts string input', async () => {
   const controller = createTestController({
-    locales: [
-      {
-        id: 'en',
-        loader: () => Promise.resolve({ default: {} }),
-        regionLocale: 'en-US',
-      },
-    ],
+    locales: { en: {} },
   });
   await controller.setLocale('en');
+  controller.__mockRegionLocale('en-US');
 
   const formatted = __date('2024-01-15', { dateStyle: 'short' });
   expect(formatted).toMatch(/1\/15\/24/);
@@ -52,15 +41,10 @@ test('__date accepts string input', async () => {
 
 test('__date returns Invalid Date for invalid input', async () => {
   const controller = createTestController({
-    locales: [
-      {
-        id: 'en',
-        loader: () => Promise.resolve({ default: {} }),
-        regionLocale: 'en-US',
-      },
-    ],
+    locales: { en: {} },
   });
   await controller.setLocale('en');
+  controller.__mockRegionLocale('en-US');
 
   const formatted = __date('not-a-date');
   expect(formatted).toBe('Invalid Date');
@@ -68,15 +52,10 @@ test('__date returns Invalid Date for invalid input', async () => {
 
 test('__num formats numbers', async () => {
   const controller = createTestController({
-    locales: [
-      {
-        id: 'en',
-        loader: () => Promise.resolve({ default: {} }),
-        regionLocale: 'en-US',
-      },
-    ],
+    locales: { en: {} },
   });
   await controller.setLocale('en');
+  controller.__mockRegionLocale('en-US');
 
   const formatted = __num(1234.56);
   expect(formatted).toBe('1,234.56');
@@ -84,15 +63,10 @@ test('__num formats numbers', async () => {
 
 test('__num returns empty string for null', async () => {
   const controller = createTestController({
-    locales: [
-      {
-        id: 'en',
-        loader: () => Promise.resolve({ default: {} }),
-        regionLocale: 'en-US',
-      },
-    ],
+    locales: { en: {} },
   });
   await controller.setLocale('en');
+  controller.__mockRegionLocale('en-US');
 
   const formatted = __num(null);
   expect(formatted).toBe('');
@@ -100,32 +74,21 @@ test('__num returns empty string for null', async () => {
 
 test('__currency formats currency', async () => {
   const controller = createTestController({
-    locales: [
-      {
-        id: 'en',
-        loader: () => Promise.resolve({ default: {} }),
-        regionLocale: 'en-US',
-        currencyCode: 'USD',
-      },
-    ],
+    locales: { en: {} },
   });
   await controller.setLocale('en');
+  controller.__mockRegionLocale('en-US');
 
-  const formatted = __currency(1234.56);
+  const formatted = __currency(1234.56, 'USD');
   expect(formatted).toMatch(/\$1,234\.56/);
 });
 
 test('__relativeTime formats relative time with object API', async () => {
   const controller = createTestController({
-    locales: [
-      {
-        id: 'en',
-        loader: () => Promise.resolve({ default: {} }),
-        regionLocale: 'en-US',
-      },
-    ],
+    locales: { en: {} },
   });
   await controller.setLocale('en');
+  controller.__mockRegionLocale('en-US');
 
   const now = new Date('2024-01-15T12:00:00Z');
   const yesterday = new Date('2024-01-14T12:00:00Z');
@@ -135,15 +98,10 @@ test('__relativeTime formats relative time with object API', async () => {
 
 test('__relativeTime with auto unit detection', async () => {
   const controller = createTestController({
-    locales: [
-      {
-        id: 'en',
-        loader: () => Promise.resolve({ default: {} }),
-        regionLocale: 'en-US',
-      },
-    ],
+    locales: { en: {} },
   });
   await controller.setLocale('en');
+  controller.__mockRegionLocale('en-US');
 
   const now = new Date('2024-01-15T12:00:00Z');
   const fiveMinutesAgo = new Date('2024-01-15T11:55:00Z');
@@ -153,15 +111,10 @@ test('__relativeTime with auto unit detection', async () => {
 
 test('__relativeTimeFromNow formats relative time', async () => {
   const controller = createTestController({
-    locales: [
-      {
-        id: 'en',
-        loader: () => Promise.resolve({ default: {} }),
-        regionLocale: 'en-US',
-      },
-    ],
+    locales: { en: {} },
   });
   await controller.setLocale('en');
+  controller.__mockRegionLocale('en-US');
 
   const now = new Date('2024-01-15T12:00:00Z');
   const yesterday = new Date('2024-01-14T12:00:00Z');
@@ -171,15 +124,10 @@ test('__relativeTimeFromNow formats relative time', async () => {
 
 test('__relativeTimeFromNow uses date format for long diffs', async () => {
   const controller = createTestController({
-    locales: [
-      {
-        id: 'en',
-        loader: () => Promise.resolve({ default: {} }),
-        regionLocale: 'en-US',
-      },
-    ],
+    locales: { en: {} },
   });
   await controller.setLocale('en');
+  controller.__mockRegionLocale('en-US');
 
   const now = new Date('2024-01-15T12:00:00Z');
   const twoWeeksAgo = new Date('2024-01-01T12:00:00Z');
@@ -193,15 +141,10 @@ test('__relativeTimeFromNow uses date format for long diffs', async () => {
 
 test('__list formats lists', async () => {
   const controller = createTestController({
-    locales: [
-      {
-        id: 'en',
-        loader: () => Promise.resolve({ default: {} }),
-        regionLocale: 'en-US',
-      },
-    ],
+    locales: { en: {} },
   });
   await controller.setLocale('en');
+  controller.__mockRegionLocale('en-US');
 
   const formatted = __list(['apple', 'banana', 'cherry']);
   expect(formatted).toBe('apple, banana, and cherry');
@@ -209,15 +152,10 @@ test('__list formats lists', async () => {
 
 test('__timeDuration returns formatted duration with unit', async () => {
   const controller = createTestController({
-    locales: [
-      {
-        id: 'en',
-        loader: () => Promise.resolve({ default: {} }),
-        regionLocale: 'en-US',
-      },
-    ],
+    locales: { en: {} },
   });
   await controller.setLocale('en');
+  controller.__mockRegionLocale('en-US');
 
   const result = __timeDuration({ ms: 3600000 });
   expect(result.unit).toBe('hour');
@@ -226,15 +164,10 @@ test('__timeDuration returns formatted duration with unit', async () => {
 
 test('__formattedTimeDuration formats duration object', async () => {
   const controller = createTestController({
-    locales: [
-      {
-        id: 'en',
-        loader: () => Promise.resolve({ default: {} }),
-        regionLocale: 'en-US',
-      },
-    ],
+    locales: { en: {} },
   });
   await controller.setLocale('en');
+  controller.__mockRegionLocale('en-US');
 
   const formatted = __formattedTimeDuration({
     hours: 1,
@@ -246,15 +179,10 @@ test('__formattedTimeDuration formats duration object', async () => {
 
 test('__formattedTimeDuration with maxUnitsToShow', async () => {
   const controller = createTestController({
-    locales: [
-      {
-        id: 'en',
-        loader: () => Promise.resolve({ default: {} }),
-        regionLocale: 'en-US',
-      },
-    ],
+    locales: { en: {} },
   });
   await controller.setLocale('en');
+  controller.__mockRegionLocale('en-US');
 
   const formatted = __formattedTimeDuration(
     { hours: 1, minutes: 30, seconds: 45 },

@@ -9,17 +9,9 @@ beforeEach(() => {
 describe('basic translation with async loading', () => {
   test('before loading, returns fallback', () => {
     createTestController({
-      locales: [
-        {
-          id: 'pt',
-          loader: () =>
-            Promise.resolve({
-              default: {
-                hello: 'olá',
-              },
-            }),
-        },
-      ],
+      locales: {
+        pt: { hello: 'olá' },
+      },
     });
 
     expect(__`hello`).toBe('hello');
@@ -27,17 +19,9 @@ describe('basic translation with async loading', () => {
 
   test('after loading, returns translation', async () => {
     const controller = createTestController({
-      locales: [
-        {
-          id: 'pt',
-          loader: () =>
-            Promise.resolve({
-              default: {
-                hello: 'olá',
-              },
-            }),
-        },
-      ],
+      locales: {
+        pt: { hello: 'olá' },
+      },
     });
 
     await controller.setLocale('pt');
@@ -49,17 +33,9 @@ describe('basic translation with async loading', () => {
 describe('interpolation', () => {
   test('simple interpolation', async () => {
     const controller = createTestController({
-      locales: [
-        {
-          id: 'pt',
-          loader: () =>
-            Promise.resolve({
-              default: {
-                'hello {1}': 'olá {1}',
-              },
-            }),
-        },
-      ],
+      locales: {
+        pt: { 'hello {1}': 'olá {1}' },
+      },
     });
 
     await controller.setLocale('pt');
@@ -71,23 +47,17 @@ describe('interpolation', () => {
 describe('pluralization', () => {
   test('plural translations work after loading', async () => {
     const controller = createTestController({
-      locales: [
-        {
-          id: 'pt',
-          loader: () =>
-            Promise.resolve({
-              default: {
-                '# apples': {
-                  one: 'uma maçã',
-                  '+2': '# maçãs',
-                  zero: 'nenhuma maçã',
-                  many: 'muitas maçãs',
-                  manyLimit: 10,
-                },
-              },
-            }),
+      locales: {
+        pt: {
+          '# apples': {
+            one: 'uma maçã',
+            '+2': '# maçãs',
+            zero: 'nenhuma maçã',
+            many: 'muitas maçãs',
+            manyLimit: 10,
+          },
         },
-      ],
+      },
     });
 
     await controller.setLocale('pt');
@@ -102,15 +72,7 @@ describe('pluralization', () => {
 describe('$ prefix handling', () => {
   test('returns ellipsis for translations starting with $', async () => {
     const controller = createTestController({
-      locales: [
-        {
-          id: 'en',
-          loader: () =>
-            Promise.resolve({
-              default: {},
-            }),
-        },
-      ],
+      locales: { en: {} },
     });
 
     await controller.setLocale('en');
@@ -121,15 +83,7 @@ describe('$ prefix handling', () => {
 
   test('returns ellipsis for $ prefix even with interpolation', async () => {
     const controller = createTestController({
-      locales: [
-        {
-          id: 'en',
-          loader: () =>
-            Promise.resolve({
-              default: {},
-            }),
-        },
-      ],
+      locales: { en: {} },
     });
 
     await controller.setLocale('en');

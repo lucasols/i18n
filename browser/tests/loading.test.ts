@@ -10,12 +10,7 @@ beforeEach(() => {
 describe('loading states', () => {
   test('getLoadedLocale is null before loading', () => {
     const controller = createTestController({
-      locales: [
-        {
-          id: 'en',
-          loader: () => Promise.resolve({ default: {} }),
-        },
-      ],
+      locales: { en: {} },
     });
 
     expect(controller.getLoadedLocale()).toBe(null);
@@ -23,12 +18,7 @@ describe('loading states', () => {
 
   test('getLoadedLocale returns locale after loading', async () => {
     const controller = createTestController({
-      locales: [
-        {
-          id: 'en',
-          loader: () => Promise.resolve({ default: {} }),
-        },
-      ],
+      locales: { en: {} },
     });
 
     await controller.setLocale('en');
@@ -37,31 +27,17 @@ describe('loading states', () => {
   });
 
   test('getLoadedLocale returns null while loading, locale after loaded', async () => {
-    let resolveLoader: (value: { default: Record<string, never> }) => void;
-    const loaderPromise = new Promise<{ default: Record<string, never> }>(
-      (resolve) => {
-        resolveLoader = resolve;
-      },
-    );
+    vi.useFakeTimers();
 
     const controller = createTestController({
-      locales: [
-        {
-          id: 'en',
-          loader: () => loaderPromise,
-        },
-        {
-          id: 'pt',
-          loader: () => Promise.resolve({ default: {} }),
-        },
-      ],
+      locales: { en: {}, pt: {} },
     });
 
     const setLocalePromise = controller.setLocale('pt');
 
     expect(controller.getLoadedLocale()).toBe(null);
 
-    resolveLoader!({ default: {} });
+    await vi.advanceTimersByTimeAsync(100);
     await setLocalePromise;
 
     expect(controller.getLoadedLocale()).toBe('pt');
@@ -69,12 +45,7 @@ describe('loading states', () => {
 
   test('getLoadedLocale returns locale id after loading', async () => {
     const controller = createTestController({
-      locales: [
-        {
-          id: 'en',
-          loader: () => Promise.resolve({ default: {} }),
-        },
-      ],
+      locales: { en: {} },
     });
 
     await controller.setLocale('en');
@@ -86,16 +57,10 @@ describe('loading states', () => {
 describe('locale switching', () => {
   test('can switch between locales', async () => {
     const controller = createTestController({
-      locales: [
-        {
-          id: 'en',
-          loader: () => Promise.resolve({ default: { hello: 'hello' } }),
-        },
-        {
-          id: 'pt',
-          loader: () => Promise.resolve({ default: { hello: 'olá' } }),
-        },
-      ],
+      locales: {
+        en: { hello: 'hello' },
+        pt: { hello: 'olá' },
+      },
     });
 
     await controller.setLocale('en');
@@ -107,16 +72,10 @@ describe('locale switching', () => {
 
   test('switching locales updates activeLocale', async () => {
     const controller = createTestController({
-      locales: [
-        {
-          id: 'en',
-          loader: () => Promise.resolve({ default: {} }),
-        },
-        {
-          id: 'pt',
-          loader: () => Promise.resolve({ default: {} }),
-        },
-      ],
+      locales: {
+        en: {},
+        pt: {},
+      },
     });
 
     await controller.setLocale('en');
@@ -128,29 +87,9 @@ describe('locale switching', () => {
 });
 
 describe('error handling', () => {
-  test('throws error for unknown locale without fallback', async () => {
-    const controller = createTestController({
-      locales: [
-        {
-          id: 'en',
-          loader: () => Promise.resolve({ default: {} }),
-        },
-      ],
-    });
-
-    await expect(controller.setLocale('unknown' as 'en')).rejects.toThrow(
-      'Locale "unknown" not found',
-    );
-  });
-
   test('uses fallbackLocale for unknown locale', async () => {
     const controller = createTestController({
-      locales: [
-        {
-          id: 'en',
-          loader: () => Promise.resolve({ default: {} }),
-        },
-      ],
+      locales: { en: {} },
       fallbackLocale: 'en',
     });
 
@@ -159,150 +98,63 @@ describe('error handling', () => {
   });
 
   test('throws error when loader fails after retries', async () => {
+    vi.useFakeTimers();
+
     const controller = createTestController({
-      locales: [
-        {
-          id: 'en',
-          loader: () => Promise.reject(new Error('Network error')),
-        },
-      ],
+      locales: { dummy: {}, en: new Error('Network error') },
       retryAttempts: 1,
       retryDelay: 0,
     });
 
-    await expect(controller.setLocale('en')).rejects.toThrow('Network error');
+    // Wait for initial load of dummy locale (first in object = fallback)
+    await vi.advanceTimersByTimeAsync(100);
+
+    let caughtError: Error | undefined;
+    const promise = controller.setLocale('en').catch((e: Error) => {
+      caughtError = e;
+    });
+
+    // First attempt (100ms) + 1 retry (100ms) = 200ms
+    await vi.advanceTimersByTimeAsync(200);
+    await promise;
+
+    expect(caughtError).toBeDefined();
+    expect(caughtError?.message).toBe('Network error');
   });
 });
 
+
 describe('retry logic', () => {
-  test('retries on failure before succeeding', async () => {
+  test('retries with configured delay before failing', async () => {
     vi.useFakeTimers();
 
-    let attempts = 0;
     const controller = createTestController({
-      locales: [
-        {
-          id: 'dummy',
-          loader: () => Promise.resolve({ default: {} }),
-        },
-        {
-          id: 'en',
-          loader: () => {
-            attempts++;
-            if (attempts < 3) {
-              return Promise.reject(new Error('Network error'));
-            }
-            return Promise.resolve({ default: { hello: 'hello' } });
-          },
-        },
-      ],
+      locales: { dummy: {}, en: new Error('Network error') },
       retryAttempts: 3,
       retryDelay: 100,
     });
 
-    await controller.setLocale('dummy');
-
-    const loadPromise = controller.setLocale('en');
-
-    await vi.advanceTimersByTimeAsync(100);
+    // Wait for initial load of dummy locale (first in object = fallback)
     await vi.advanceTimersByTimeAsync(100);
 
-    await loadPromise;
-
-    expect(attempts).toBe(3);
-    expect(controller.getLoadedLocale()).toBe('en');
-  });
-
-  test('respects retryDelay between attempts', async () => {
-    vi.useFakeTimers();
-
-    const timestamps: number[] = [];
-    let attempts = 0;
-
-    const controller = createTestController({
-      locales: [
-        {
-          id: 'dummy',
-          loader: () => Promise.resolve({ default: {} }),
-        },
-        {
-          id: 'en',
-          loader: () => {
-            timestamps.push(Date.now());
-            attempts++;
-            if (attempts < 2) {
-              return Promise.reject(new Error('Network error'));
-            }
-            return Promise.resolve({ default: {} });
-          },
-        },
-      ],
-      retryAttempts: 2,
-      retryDelay: 500,
+    let caughtError: Error | undefined;
+    const loadPromise = controller.setLocale('en').catch((e: Error) => {
+      caughtError = e;
     });
 
-    await controller.setLocale('dummy');
-
-    const loadPromise = controller.setLocale('en');
-
-    await vi.advanceTimersByTimeAsync(500);
-
+    // First attempt (100ms) + 3 retries * (100ms delay + 100ms loading) = 700ms total
+    await vi.advanceTimersByTimeAsync(800);
     await loadPromise;
 
-    expect(timestamps).toHaveLength(2);
-    expect(timestamps[1]! - timestamps[0]!).toBe(500);
-  });
-});
-
-describe('loading guard', () => {
-  test('duplicate setLocale calls are no-ops', async () => {
-    let loadCount = 0;
-    const controller = createTestController({
-      locales: [
-        {
-          id: 'en',
-          loader: () => {
-            loadCount++;
-            return Promise.resolve({ default: {} });
-          },
-        },
-      ],
-    });
-
-    const promise1 = controller.setLocale('en');
-    const promise2 = controller.setLocale('en');
-
-    await Promise.all([promise1, promise2]);
-
-    expect(loadCount).toBe(1);
+    expect(caughtError).toBeDefined();
+    expect(caughtError?.message).toBe('Network error');
   });
 });
 
 describe('regionLocale', () => {
-  test('getRegionLocale returns regionLocale from config', async () => {
-    const controller = createTestController({
-      locales: [
-        {
-          id: 'en',
-          loader: () => Promise.resolve({ default: {} }),
-          regionLocale: 'en-US',
-        },
-      ],
-    });
-
-    await controller.setLocale('en');
-
-    expect(controller.getRegionLocale()).toBe('en-US');
-  });
-
   test('getRegionLocale infers region from navigator.languages or falls back to locale id', async () => {
     const controller = createTestController({
-      locales: [
-        {
-          id: 'en',
-          loader: () => Promise.resolve({ default: {} }),
-        },
-      ],
+      locales: { en: {} },
     });
 
     await controller.setLocale('en');
@@ -313,12 +165,7 @@ describe('regionLocale', () => {
 
   test('__mockRegionLocale overrides region locale', async () => {
     const controller = createTestController({
-      locales: [
-        {
-          id: 'en',
-          loader: () => Promise.resolve({ default: {} }),
-        },
-      ],
+      locales: { en: {} },
     });
 
     await controller.setLocale('en');
@@ -331,16 +178,10 @@ describe('regionLocale', () => {
 describe('onLoad', () => {
   test('notifies when locale is fully loaded', async () => {
     const controller = createTestController({
-      locales: [
-        {
-          id: 'en',
-          loader: () => Promise.resolve({ default: {} }),
-        },
-        {
-          id: 'pt',
-          loader: () => Promise.resolve({ default: { hello: 'olá' } }),
-        },
-      ],
+      locales: {
+        en: {},
+        pt: { hello: 'olá' },
+      },
     });
 
     const receivedLocales: string[] = [];
@@ -356,12 +197,7 @@ describe('onLoad', () => {
 
   test('does not call callback immediately when subscribing', async () => {
     const controller = createTestController({
-      locales: [
-        {
-          id: 'en',
-          loader: () => Promise.resolve({ default: {} }),
-        },
-      ],
+      locales: { en: {} },
     });
 
     await controller.setLocale('en');

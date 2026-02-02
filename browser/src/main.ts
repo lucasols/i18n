@@ -1,7 +1,8 @@
+import { useSyncExternalStore } from 'react';
 import { clearIntlCache } from './formatters';
 import {
   configure,
-  getDefaultLocale,
+  getLoadedLocaleSnapshot,
   getLocalesConfig,
   getPersistedLocale,
   getRegionLocale,
@@ -10,15 +11,16 @@ import {
   setLocale,
   setMockedRegionLocale,
   subscribe,
+  subscribeToState,
 } from './state';
 import type { I18nController, LocaleConfig } from './types';
 
 export type I18nOptions<T extends string> = {
   locales: LocaleConfig<T>[];
   persistenceKey: string;
+  fallbackLocale: T;
   retryAttempts?: number;
   retryDelay?: number;
-  fallbackLocale?: T;
   dev?: boolean;
 };
 
@@ -56,13 +58,22 @@ export function i18nitialize<T extends string>(
     getRegionLocale: () => getRegionLocale(),
     onLoad: (callback: (localeId: T) => void) =>
       subscribe(callback as (localeId: string) => void),
+    useLoadedLocale: () => {
+      const snapshot = useSyncExternalStore(
+        subscribeToState,
+        getLoadedLocaleSnapshot,
+      );
+      return {
+        isLoading: snapshot.isLoading as { locale: T } | null,
+        loadError: snapshot.loadError,
+        loadedLocale: snapshot.loadedLocale as T | null,
+      };
+    },
     __mockRegionLocale: setMockedRegionLocale,
   };
 
   const persistedLocale = getPersistedLocale() as T | null;
-  const fallbackLocale =
-    options.fallbackLocale ?? (getDefaultLocale() as T | null);
-  const initialLocale = persistedLocale ?? fallbackLocale;
+  const initialLocale = persistedLocale ?? options.fallbackLocale;
 
   if (initialLocale) {
     setLocaleWithFallback(initialLocale).catch((error) => {

@@ -14,12 +14,16 @@ let state: I18nState<string> = {
 type OnChangeCallback = (localeId: string) => void;
 const listeners: Set<OnChangeCallback> = new Set();
 
+type StateChangeCallback = () => void;
+const stateListeners: Set<StateChangeCallback> = new Set();
+
 let persistenceKey: string | null = null;
 let retryAttempts = 3;
 let retryDelay = 1000;
 let devMode = false;
 let loadingLocaleId: string | null = null;
 let loadingPromise: Promise<void> | null = null;
+let loadedLocaleId: string | null = null;
 let mockedRegionLocale: string | null = null;
 let clearIntlCacheFn: (() => void) | null = null;
 
@@ -62,6 +66,20 @@ export function subscribe(callback: OnChangeCallback): () => void {
   };
 }
 
+export function subscribeToState(callback: StateChangeCallback): () => void {
+  stateListeners.add(callback);
+
+  return () => {
+    stateListeners.delete(callback);
+  };
+}
+
+function notifyStateListeners() {
+  for (const callback of stateListeners) {
+    callback();
+  }
+}
+
 function notifyListeners() {
   if (state.activeLocale) {
     for (const callback of listeners) {
@@ -72,6 +90,7 @@ function notifyListeners() {
 
 function updateState(newState: Partial<I18nState<string>>) {
   state = { ...state, ...newState };
+  notifyStateListeners();
 }
 
 function inferRegionLocale(localeId: string): string {
@@ -144,6 +163,8 @@ export async function setLocale(localeId: string): Promise<void> {
       const regionLocale =
         localeConfig.regionLocale ?? inferRegionLocale(localeId);
 
+      loadedLocaleId = localeId;
+
       updateState({
         translations,
         isLoading: false,
@@ -198,6 +219,36 @@ export function getDefaultLocale(): string | null {
   return localesConfig[0]?.id ?? null;
 }
 
+type LoadedLocaleSnapshot = {
+  isLoading: { locale: string } | null;
+  loadError: Error | null;
+  loadedLocale: string | null;
+};
+
+let cachedSnapshot: LoadedLocaleSnapshot | null = null;
+
+export function getLoadedLocaleSnapshot(): LoadedLocaleSnapshot {
+  const isLoading = loadingLocaleId ? { locale: loadingLocaleId } : null;
+  const loadedLocale = loadedLocaleId;
+
+  if (
+    cachedSnapshot &&
+    cachedSnapshot.isLoading?.locale === isLoading?.locale &&
+    cachedSnapshot.loadError === state.loadError &&
+    cachedSnapshot.loadedLocale === loadedLocale
+  ) {
+    return cachedSnapshot;
+  }
+
+  cachedSnapshot = {
+    isLoading,
+    loadError: state.loadError,
+    loadedLocale,
+  };
+
+  return cachedSnapshot;
+}
+
 export function resetState(): void {
   localesConfig = [];
   state = {
@@ -209,11 +260,14 @@ export function resetState(): void {
     regionLocale: null,
   };
   listeners.clear();
+  stateListeners.clear();
+  cachedSnapshot = null;
   persistenceKey = null;
   retryAttempts = 3;
   retryDelay = 1000;
   devMode = false;
   loadingLocaleId = null;
   loadingPromise = null;
+  loadedLocaleId = null;
   mockedRegionLocale = null;
 }

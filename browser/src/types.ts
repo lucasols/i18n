@@ -25,7 +25,7 @@ export type I18nController<T extends string = string> = {
   getRegionLocale: () => string;
   onLoad: (callback: (localeId: T) => void) => () => void;
   useLoadedLocale: () => {
-    isLoading: boolean;
+    isLoading: { locale: T } | null;
     loadError: Error | null;
     loadedLocale: T | null;
   };
