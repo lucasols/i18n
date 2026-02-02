@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { __, resetState } from '../src/main';
+import { sleep } from '@ls-stack/utils/sleep';
+import { __, i18nitialize, resetState } from '../src/main';
 import { createTestController } from './test-utils';
 
 beforeEach(() => {
@@ -43,15 +44,6 @@ describe('loading states', () => {
     expect(controller.getLoadedLocale()).toBe('pt');
   });
 
-  test('getLoadedLocale returns locale id after loading', async () => {
-    const controller = createTestController({
-      locales: { en: {} },
-    });
-
-    await controller.setLocale('en');
-
-    expect(controller.getLoadedLocale()).toBe('en');
-  });
 });
 
 describe('locale switching', () => {
@@ -83,6 +75,33 @@ describe('locale switching', () => {
 
     await controller.setLocale('pt');
     expect(controller.getLoadedLocale()).toBe('pt');
+  });
+
+  test('calling setLocale with current locale is a no-op', async () => {
+    const controller = createTestController({
+      locales: { en: {} },
+    });
+
+    await controller.setLocale('en');
+    await controller.setLocale('en');
+
+    expect(controller.getLoadedLocale()).toBe('en');
+  });
+
+  test('calling setLocale while loading supersedes previous load', async () => {
+    vi.useFakeTimers();
+
+    const controller = createTestController({
+      locales: { en: {}, pt: {}, fr: {} },
+    });
+
+    const enPromise = controller.setLocale('en');
+    const frPromise = controller.setLocale('fr');
+
+    await vi.advanceTimersByTimeAsync(200);
+    await Promise.all([enPromise, frPromise]);
+
+    expect(controller.getLoadedLocale()).toBe('fr');
   });
 });
 
@@ -148,6 +167,41 @@ describe('retry logic', () => {
 
     expect(caughtError).toBeDefined();
     expect(caughtError?.message).toBe('Network error');
+  });
+
+  test('succeeds after transient error on retry', async () => {
+    vi.useFakeTimers();
+
+    let attempts = 0;
+    const controller = i18nitialize({
+      persistenceKey: 'test-retry',
+      fallbackLocale: 'en',
+      retryAttempts: 3,
+      retryDelay: 100,
+      locales: [
+        {
+          id: 'en',
+          loader: async () => {
+            await sleep(100);
+            attempts++;
+            if (attempts === 1) {
+              throw new Error('Network error');
+            }
+            return { default: { hello: 'Hello' } };
+          },
+        },
+      ],
+    });
+
+    const loadPromise = controller.setLocale('en');
+
+    // First attempt (100ms) fails + retry delay (100ms) + second attempt (100ms) succeeds
+    await vi.advanceTimersByTimeAsync(300);
+    await loadPromise;
+
+    expect(attempts).toBe(2);
+    expect(controller.getLoadedLocale()).toBe('en');
+    expect(__`hello`).toBe('Hello');
   });
 });
 
