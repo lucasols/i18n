@@ -1,4 +1,5 @@
 import path from 'path';
+import type { AITranslator } from './ai-translator';
 import {
   validateTranslations,
   type FileSystem,
@@ -152,13 +153,18 @@ export function createCliTestContext(fixture: {
     },
   };
 
-  async function validate(options?: { fix?: boolean; defaultLocale?: string }) {
+  async function validate(options?: {
+    fix?: boolean;
+    defaultLocale?: string;
+    aiTranslator?: AITranslator;
+  }) {
     log.clear();
     const result = await validateTranslations({
       configDir,
       srcDir,
       fix: options?.fix,
       defaultLocale: options?.defaultLocale,
+      aiTranslator: options?.aiTranslator,
       noColor: true,
       fs: combinedFs,
       log,

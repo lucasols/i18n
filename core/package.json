@@ -20,7 +20,12 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
+    "@ai-sdk/google": "^3.0.20",
+    "@ai-sdk/openai": "^3.0.25",
+    "@ai-sdk/provider": "^3.0.7",
+    "ai": "^6.0.69",
     "readdirp": "^5.0.0",
-    "runcheck": "^1.15.0"
+    "runcheck": "^1.15.0",
+    "zod": "^3.24.0"
   }
 }

@@ -1,4 +1,9 @@
-import { validateTranslations } from '@ls-stack/i18n-core/cli';
+import {
+  createAITranslator,
+  validateTranslations,
+  type AIProvider,
+  type AITranslator,
+} from '@ls-stack/i18n-core/cli';
 import { styleText } from 'node:util';
 import { typeFlag } from 'type-flag';
 
@@ -24,6 +29,9 @@ const parsed = typeFlag({
     type: Boolean,
     default: false,
   },
+  ai: {
+    type: String,
+  },
 });
 
 const srcDir = parsed.flags['src-dir'];
@@ -38,6 +46,36 @@ if (!configDir) {
   process.exit(1);
 }
 
+let aiTranslator: AITranslator | undefined;
+
+const aiProviderInput =
+  parsed.flags.ai ?? process.env['I18N_AI_AUTO_TRANSLATE'];
+
+if (aiProviderInput) {
+  if (aiProviderInput !== 'google' && aiProviderInput !== 'openai') {
+    console.error(
+      `Invalid AI provider: ${aiProviderInput}. Must be 'google' or 'openai'.`,
+    );
+    process.exit(1);
+  }
+
+  const provider: AIProvider = aiProviderInput;
+
+  const apiKeyEnvVar =
+    provider === 'google' ?
+      'GOOGLE_GENERATIVE_AI_API_KEY'
+    : 'OPENAI_API_KEY';
+  const hasApiKey = Boolean(process.env[apiKeyEnvVar]);
+
+  if (!hasApiKey) {
+    console.warn(
+      `Warning: ${apiKeyEnvVar} not set. AI translation will be skipped.`,
+    );
+  } else {
+    aiTranslator = createAITranslator(provider);
+  }
+}
+
 const { hasError } = await validateTranslations({
   srcDir,
   configDir,
@@ -45,6 +83,7 @@ const { hasError } = await validateTranslations({
   fix: parsed.flags.fix,
   noColor: parsed.flags['no-color'],
   colorFn: (color, text) => styleText(color, text),
+  aiTranslator,
 });
 
 if (hasError) {

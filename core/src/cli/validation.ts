@@ -10,7 +10,10 @@ import {
   rc_string,
   rc_union,
 } from 'runcheck';
+import type { PluralTranslation } from '../types';
+import type { AITranslator, TranslationContext } from './ai-translator';
 import { getI18nUsagesInCode } from './findMissingTranslations';
+import { findSimilarTranslations } from './similarity';
 
 export type FileSystem = {
   readFileSync: (path: string, encoding: 'utf-8') => string;
@@ -34,6 +37,7 @@ export type ValidationOptions = {
   colorFn?: (color: 'red', text: string) => string;
   fs?: FileSystem;
   log?: Logger;
+  aiTranslator?: AITranslator;
 };
 
 const pluralTranslationSchema = rc_object({
@@ -105,6 +109,7 @@ function buildOrderedTranslations(
   existing: Record<string, unknown>,
   missing: Map<string, unknown>,
   insertPosition: number,
+  addMarkers = true,
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   const existingKeys = Object.keys(existing).filter(
@@ -114,11 +119,15 @@ function buildOrderedTranslations(
   let inserted = false;
   for (let i = 0; i < existingKeys.length; i++) {
     if (i === insertPosition && !inserted && missing.size > 0) {
-      result[MISSING_START_MARKER] = MISSING_MARKER_VALUE;
+      if (addMarkers) {
+        result[MISSING_START_MARKER] = MISSING_MARKER_VALUE;
+      }
       for (const [key, value] of missing) {
         result[key] = value;
       }
-      result[MISSING_END_MARKER] = MISSING_MARKER_VALUE;
+      if (addMarkers) {
+        result[MISSING_END_MARKER] = MISSING_MARKER_VALUE;
+      }
       inserted = true;
     }
     const key = existingKeys[i];
@@ -128,11 +137,15 @@ function buildOrderedTranslations(
   }
 
   if (!inserted && missing.size > 0) {
-    result[MISSING_START_MARKER] = MISSING_MARKER_VALUE;
+    if (addMarkers) {
+      result[MISSING_START_MARKER] = MISSING_MARKER_VALUE;
+    }
     for (const [key, value] of missing) {
       result[key] = value;
     }
-    result[MISSING_END_MARKER] = MISSING_MARKER_VALUE;
+    if (addMarkers) {
+      result[MISSING_END_MARKER] = MISSING_MARKER_VALUE;
+    }
   }
 
   result[''] = '';
@@ -166,6 +179,7 @@ export async function validateTranslations(
     colorFn = (_, text) => text,
     fs = defaultFs,
     log = console,
+    aiTranslator,
   } = options;
 
   const allStringTranslationHashs = new Set<string>();
@@ -349,18 +363,98 @@ export async function validateTranslations(
           }
 
           const missingMap = new Map<string, unknown>();
-          for (const hash of missingHashs) {
-            const value =
-              allPluralTranslationHashs.has(hash) ?
-                {
-                  zero: 'No x',
-                  one: '1 x',
-                  '+2': '# x',
-                  many: undefined,
-                  manyLimit: undefined,
+          let useAIMarkers = true;
+
+          if (aiTranslator && missingHashs.size > 0) {
+            const targetLocale = basename.replace('.json', '');
+
+            const existingTranslationsMap = new Map<
+              string,
+              string | PluralTranslation
+            >();
+            for (const [key, value] of Object.entries(cleanedExisting)) {
+              if (
+                typeof value === 'string' ||
+                (typeof value === 'object' && value !== null)
+              ) {
+                existingTranslationsMap.set(
+                  key,
+                  value as string | PluralTranslation,
+                );
+              }
+            }
+
+            const contexts: TranslationContext[] = [];
+            for (const hash of missingHashs) {
+              const isPlural = allPluralTranslationHashs.has(hash);
+              const similarTranslations = findSimilarTranslations(
+                hash,
+                existingTranslationsMap,
+              );
+              contexts.push({
+                sourceKey: hash,
+                targetLocale,
+                isPlural,
+                similarTranslations,
+              });
+            }
+
+            try {
+              const aiResults = await aiTranslator.translateBatch(contexts);
+
+              for (const hash of missingHashs) {
+                const aiResult = aiResults.get(hash);
+                if (aiResult) {
+                  if (aiResult.type === 'plural') {
+                    missingMap.set(hash, aiResult.value);
+                  } else {
+                    missingMap.set(hash, aiResult.value);
+                  }
+                } else {
+                  const fallbackValue =
+                    allPluralTranslationHashs.has(hash) ?
+                      {
+                        zero: 'No x',
+                        one: '1 x',
+                        '+2': '# x',
+                        many: undefined,
+                        manyLimit: undefined,
+                      }
+                    : null;
+                  missingMap.set(hash, fallbackValue);
                 }
-              : null;
-            missingMap.set(hash, value);
+              }
+
+              useAIMarkers = false;
+            } catch {
+              for (const hash of missingHashs) {
+                const value =
+                  allPluralTranslationHashs.has(hash) ?
+                    {
+                      zero: 'No x',
+                      one: '1 x',
+                      '+2': '# x',
+                      many: undefined,
+                      manyLimit: undefined,
+                    }
+                  : null;
+                missingMap.set(hash, value);
+              }
+            }
+          } else {
+            for (const hash of missingHashs) {
+              const value =
+                allPluralTranslationHashs.has(hash) ?
+                  {
+                    zero: 'No x',
+                    one: '1 x',
+                    '+2': '# x',
+                    many: undefined,
+                    manyLimit: undefined,
+                  }
+                : null;
+              missingMap.set(hash, value);
+            }
           }
 
           const existingKeysCount = Object.keys(cleanedExisting).length;
@@ -373,10 +467,15 @@ export async function validateTranslations(
             cleanedExisting,
             missingMap,
             insertPosition,
+            useAIMarkers,
           );
 
           if (missingHashs.size > 0) {
-            log.info(`🟠 ${basename} translations keys were added`);
+            if (aiTranslator && !useAIMarkers) {
+              log.info(`✅ ${basename} translations were AI-generated`);
+            } else {
+              log.info(`🟠 ${basename} translations keys were added`);
+            }
           } else {
             log.info(`✅ ${basename} translations fixed`);
           }
