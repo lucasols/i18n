@@ -14,7 +14,7 @@ import {
   type LocaleConfig,
 } from './state';
 
-export type I18nController<T extends string = string> = {
+export type I18nController<T extends string> = {
   setLocale: (localeId: T) => Promise<boolean>;
   getLoadedLocale: () => T | null;
   getRegionLocale: () => string;
