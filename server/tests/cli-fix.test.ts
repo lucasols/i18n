@@ -109,7 +109,7 @@ test('fix missing translations', async () => {
 
   expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
     "{
-      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "👇 missing start 👇": "🛑 delete this line 🛑",
       "Hello World": null,
       "Hello {1}": null,
       "Hello {1} {2}": null,
@@ -125,14 +125,14 @@ test('fix missing translations', async () => {
         "one": "1 x",
         "+2": "# x"
       },
+      "👆 missing end 👆": "🛑 delete this line 🛑",
       "": ""
     }"
   `);
 
   expect(ctx.getConfigFileRaw('pt.json')).toMatchInlineSnapshot(`
     "{
-      "Hello World": "Olá Mundo",
-      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "👇 missing start 👇": "🛑 delete this line 🛑",
       "Hello {1}": null,
       "Hello {1} {2}": null,
       "Hello World~~2": null,
@@ -147,6 +147,8 @@ test('fix missing translations', async () => {
         "one": "1 x",
         "+2": "# x"
       },
+      "👆 missing end 👆": "🛑 delete this line 🛑",
+      "Hello World": "Olá Mundo",
       "": ""
     }"
   `);
@@ -275,6 +277,13 @@ test('fix invalid plural translations', async () => {
       "Hello World": "Olá Mundo",
       "Hello {1}": "Olá {1}",
       "Hello {1} {2}": "Olá {1} {2}",
+      "👇 missing start 👇": "🛑 delete this line 🛑",
+      "# Hello World": {
+        "zero": "No x",
+        "one": "1 x",
+        "+2": "# x"
+      },
+      "👆 missing end 👆": "🛑 delete this line 🛑",
       "Hello World~~2": "Olá Mundo~~2",
       "Imported usage": "Uso importado",
       "# Hello {1}": {
@@ -283,12 +292,6 @@ test('fix invalid plural translations', async () => {
         "+2": "# x",
         "many": "Muitas x",
         "manyLimit": 50
-      },
-      "👇 missing translations 👇": "🛑 delete this line 🛑",
-      "# Hello World": {
-        "zero": "No x",
-        "one": "1 x",
-        "+2": "# x"
       },
       "": ""
     }"
@@ -378,8 +381,9 @@ test('fix mode with missing translations marker already present', async () => {
 
   expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
     "{
-      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "👇 missing start 👇": "🛑 delete this line 🛑",
       "Hello": null,
+      "👆 missing end 👆": "🛑 delete this line 🛑",
       "": ""
     }"
   `);
@@ -459,14 +463,15 @@ test('fix mode handles missing, extra, and invalid plural simultaneously', async
 
   expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
     "{
-      "Hello": "Hello",
-      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "👇 missing start 👇": "🛑 delete this line 🛑",
       "World": null,
       "# items": {
         "zero": "No x",
         "one": "1 x",
         "+2": "# x"
       },
+      "👆 missing end 👆": "🛑 delete this line 🛑",
+      "Hello": "Hello",
       "": ""
     }"
   `);
@@ -495,9 +500,10 @@ test('fix mode preserves existing valid translations', async () => {
 
   expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
     "{
-      "Hello": "Custom Hello Translation",
-      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "👇 missing start 👇": "🛑 delete this line 🛑",
       "World": null,
+      "👆 missing end 👆": "🛑 delete this line 🛑",
+      "Hello": "Custom Hello Translation",
       "": ""
     }"
   `);
@@ -537,9 +543,10 @@ test('fix adds null for missing variant translations', async () => {
 
   expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
     "{
-      "Hello": "Hello",
-      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "👇 missing start 👇": "🛑 delete this line 🛑",
       "Hello~~formal": null,
+      "👆 missing end 👆": "🛑 delete this line 🛑",
+      "Hello": "Hello",
       "": ""
     }"
   `);
@@ -576,8 +583,9 @@ test('fix adds null for missing $ prefixed translations', async () => {
 
   expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
     "{
-      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "👇 missing start 👇": "🛑 delete this line 🛑",
       "$placeholder": null,
+      "👆 missing end 👆": "🛑 delete this line 🛑",
       "": ""
     }"
   `);

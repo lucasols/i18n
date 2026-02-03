@@ -78,7 +78,7 @@ test('fix missing translations in tsx files', async () => {
 
   expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
     "{
-      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "👇 missing start 👇": "🛑 delete this line 🛑",
       "Hello World": null,
       "Hello {1}": null,
       "# Hello World": {
@@ -86,20 +86,22 @@ test('fix missing translations in tsx files', async () => {
         "one": "1 x",
         "+2": "# x"
       },
+      "👆 missing end 👆": "🛑 delete this line 🛑",
       "": ""
     }"
   `);
 
   expect(ctx.getConfigFileRaw('pt.json')).toMatchInlineSnapshot(`
     "{
-      "Hello World": "Olá Mundo",
-      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "👇 missing start 👇": "🛑 delete this line 🛑",
       "Hello {1}": null,
       "# Hello World": {
         "zero": "No x",
         "one": "1 x",
         "+2": "# x"
       },
+      "👆 missing end 👆": "🛑 delete this line 🛑",
+      "Hello World": "Olá Mundo",
       "": ""
     }"
   `);
@@ -204,13 +206,14 @@ test('fix invalid plural translations in tsx files', async () => {
   expect(ctx.getConfigFileRaw('pt.json')).toMatchInlineSnapshot(`
     "{
       "Hello World": "Olá Mundo",
-      "Hello {1}": "Olá {1}",
-      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "👇 missing start 👇": "🛑 delete this line 🛑",
       "# Hello World": {
         "zero": "No x",
         "one": "1 x",
         "+2": "# x"
       },
+      "👆 missing end 👆": "🛑 delete this line 🛑",
+      "Hello {1}": "Olá {1}",
       "": ""
     }"
   `);
@@ -248,8 +251,9 @@ test('fix mode with missing translations marker already present', async () => {
 
   expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
     "{
-      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "👇 missing start 👇": "🛑 delete this line 🛑",
       "Hello": null,
+      "👆 missing end 👆": "🛑 delete this line 🛑",
       "": ""
     }"
   `);
@@ -320,14 +324,15 @@ test('fix mode handles missing, extra, and invalid plural simultaneously', async
 
   expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
     "{
-      "Hello": "Hello",
-      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "👇 missing start 👇": "🛑 delete this line 🛑",
       "World": null,
       "# items": {
         "zero": "No x",
         "one": "1 x",
         "+2": "# x"
       },
+      "👆 missing end 👆": "🛑 delete this line 🛑",
+      "Hello": "Hello",
       "": ""
     }"
   `);
@@ -366,9 +371,10 @@ test('fix mode preserves existing valid translations', async () => {
 
   expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
     "{
-      "Hello": "Custom Hello Translation",
-      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "👇 missing start 👇": "🛑 delete this line 🛑",
       "World": null,
+      "👆 missing end 👆": "🛑 delete this line 🛑",
+      "Hello": "Custom Hello Translation",
       "": ""
     }"
   `);
@@ -452,9 +458,10 @@ test('fix adds null for missing variant translations', async () => {
 
   expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
     "{
-      "Hello": "Hello",
-      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "👇 missing start 👇": "🛑 delete this line 🛑",
       "Hello~~formal": null,
+      "👆 missing end 👆": "🛑 delete this line 🛑",
+      "Hello": "Hello",
       "": ""
     }"
   `);
@@ -490,8 +497,9 @@ test('fix adds null for missing $ prefixed translations', async () => {
 
   expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
     "{
-      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "👇 missing start 👇": "🛑 delete this line 🛑",
       "$placeholder": null,
+      "👆 missing end 👆": "🛑 delete this line 🛑",
       "": ""
     }"
   `);
@@ -580,9 +588,10 @@ test('fix moves existing null translations under missing marker for non-default 
 
   expect(ctx.getConfigFileRaw('pt.json')).toMatchInlineSnapshot(`
     "{
-      "Hello": "Olá tradução",
-      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "👇 missing start 👇": "🛑 delete this line 🛑",
       "World": null,
+      "👆 missing end 👆": "🛑 delete this line 🛑",
+      "Hello": "Olá tradução",
       "": ""
     }"
   `);
@@ -616,11 +625,150 @@ test('fix moves multiple existing null translations under missing marker for non
 
   expect(ctx.getConfigFileRaw('pt.json')).toMatchInlineSnapshot(`
     "{
-      "World": "Mundo tradução",
-      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "👇 missing start 👇": "🛑 delete this line 🛑",
       "Hello": null,
       "Foo": null,
+      "👆 missing end 👆": "🛑 delete this line 🛑",
+      "World": "Mundo tradução",
       "": ""
     }"
   `);
+});
+
+test('missing translations position is deterministic based on missing keys', async () => {
+  const existingTranslations = {
+    Apple: 'Apple',
+    Banana: 'Banana',
+    Cherry: 'Cherry',
+    Date: 'Date',
+    Elderberry: 'Elderberry',
+  };
+
+  const ctx1 = createCliTestContext({
+    src: {
+      'main.tsx': `
+        import { __ } from '@ls-stack/i18n';
+        export const t1 = __\`Apple\`;
+        export const t2 = __\`Banana\`;
+        export const t3 = __\`Cherry\`;
+        export const t4 = __\`Date\`;
+        export const t5 = __\`Elderberry\`;
+        export const t6 = __\`NewKey1\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify(existingTranslations),
+    },
+  });
+
+  await ctx1.validate({ fix: true });
+  const output1 = ctx1.getConfigFileRaw('en.json');
+
+  const ctx2 = createCliTestContext({
+    src: {
+      'main.tsx': `
+        import { __ } from '@ls-stack/i18n';
+        export const t1 = __\`Apple\`;
+        export const t2 = __\`Banana\`;
+        export const t3 = __\`Cherry\`;
+        export const t4 = __\`Date\`;
+        export const t5 = __\`Elderberry\`;
+        export const t6 = __\`NewKey1\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify(existingTranslations),
+    },
+  });
+
+  await ctx2.validate({ fix: true });
+  const output2 = ctx2.getConfigFileRaw('en.json');
+
+  expect(output1).toBe(output2);
+
+  const ctx3 = createCliTestContext({
+    src: {
+      'main.tsx': `
+        import { __ } from '@ls-stack/i18n';
+        export const t1 = __\`Apple\`;
+        export const t2 = __\`Banana\`;
+        export const t3 = __\`Cherry\`;
+        export const t4 = __\`Date\`;
+        export const t5 = __\`Elderberry\`;
+        export const t6 = __\`DifferentKey\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify(existingTranslations),
+    },
+  });
+
+  await ctx3.validate({ fix: true });
+  const output3 = ctx3.getConfigFileRaw('en.json');
+
+  expect(output1).not.toBe(output3);
+});
+
+test('different branches adding different translations get different positions', async () => {
+  const existingTranslations: Record<string, string> = {};
+  const existingKeys: string[] = [];
+  for (let i = 0; i < 1000; i++) {
+    const key = `Translation key ${i.toString().padStart(4, '0')}`;
+    existingTranslations[key] = `Translated value ${i}`;
+    existingKeys.push(key);
+  }
+
+  const branchFeatures = [
+    ['Auth login button', 'Auth logout button', 'Auth forgot password'],
+    ['Cart add item', 'Cart remove item', 'Cart checkout'],
+    ['Dashboard welcome', 'Dashboard stats', 'Dashboard settings'],
+    ['Error not found', 'Error server error', 'Error validation'],
+    ['Form submit', 'Form cancel', 'Form reset'],
+    ['Help faq', 'Help contact', 'Help docs'],
+    ['Invoice total', 'Invoice items', 'Invoice date'],
+    ['Menu home', 'Menu profile', 'Menu settings'],
+    ['Notification success', 'Notification error', 'Notification warning'],
+    ['Search placeholder', 'Search results', 'Search no results'],
+  ];
+
+  function getMissingBlockPosition(output: string): number {
+    const parsed = JSON.parse(output) as Record<string, unknown>;
+    const keys = Object.keys(parsed);
+    return keys.indexOf('👇 missing start 👇');
+  }
+
+  const positions: number[] = [];
+
+  for (const featureKeys of branchFeatures) {
+    const existingExports = existingKeys
+      .map((k, i) => `export const t${i} = __\`${k}\`;`)
+      .join('\n');
+    const newExports = featureKeys
+      .map((k, i) => `export const new${i} = __\`${k}\`;`)
+      .join('\n');
+
+    const ctx = createCliTestContext({
+      src: {
+        'main.tsx': `
+          import { __ } from '@ls-stack/i18n';
+          ${existingExports}
+          ${newExports}
+        `,
+      },
+      config: {
+        'en.json': JSON.stringify(existingTranslations),
+      },
+    });
+
+    await ctx.validate({ fix: true });
+    const output = ctx.getConfigFileRaw('en.json');
+    if (output === undefined) {
+      throw new Error('Expected en.json to exist');
+    }
+    const position = getMissingBlockPosition(output);
+    positions.push(position);
+  }
+
+  const uniquePositions = new Set(positions);
+  expect(uniquePositions.size).toBe(10);
 });

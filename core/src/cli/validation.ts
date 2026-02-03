@@ -56,8 +56,88 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-const MISSING_TRANSLATIONS_KEY = '👇 missing translations 👇';
-const MISSING_TRANSLATION_VALUE = '🛑 delete this line 🛑';
+const LEGACY_MISSING_MARKER = '👇 missing translations 👇';
+const MISSING_START_MARKER = '👇 missing start 👇';
+const MISSING_END_MARKER = '👆 missing end 👆';
+const MISSING_MARKER_VALUE = '🛑 delete this line 🛑';
+
+function isMarkerKey(key: string): boolean {
+  return (
+    key === LEGACY_MISSING_MARKER ||
+    key === MISSING_START_MARKER ||
+    key === MISSING_END_MARKER
+  );
+}
+
+function calculateInsertPosition(
+  missingKeys: string[],
+  totalKeys: number,
+): number {
+  if (totalKeys === 0) return 0;
+
+  const sortedKeys = [...missingKeys].sort();
+
+  // Start with key count for initial entropy
+  let hash = sortedKeys.length | 0;
+
+  for (const key of sortedKeys) {
+    // Mix in key length first (adds entropy for same-char-sum keys)
+    hash = ((hash << 5) - hash + key.length) | 0;
+
+    for (let i = 0; i < key.length; i++) {
+      hash = ((hash << 5) - hash + key.charCodeAt(i)) | 0;
+    }
+    hash = ((hash << 5) - hash + 0xff) | 0;
+  }
+
+  // MurmurHash3-style finalizer with proper 32-bit multiplication
+  hash ^= hash >>> 16;
+  hash = Math.imul(hash, 0x85ebca6b);
+  hash ^= hash >>> 13;
+  hash = Math.imul(hash, 0xc2b2ae35);
+  hash ^= hash >>> 16;
+
+  // Use unsigned right shift to ensure positive (avoids Math.abs edge case)
+  return (hash >>> 0) % totalKeys;
+}
+
+function buildOrderedTranslations(
+  existing: Record<string, unknown>,
+  missing: Map<string, unknown>,
+  insertPosition: number,
+): Record<string, unknown> {
+  const result: Record<string, unknown> = {};
+  const existingKeys = Object.keys(existing).filter(
+    (k) => k !== '' && !isMarkerKey(k),
+  );
+
+  let inserted = false;
+  for (let i = 0; i < existingKeys.length; i++) {
+    if (i === insertPosition && !inserted && missing.size > 0) {
+      result[MISSING_START_MARKER] = MISSING_MARKER_VALUE;
+      for (const [key, value] of missing) {
+        result[key] = value;
+      }
+      result[MISSING_END_MARKER] = MISSING_MARKER_VALUE;
+      inserted = true;
+    }
+    const key = existingKeys[i];
+    if (key !== undefined) {
+      result[key] = existing[key];
+    }
+  }
+
+  if (!inserted && missing.size > 0) {
+    result[MISSING_START_MARKER] = MISSING_MARKER_VALUE;
+    for (const [key, value] of missing) {
+      result[key] = value;
+    }
+    result[MISSING_END_MARKER] = MISSING_MARKER_VALUE;
+  }
+
+  result[''] = '';
+  return result;
+}
 
 export const defaultFs: FileSystem = {
   readFileSync: (filePath, encoding) => readFileSync(filePath, encoding),
@@ -255,45 +335,45 @@ export async function validateTranslations(
           );
         } else if (
           missingHashs.size === 0 &&
-          extraHashs.size === 1 &&
-          extraHashs.has(MISSING_TRANSLATIONS_KEY)
+          extraHashs.size > 0 &&
+          [...extraHashs].every((k) => isMarkerKey(k))
         ) {
           log.error(`❌ ${basename} has missing translations`);
         } else {
-          delete localeTranslations[''];
-
-          if (extraHashs.size > 0) {
-            for (const hash of extraHashs) {
-              if (hash === MISSING_TRANSLATIONS_KEY) continue;
-
-              delete localeTranslations[hash];
+          const cleanedExisting: Record<string, unknown> = {};
+          for (const key of Object.keys(localeTranslations)) {
+            if (key === '' || isMarkerKey(key) || extraHashs.has(key)) {
+              continue;
             }
+            cleanedExisting[key] = localeTranslations[key];
           }
 
-          if (
-            !localeTranslations[MISSING_TRANSLATIONS_KEY] &&
-            missingHashs.size > 0
-          ) {
-            localeTranslations[MISSING_TRANSLATIONS_KEY] =
-              MISSING_TRANSLATION_VALUE;
+          const missingMap = new Map<string, unknown>();
+          for (const hash of missingHashs) {
+            const value =
+              allPluralTranslationHashs.has(hash) ?
+                {
+                  zero: 'No x',
+                  one: '1 x',
+                  '+2': '# x',
+                  many: undefined,
+                  manyLimit: undefined,
+                }
+              : null;
+            missingMap.set(hash, value);
           }
 
-          if (missingHashs.size > 0) {
-            for (const hash of missingHashs) {
-              localeTranslations[hash] =
-                allPluralTranslationHashs.has(hash) ?
-                  {
-                    zero: 'No x',
-                    one: '1 x',
-                    '+2': '# x',
-                    many: undefined,
-                    manyLimit: undefined,
-                  }
-                : null;
-            }
-          }
+          const existingKeysCount = Object.keys(cleanedExisting).length;
+          const insertPosition = calculateInsertPosition(
+            [...missingHashs],
+            existingKeysCount,
+          );
 
-          localeTranslations[''] = '';
+          const orderedTranslations = buildOrderedTranslations(
+            cleanedExisting,
+            missingMap,
+            insertPosition,
+          );
 
           if (missingHashs.size > 0) {
             log.info(`🟠 ${basename} translations keys were added`);
@@ -303,7 +383,7 @@ export async function validateTranslations(
 
           fs.writeFileSync(
             fullPath,
-            JSON.stringify(localeTranslations, null, 2),
+            JSON.stringify(orderedTranslations, null, 2),
           );
         }
       }
