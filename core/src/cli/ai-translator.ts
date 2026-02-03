@@ -149,7 +149,7 @@ export function createAITranslator(
         languageModel = google('gemini-2.5-flash') as AnyLanguageModel;
       } else {
         const { openai } = await import('@ai-sdk/openai');
-        languageModel = openai('gpt-4o-mini') as AnyLanguageModel;
+        languageModel = openai('gpt-5-mini') as AnyLanguageModel;
       }
 
       const prompt = buildPrompt(contexts);
@@ -162,7 +162,9 @@ export function createAITranslator(
         prompt,
       });
 
-      const output = result.output as z.infer<typeof translationsSchema> | undefined;
+      const output = result.output as
+        | z.infer<typeof translationsSchema>
+        | undefined;
 
       if (!output) {
         return { translations: new Map() };
@@ -174,9 +176,11 @@ export function createAITranslator(
         translations: parseGeneratedObject(output, contexts),
         model: result.response.modelId,
         usage:
-          inputTokens !== undefined &&
-          outputTokens !== undefined &&
-          totalTokens !== undefined ?
+          (
+            inputTokens !== undefined &&
+            outputTokens !== undefined &&
+            totalTokens !== undefined
+          ) ?
             { inputTokens, outputTokens, totalTokens }
           : undefined,
       };
