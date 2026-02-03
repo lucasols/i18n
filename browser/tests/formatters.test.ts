@@ -115,6 +115,140 @@ describe('__relativeTime', () => {
   });
 });
 
+describe('__relativeTime explicit unit floor rounding', () => {
+  const setup = async () => {
+    const controller = createTestController({
+      locales: { en: {} },
+    });
+    await controller.setLocale('en');
+    return new Date('2024-01-15T12:00:00Z');
+  };
+
+  const addSeconds = (date: Date, seconds: number) =>
+    new Date(date.getTime() - seconds * 1000);
+
+  describe('minute unit', () => {
+    test('90 seconds with minute unit shows 1 minute (floor)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 90);
+      expect(__relativeTime({ from: date, to: now }, 'minute')).toBe(
+        '1 minute ago',
+      );
+    });
+
+    test('115 seconds with minute unit shows 2 minutes (rounds at >= 55s)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 115);
+      expect(__relativeTime({ from: date, to: now }, 'minute')).toBe(
+        '2 minutes ago',
+      );
+    });
+  });
+
+  describe('hour unit', () => {
+    test('90 minutes with hour unit shows 1 hour (floor)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 90 * 60);
+      expect(__relativeTime({ from: date, to: now }, 'hour')).toBe(
+        '1 hour ago',
+      );
+    });
+
+    test('115 minutes with hour unit shows 2 hours (rounds at >= 55m)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 115 * 60);
+      expect(__relativeTime({ from: date, to: now }, 'hour')).toBe(
+        '2 hours ago',
+      );
+    });
+  });
+
+  describe('day unit', () => {
+    test('36 hours with day unit shows 1 day (floor)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 36 * 60 * 60);
+      expect(__relativeTime({ from: date, to: now }, 'day')).toBe('1 day ago');
+    });
+
+    test('46 hours with day unit shows 2 days (rounds at >= 22h)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 46 * 60 * 60);
+      expect(__relativeTime({ from: date, to: now }, 'day')).toBe('2 days ago');
+    });
+  });
+
+  describe('week unit', () => {
+    test('10 days with week unit shows 1 week (floor)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 10 * 24 * 60 * 60);
+      expect(__relativeTime({ from: date, to: now }, 'week')).toBe(
+        '1 week ago',
+      );
+    });
+
+    test('13 days with week unit shows 2 weeks (rounds at >= 6d)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 13 * 24 * 60 * 60);
+      expect(__relativeTime({ from: date, to: now }, 'week')).toBe(
+        '2 weeks ago',
+      );
+    });
+  });
+
+  describe('month unit', () => {
+    test('50 days with month unit shows 1 month (floor)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 50 * 24 * 60 * 60);
+      expect(__relativeTime({ from: date, to: now }, 'month')).toBe(
+        '1 month ago',
+      );
+    });
+
+    test('56 days with month unit shows 2 months (rounds at >= 25d)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 56 * 24 * 60 * 60);
+      expect(__relativeTime({ from: date, to: now }, 'month')).toBe(
+        '2 months ago',
+      );
+    });
+  });
+
+  describe('year unit', () => {
+    test('500 days with year unit shows 1 year (floor)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 500 * 24 * 60 * 60);
+      expect(__relativeTime({ from: date, to: now }, 'year')).toBe(
+        '1 year ago',
+      );
+    });
+
+    test('700 days with year unit shows 2 years (rounds at >= 11mo)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 700 * 24 * 60 * 60);
+      expect(__relativeTime({ from: date, to: now }, 'year')).toBe(
+        '2 years ago',
+      );
+    });
+  });
+
+  describe('future times', () => {
+    const addSecondsFuture = (date: Date, seconds: number) =>
+      new Date(date.getTime() + seconds * 1000);
+
+    test('36 hours future with day unit shows in 1 day (floor)', async () => {
+      const now = await setup();
+      const date = addSecondsFuture(now, 36 * 60 * 60);
+      expect(__relativeTime({ from: date, to: now }, 'day')).toBe('in 1 day');
+    });
+
+    test('46 hours future with day unit shows in 2 days (rounds at >= 22h)', async () => {
+      const now = await setup();
+      const date = addSecondsFuture(now, 46 * 60 * 60);
+      expect(__relativeTime({ from: date, to: now }, 'day')).toBe('in 2 days');
+    });
+  });
+});
+
 describe('__relativeTimeFromNow', () => {
   test('formats relative time', async () => {
     const controller = createTestController({

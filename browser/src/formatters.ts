@@ -235,6 +235,14 @@ const DAY_SECS = 24 * HOUR_SECS;
 const MONTH_SECS = 30 * DAY_SECS;
 const YEAR_SECS = 365 * DAY_SECS;
 
+function floorWithThreshold(
+  value: number,
+  remainder: number,
+  threshold: number,
+) {
+  return remainder >= threshold ? Math.ceil(value) : Math.floor(value);
+}
+
 function getUnit(
   from: Date | string | number | undefined,
   to: Date | string | number | undefined,
@@ -244,80 +252,45 @@ function getUnit(
 
   const diffMs = fromDate.getTime() - toDate_.getTime();
   const absDiffSecs = Math.abs(diffMs / 1000);
-  const isNegative = diffMs < 0;
+  const sign = diffMs < 0 ? -1 : 1;
 
-  const applySign = (val: number) => (isNegative ? -val : val);
-
-  // 0...55 secs → seconds
   if (absDiffSecs < 55) {
-    return { value: applySign(Math.round(absDiffSecs)), unit: 'second' };
+    return { value: sign * Math.round(absDiffSecs), unit: 'second' };
   }
-  // 55 secs...1m 55s → 1 minute
   if (absDiffSecs < MINUTE_SECS + 55) {
-    return { value: applySign(1), unit: 'minute' };
+    return { value: sign, unit: 'minute' };
   }
-  // 1m 30s...44m 30s → [2..44] minutes (floor, but round if >= 55s past minute)
   if (absDiffSecs < 44 * MINUTE_SECS + 30) {
-    const minutes = absDiffSecs / MINUTE_SECS;
-    const secondsPastMinute = absDiffSecs % MINUTE_SECS;
-    const roundedMinutes =
-      secondsPastMinute >= 55 ? Math.ceil(minutes) : Math.floor(minutes);
-    return {
-      value: applySign(roundedMinutes),
-      unit: 'minute',
-    };
+    const mins = absDiffSecs / MINUTE_SECS;
+    return { value: sign * floorWithThreshold(mins, absDiffSecs % MINUTE_SECS, 55), unit: 'minute' };
   }
-  // 44m 30s...89m 30s → 1 hour
   if (absDiffSecs < 89 * MINUTE_SECS + 30) {
-    return { value: applySign(1), unit: 'hour' };
+    return { value: sign, unit: 'hour' };
   }
-  // 89m 30s...23h 59m 30s → [2..24] hours (floor, but round if >= X hours 55 min)
   if (absDiffSecs < 24 * HOUR_SECS - 30) {
-    const hours = absDiffSecs / HOUR_SECS;
-    const minutesPastHour = (absDiffSecs % HOUR_SECS) / 60;
-    const roundedHours =
-      minutesPastHour >= 55 ? Math.ceil(hours) : Math.floor(hours);
-    return {
-      value: applySign(roundedHours),
-      unit: 'hour',
-    };
+    const hrs = absDiffSecs / HOUR_SECS;
+    return { value: sign * floorWithThreshold(hrs, (absDiffSecs % HOUR_SECS) / 60, 55), unit: 'hour' };
   }
-  // 23h 59m 30s...41h 59m 30s → 1 day
   if (absDiffSecs < 42 * HOUR_SECS - 30) {
-    return { value: applySign(1), unit: 'day' };
+    return { value: sign, unit: 'day' };
   }
-  // 41h 59m 30s...29d 23h 59m 30s → [2..30] days (floor, but round if >= 22h past day)
   if (absDiffSecs < 30 * DAY_SECS - 30) {
     const days = absDiffSecs / DAY_SECS;
-    const hoursPastDay = (absDiffSecs % DAY_SECS) / HOUR_SECS;
-    const roundedDays = hoursPastDay >= 22 ? Math.ceil(days) : Math.floor(days);
-    return { value: applySign(roundedDays), unit: 'day' };
+    return { value: sign * floorWithThreshold(days, (absDiffSecs % DAY_SECS) / HOUR_SECS, 22), unit: 'day' };
   }
-  // 29d 23h 59m 30s...44d 23h 59m 30s → 1 month
   if (absDiffSecs < 45 * DAY_SECS - 30) {
-    return { value: applySign(1), unit: 'month' };
+    return { value: sign, unit: 'month' };
   }
-  // 44d 23h 59m 30s...59d 23h 59m 30s → 2 months
   if (absDiffSecs < 60 * DAY_SECS - 30) {
-    return { value: applySign(2), unit: 'month' };
+    return { value: sign * 2, unit: 'month' };
   }
-  // 59d 23h 59m 30s...1yr → [2..12] months (floor, but round if >= 25 days past month)
   if (absDiffSecs < YEAR_SECS - 30) {
     const months = absDiffSecs / MONTH_SECS;
-    const daysPastMonth = (absDiffSecs % MONTH_SECS) / DAY_SECS;
-    const roundedMonths =
-      daysPastMonth >= 25 ? Math.ceil(months) : Math.floor(months);
-    return {
-      value: applySign(roundedMonths),
-      unit: 'month',
-    };
+    return { value: sign * floorWithThreshold(months, (absDiffSecs % MONTH_SECS) / DAY_SECS, 25), unit: 'month' };
   }
-  // Years (floor, but round if >= 11 months past year)
+
   const years = absDiffSecs / YEAR_SECS;
-  const monthsPastYear = (absDiffSecs % YEAR_SECS) / MONTH_SECS;
-  const roundedYears =
-    monthsPastYear >= 11 ? Math.ceil(years) : Math.floor(years);
-  return { value: applySign(roundedYears), unit: 'year' };
+  return { value: sign * floorWithThreshold(years, (absDiffSecs % YEAR_SECS) / MONTH_SECS, 11), unit: 'year' };
 }
 
 export function __relativeTime(
@@ -340,31 +313,37 @@ export function __relativeTime(
     const fromDate = toDate(value.from ?? new Date());
     const toDateVal = toDate(value.to ?? new Date());
     const diffMs = fromDate.getTime() - toDateVal.getTime();
+    const absDiffSecs = Math.abs(diffMs / 1000);
+    const sign = diffMs < 0 ? -1 : 1;
 
     switch (unit) {
       case 'second':
-        diff = Math.round(diffMs / 1000);
+        diff = sign * Math.round(absDiffSecs);
         break;
       case 'minute':
-        diff = Math.round(diffMs / (1000 * 60));
+        diff = sign * floorWithThreshold(absDiffSecs / MINUTE_SECS, absDiffSecs % MINUTE_SECS, 55);
         break;
       case 'hour':
-        diff = Math.round(diffMs / (1000 * 60 * 60));
+        diff = sign * floorWithThreshold(absDiffSecs / HOUR_SECS, (absDiffSecs % HOUR_SECS) / 60, 55);
         break;
       case 'day':
-        diff = Math.round(diffMs / (1000 * 60 * 60 * 24));
+        diff = sign * floorWithThreshold(absDiffSecs / DAY_SECS, (absDiffSecs % DAY_SECS) / HOUR_SECS, 22);
         break;
-      case 'week':
-        diff = Math.round(diffMs / (1000 * 60 * 60 * 24 * 7));
+      case 'week': {
+        const weekSecs = 7 * DAY_SECS;
+        diff = sign * floorWithThreshold(absDiffSecs / weekSecs, (absDiffSecs % weekSecs) / DAY_SECS, 6);
         break;
+      }
       case 'month':
-        diff = Math.round(diffMs / (1000 * 60 * 60 * 24 * 30));
+        diff = sign * floorWithThreshold(absDiffSecs / MONTH_SECS, (absDiffSecs % MONTH_SECS) / DAY_SECS, 25);
         break;
-      case 'quarter':
-        diff = Math.round(diffMs / (1000 * 60 * 60 * 24 * 91));
+      case 'quarter': {
+        const quarterSecs = 91 * DAY_SECS;
+        diff = sign * floorWithThreshold(absDiffSecs / quarterSecs, (absDiffSecs % quarterSecs) / DAY_SECS, 80);
         break;
+      }
       case 'year':
-        diff = Math.round(diffMs / (1000 * 60 * 60 * 24 * 365));
+        diff = sign * floorWithThreshold(absDiffSecs / YEAR_SECS, (absDiffSecs % YEAR_SECS) / MONTH_SECS, 11);
         break;
       default:
         diff = 0;
