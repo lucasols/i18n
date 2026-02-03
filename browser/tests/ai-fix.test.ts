@@ -1,4 +1,4 @@
-import type { PluralTranslation, TranslationValue } from '@ls-stack/i18n-core';
+import type { PluralTranslation } from '@ls-stack/i18n-core';
 import {
   createCliTestContext,
   findSimilarTranslations,
@@ -31,17 +31,20 @@ describe('AI translation fix', () => {
       expect.stringContaining('AI-generated'),
     );
 
-    const translations = parseConfigJson(ctx.getConfigFileRaw('pt.json'));
-    expect(translations['Hello World']).toBe('Olá Mundo');
+    expect(ctx.getConfigFileRaw('pt.json')).toMatchInlineSnapshot(`
+      "{
+        "Hello World": "Olá Mundo",
+        "": ""
+      }"
+    `);
   });
 
-  test('generates plural translations with all forms', async () => {
+  test('generates plural translations with required forms', async () => {
     const translator = mockTranslator((ctx) =>
       ctx.isPlural ?
         {
           type: 'plural',
           value: {
-            zero: 'Nenhum usuário',
             one: '1 usuário',
             '+2': '# usuários',
           },
@@ -61,12 +64,15 @@ describe('AI translation fix', () => {
 
     await ctx.validate({ fix: true, aiTranslator: translator });
 
-    const translations = parseConfigJson(ctx.getConfigFileRaw('pt.json'));
-    expect(translations['# users']).toEqual({
-      zero: 'Nenhum usuário',
-      one: '1 usuário',
-      '+2': '# usuários',
-    });
+    expect(ctx.getConfigFileRaw('pt.json')).toMatchInlineSnapshot(`
+      "{
+        "# users": {
+          "one": "1 usuário",
+          "+2": "# usuários"
+        },
+        "": ""
+      }"
+    `);
   });
 
   test('generates plural translations with optional many/manyLimit', async () => {
@@ -75,7 +81,6 @@ describe('AI translation fix', () => {
         {
           type: 'plural',
           value: {
-            zero: 'No items',
             one: '1 item',
             '+2': '# items',
             many: 'Many items',
@@ -97,14 +102,17 @@ describe('AI translation fix', () => {
 
     await ctx.validate({ fix: true, aiTranslator: translator });
 
-    const translations = parseConfigJson(ctx.getConfigFileRaw('en.json'));
-    expect(translations['# items']).toEqual({
-      zero: 'No items',
-      one: '1 item',
-      '+2': '# items',
-      many: 'Many items',
-      manyLimit: 100,
-    });
+    expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
+      "{
+        "# items": {
+          "one": "1 item",
+          "+2": "# items",
+          "many": "Many items",
+          "manyLimit": 100
+        },
+        "": ""
+      }"
+    `);
   });
 
   test('does not add missing markers when AI succeeds', async () => {
@@ -148,9 +156,13 @@ describe('AI translation fix', () => {
 
     await ctx.validate({ fix: true, aiTranslator: translator });
 
-    const translations = parseConfigJson(ctx.getConfigFileRaw('en.json'));
-    expect(translations['Hello']).toBe('AI Hello');
-    expect(translations['World']).toBe(null);
+    expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
+      "{
+        "Hello": "AI Hello",
+        "World": null,
+        "": ""
+      }"
+    `);
   });
 
   test('falls back to null with markers on complete AI failure', async () => {
@@ -166,11 +178,14 @@ describe('AI translation fix', () => {
 
     await ctx.validate({ fix: true, aiTranslator: failingTranslator() });
 
-    const translations = parseConfigJson(ctx.getConfigFileRaw('en.json'));
-    expect(translations['Hello']).toBe(null);
-
-    const rawJson = ctx.getConfigFileRaw('en.json') ?? '';
-    expect(rawJson).toContain('👇 missing start 👇');
+    expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
+      "{
+        "👇 missing start 👇": "🛑 delete this line 🛑",
+        "Hello": null,
+        "👆 missing end 👆": "🛑 delete this line 🛑",
+        "": ""
+      }"
+    `);
   });
 
   test('preserves existing translations', async () => {
@@ -191,9 +206,13 @@ describe('AI translation fix', () => {
 
     await ctx.validate({ fix: true, aiTranslator: translator });
 
-    const translations = parseConfigJson(ctx.getConfigFileRaw('en.json'));
-    expect(translations['Hello']).toBe('Existing translation');
-    expect(translations['World']).toBe('AI: World');
+    expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
+      "{
+        "World": "AI: World",
+        "Hello": "Existing translation",
+        "": ""
+      }"
+    `);
   });
 
   test('provides similar translations as context to AI', async () => {
@@ -251,7 +270,7 @@ describe('AI translation fix', () => {
       ctx.isPlural ?
         {
           type: 'plural',
-          value: { zero: 'No items', one: '1 item', '+2': '# items' },
+          value: { one: '1 item', '+2': '# items' },
         }
       : { type: 'string', value: `Translated: ${ctx.sourceKey}` },
     );
@@ -269,13 +288,16 @@ describe('AI translation fix', () => {
 
     await ctx.validate({ fix: true, aiTranslator: translator });
 
-    const translations = parseConfigJson(ctx.getConfigFileRaw('en.json'));
-    expect(translations['Hello World']).toBe('Translated: Hello World');
-    expect(translations['# items']).toEqual({
-      zero: 'No items',
-      one: '1 item',
-      '+2': '# items',
-    });
+    expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
+      "{
+        "Hello World": "Translated: Hello World",
+        "# items": {
+          "one": "1 item",
+          "+2": "# items"
+        },
+        "": ""
+      }"
+    `);
   });
 });
 
@@ -327,12 +349,6 @@ describe('Similarity search', () => {
     expect(matches.length).toBeLessThanOrEqual(3);
   });
 });
-
-function parseConfigJson(
-  raw: string | undefined,
-): Record<string, TranslationValue> {
-  return JSON.parse(raw ?? '{}') as Record<string, TranslationValue>;
-}
 
 function mockTranslator(
   handler: (ctx: TranslationContext) => TranslationResult | undefined,
