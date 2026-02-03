@@ -130,6 +130,7 @@ export async function validateTranslations(
   })) {
     const { fullPath, basename } = entry;
     const invalidPluralTranslations: string[] = [];
+    const invalidSpecialTranslations: string[] = [];
 
     const fileParseResult = rc_parse(
       JSON.parse(fs.readFileSync(fullPath, 'utf-8')),
@@ -158,11 +159,19 @@ export async function validateTranslations(
       missingHashs.delete(hash);
 
       if (allStringTranslationHashs.has(hash)) {
-        const isUnnededDefaultHash =
-          isDefaultLocale && localeTranslations[hash] === null;
+        const isUnneededDefaultHash =
+          isDefaultLocale &&
+          (localeTranslations[hash] === null ||
+            localeTranslations[hash] === hash);
 
-        if (!isUnnededDefaultHash) {
+        if (!isUnneededDefaultHash) {
           extraHashs.delete(hash);
+        }
+
+        const isVariantOrPlaceholder = hash.includes('~~') || hash.startsWith('$');
+        const translationValue = localeTranslations[hash];
+        if (isVariantOrPlaceholder && translationValue === hash) {
+          invalidSpecialTranslations.push(hash);
         }
       } else if (allPluralTranslationHashs.has(hash)) {
         extraHashs.delete(hash);
@@ -184,7 +193,8 @@ export async function validateTranslations(
     if (
       missingHashs.size > 0 ||
       extraHashs.size > 0 ||
-      invalidPluralTranslations.length > 0
+      invalidPluralTranslations.length > 0 ||
+      invalidSpecialTranslations.length > 0
     ) {
       if (!fix) {
         hasError = true;
@@ -193,6 +203,13 @@ export async function validateTranslations(
           log.error(
             `❌ ${basename} has invalid plural translations: `,
             invalidPluralTranslations,
+          );
+        }
+
+        if (invalidSpecialTranslations.length > 0) {
+          log.error(
+            `❌ ${basename} has invalid special translations (value equals key): `,
+            invalidSpecialTranslations,
           );
         }
 
@@ -220,7 +237,12 @@ export async function validateTranslations(
           );
         }
       } else {
-        if (
+        if (invalidSpecialTranslations.length > 0) {
+          log.error(
+            `❌ ${basename} has invalid special translations (value equals key): `,
+            invalidSpecialTranslations,
+          );
+        } else if (
           missingHashs.size === 0 &&
           extraHashs.size === 1 &&
           extraHashs.has(MISSING_TRANSLATIONS_KEY)
@@ -245,8 +267,8 @@ export async function validateTranslations(
                     zero: 'No x',
                     one: '1 x',
                     '+2': '# x',
-                    many: 'A lot of x',
-                    manyLimit: 50,
+                    many: undefined,
+                    manyLimit: undefined,
                   }
                 : null;
             }
@@ -268,7 +290,10 @@ export async function validateTranslations(
             log.info(`✅ ${basename} translations fixed`);
           }
 
-          fs.writeFileSync(fullPath, JSON.stringify(localeTranslations, null, 2));
+          fs.writeFileSync(
+            fullPath,
+            JSON.stringify(localeTranslations, null, 2),
+          );
         }
       }
     } else {

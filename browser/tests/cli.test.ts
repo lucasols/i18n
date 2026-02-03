@@ -380,3 +380,179 @@ test('handles mixed __, __p, __jsx, and __pjsx in same file', async () => {
     }
   `);
 });
+
+// === Variant and $ Prefixed Translation Validation ===
+
+test('variant translation equal to key is invalid', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.tsx': `
+        import { __ } from '@ls-stack/i18n';
+        export const t = __\`Hello~~formal\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({
+        'Hello~~formal': 'Hello~~formal',
+      }),
+    },
+  });
+
+  const result = await ctx.validate();
+
+  expect(result.hasError).toBe(true);
+  expect(result.errors).toContainEqual(
+    expect.stringContaining('invalid special translations'),
+  );
+  expect(result.errors[0]).toContain('Hello~~formal');
+});
+
+test('$ prefixed translation equal to key is invalid', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.tsx': `
+        import { __ } from '@ls-stack/i18n';
+        export const t = __\`$terms\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({
+        $terms: '$terms',
+      }),
+    },
+  });
+
+  const result = await ctx.validate();
+
+  expect(result.hasError).toBe(true);
+  expect(result.errors).toContainEqual(
+    expect.stringContaining('invalid special translations'),
+  );
+  expect(result.errors[0]).toContain('$terms');
+});
+
+test('variant translation with different value is valid', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.tsx': `
+        import { __ } from '@ls-stack/i18n';
+        export const t1 = __\`Hello\`;
+        export const t2 = __\`Hello~~formal\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({
+        Hello: 'Hello',
+        'Hello~~formal': 'Good day',
+      }),
+    },
+  });
+
+  const result = await ctx.validate();
+
+  expect(result).toMatchInlineSnapshot(`
+    {
+      "errors": [],
+      "hasError": false,
+      "infos": [
+        "✅ en.json translations are up to date",
+      ],
+      "output": [
+        "✅ en.json translations are up to date",
+      ],
+    }
+  `);
+});
+
+test('$ prefixed translation with different value is valid', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.tsx': `
+        import { __ } from '@ls-stack/i18n';
+        export const t = __\`$terms\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({
+        $terms: 'Terms and conditions text here...',
+      }),
+    },
+  });
+
+  const result = await ctx.validate();
+
+  expect(result).toMatchInlineSnapshot(`
+    {
+      "errors": [],
+      "hasError": false,
+      "infos": [
+        "✅ en.json translations are up to date",
+      ],
+      "output": [
+        "✅ en.json translations are up to date",
+      ],
+    }
+  `);
+});
+
+test('variant translation with null value is valid (pending)', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.tsx': `
+        import { __ } from '@ls-stack/i18n';
+        export const t = __\`Hello~~formal\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({
+        'Hello~~formal': null,
+      }),
+    },
+  });
+
+  const result = await ctx.validate();
+
+  expect(result).toMatchInlineSnapshot(`
+    {
+      "errors": [],
+      "hasError": false,
+      "infos": [
+        "✅ en.json translations are up to date",
+      ],
+      "output": [
+        "✅ en.json translations are up to date",
+      ],
+    }
+  `);
+});
+
+test('$ prefixed translation with null value is valid (pending)', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.tsx': `
+        import { __ } from '@ls-stack/i18n';
+        export const t = __\`$terms\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({
+        $terms: null,
+      }),
+    },
+  });
+
+  const result = await ctx.validate();
+
+  expect(result).toMatchInlineSnapshot(`
+    {
+      "errors": [],
+      "hasError": false,
+      "infos": [
+        "✅ en.json translations are up to date",
+      ],
+      "output": [
+        "✅ en.json translations are up to date",
+      ],
+    }
+  `);
+});

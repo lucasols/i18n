@@ -60,7 +60,7 @@ const enCorrectTranslations = {
   'Hello World': 'Hello World',
   'Hello {1}': 'Hello {1}',
   'Hello {1} {2}': 'Hello {1} {2}',
-  'Hello World~~2': 'Hello World~~2',
+  'Hello World~~2': 'Hello World (variant 2)',
   'Imported usage': 'Imported usage',
   '# Hello World': {
     zero: 'No x',
@@ -118,16 +118,12 @@ test('fix missing translations', async () => {
       "# Hello World": {
         "zero": "No x",
         "one": "1 x",
-        "+2": "# x",
-        "many": "A lot of x",
-        "manyLimit": 50
+        "+2": "# x"
       },
       "# Hello {1}": {
         "zero": "No x",
         "one": "1 x",
-        "+2": "# x",
-        "many": "A lot of x",
-        "manyLimit": 50
+        "+2": "# x"
       },
       "": ""
     }"
@@ -144,16 +140,12 @@ test('fix missing translations', async () => {
       "# Hello World": {
         "zero": "No x",
         "one": "1 x",
-        "+2": "# x",
-        "many": "A lot of x",
-        "manyLimit": 50
+        "+2": "# x"
       },
       "# Hello {1}": {
         "zero": "No x",
         "one": "1 x",
-        "+2": "# x",
-        "many": "A lot of x",
-        "manyLimit": 50
+        "+2": "# x"
       },
       "": ""
     }"
@@ -200,7 +192,7 @@ test('fix extra translations', async () => {
       "Hello World": "Hello World",
       "Hello {1}": "Hello {1}",
       "Hello {1} {2}": "Hello {1} {2}",
-      "Hello World~~2": "Hello World~~2",
+      "Hello World~~2": "Hello World (variant 2)",
       "Imported usage": "Imported usage",
       "# Hello World": {
         "zero": "No x",
@@ -277,6 +269,30 @@ test('fix invalid plural translations', async () => {
       ],
     }
   `);
+
+  expect(ctx.getConfigFileRaw('pt.json')).toMatchInlineSnapshot(`
+    "{
+      "Hello World": "Olá Mundo",
+      "Hello {1}": "Olá {1}",
+      "Hello {1} {2}": "Olá {1} {2}",
+      "Hello World~~2": "Olá Mundo~~2",
+      "Imported usage": "Uso importado",
+      "# Hello {1}": {
+        "zero": "Nenhuma x",
+        "one": "1 x",
+        "+2": "# x",
+        "many": "Muitas x",
+        "manyLimit": 50
+      },
+      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "# Hello World": {
+        "zero": "No x",
+        "one": "1 x",
+        "+2": "# x"
+      },
+      "": ""
+    }"
+  `);
 });
 
 test('fix default locale null translations', async () => {
@@ -310,6 +326,27 @@ test('fix default locale null translations', async () => {
       ],
     }
   `);
+
+  expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
+    "{
+      "Hello World~~2": "Hello World (variant 2)",
+      "# Hello World": {
+        "zero": "No x",
+        "one": "1 x",
+        "+2": "# x",
+        "many": "A lot of x",
+        "manyLimit": 50
+      },
+      "# Hello {1}": {
+        "zero": "No x",
+        "one": "1 x",
+        "+2": "# x",
+        "many": "A lot of x",
+        "manyLimit": 50
+      },
+      "": ""
+    }"
+  `);
 });
 
 test('fix mode with missing translations marker already present', async () => {
@@ -338,6 +375,14 @@ test('fix mode with missing translations marker already present', async () => {
   expect(result.infos).toContainEqual(
     expect.stringContaining('translations keys were added'),
   );
+
+  expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
+    "{
+      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "Hello": null,
+      "": ""
+    }"
+  `);
 });
 
 test('fix mode error when file has only missing marker', async () => {
@@ -371,6 +416,10 @@ test('fix mode error when file has only missing marker', async () => {
       ],
     }
   `);
+
+  expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(
+    `"{"Hello":"Hello","👇 missing translations 👇":"🛑 delete this line 🛑"}"`,
+  );
 });
 
 test('fix mode handles missing, extra, and invalid plural simultaneously', async () => {
@@ -408,18 +457,19 @@ test('fix mode handles missing, extra, and invalid plural simultaneously', async
     }
   `);
 
-  const fixedContent = ctx.getConfigFileContent('en.json');
-  expect(fixedContent).toBeDefined();
-  expect(fixedContent?.['Hello']).toBe('Hello');
-  expect(fixedContent?.['World']).toBe(null);
-  expect(fixedContent?.['Extra translation']).toBeUndefined();
-  expect(fixedContent?.['# items']).toEqual({
-    zero: 'No x',
-    one: '1 x',
-    '+2': '# x',
-    many: 'A lot of x',
-    manyLimit: 50,
-  });
+  expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
+    "{
+      "Hello": "Hello",
+      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "World": null,
+      "# items": {
+        "zero": "No x",
+        "one": "1 x",
+        "+2": "# x"
+      },
+      "": ""
+    }"
+  `);
 });
 
 test('fix mode preserves existing valid translations', async () => {
@@ -443,8 +493,148 @@ test('fix mode preserves existing valid translations', async () => {
 
   expect(result.hasError).toBe(false);
 
-  const fixedContent = ctx.getConfigFileContent('en.json');
-  expect(fixedContent).toBeDefined();
-  expect(fixedContent?.['Hello']).toBe('Custom Hello Translation');
-  expect(fixedContent?.['World']).toBe(null);
+  expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
+    "{
+      "Hello": "Custom Hello Translation",
+      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "World": null,
+      "": ""
+    }"
+  `);
+});
+
+test('fix adds null for missing variant translations', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.ts': `
+        import { i18nitialize } from '@ls-stack/server-i18n';
+        const i18n = i18nitialize({ locales: { en: {} } }).with('en');
+        export const t1 = i18n.__\`Hello\`;
+        export const t2 = i18n.__\`Hello~~formal\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({
+        Hello: 'Hello',
+      }),
+    },
+  });
+
+  const result = await ctx.validate({ fix: true });
+
+  expect(result).toMatchInlineSnapshot(`
+    {
+      "errors": [],
+      "hasError": false,
+      "infos": [
+        "🟠 en.json translations keys were added",
+      ],
+      "output": [
+        "🟠 en.json translations keys were added",
+      ],
+    }
+  `);
+
+  expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
+    "{
+      "Hello": "Hello",
+      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "Hello~~formal": null,
+      "": ""
+    }"
+  `);
+});
+
+test('fix adds null for missing $ prefixed translations', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.ts': `
+        import { i18nitialize } from '@ls-stack/server-i18n';
+        const i18n = i18nitialize({ locales: { en: {} } }).with('en');
+        export const t = i18n.__\`$placeholder\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({}),
+    },
+  });
+
+  const result = await ctx.validate({ fix: true });
+
+  expect(result).toMatchInlineSnapshot(`
+    {
+      "errors": [],
+      "hasError": false,
+      "infos": [
+        "🟠 en.json translations keys were added",
+      ],
+      "output": [
+        "🟠 en.json translations keys were added",
+      ],
+    }
+  `);
+
+  expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
+    "{
+      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "$placeholder": null,
+      "": ""
+    }"
+  `);
+});
+
+test('fix mode reports error for variant translation equal to key', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.ts': `
+        import { i18nitialize } from '@ls-stack/server-i18n';
+        const i18n = i18nitialize({ locales: { en: {} } }).with('en');
+        export const t = i18n.__\`Hello~~formal\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({
+        'Hello~~formal': 'Hello~~formal',
+      }),
+    },
+  });
+
+  const result = await ctx.validate({ fix: true });
+
+  expect(result.errors).toContainEqual(
+    expect.stringContaining('invalid special translations'),
+  );
+  expect(result.errors[0]).toContain('Hello~~formal');
+
+  expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(
+    `"{"Hello~~formal":"Hello~~formal"}"`,
+  );
+});
+
+test('fix mode reports error for $ prefixed translation equal to key', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.ts': `
+        import { i18nitialize } from '@ls-stack/server-i18n';
+        const i18n = i18nitialize({ locales: { en: {} } }).with('en');
+        export const t = i18n.__\`$terms\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({
+        $terms: '$terms',
+      }),
+    },
+  });
+
+  const result = await ctx.validate({ fix: true });
+
+  expect(result.errors).toContainEqual(
+    expect.stringContaining('invalid special translations'),
+  );
+  expect(result.errors[0]).toContain('$terms');
+
+  expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(
+    `"{"$terms":"$terms"}"`,
+  );
 });

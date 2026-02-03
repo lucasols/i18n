@@ -54,6 +54,7 @@ pnpm --filter @ls-stack/server-i18n test-cli:fix
   - Don't use unrealistic timelines
 - For browser tests, use `createTestController` from `test-utils.ts` to create a test controller with mock locale loaders. Extend or modify `createTestController` itself to add new testing capabilities if needed.
 - Tests should follow and test the correct expected behavior of the lib. Don't change test just to make them pass.
+- For CLI tests, the browser package is the canonical test suite. Server tests should only cover server-specific CLI behavior—generic CLI tests belong in browser tests only (avoid duplicating them in server).
 
 ## Key Features
 

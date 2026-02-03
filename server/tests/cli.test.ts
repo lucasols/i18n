@@ -60,7 +60,7 @@ const enCorrectTranslations = {
   'Hello World': 'Hello World',
   'Hello {1}': 'Hello {1}',
   'Hello {1} {2}': 'Hello {1} {2}',
-  'Hello World~~2': 'Hello World~~2',
+  'Hello World~~2': 'Hello World (variant 2)',
   'Imported usage': 'Imported usage',
   '# Hello World': {
     zero: 'No x',
@@ -265,10 +265,14 @@ test('default locale null translations error', async () => {
 
   const result = await ctx.validate({ defaultLocale: 'en' });
 
+  // For default locale, string translations that equal their key AND null values are "extra"
+  // enCorrectTranslations has 5 string translations: 'Hello World', 'Hello {1}', 'Hello {1} {2}', 'Hello World~~2', 'Imported usage'
+  // 'Hello World' is overridden to null, 'Hello World~~2' has a different value so it's valid
+  // So we have 3 strings equal to key + 1 null = 4 extra
   expect(result).toMatchInlineSnapshot(`
     {
       "errors": [
-        "❌ en.json has invalid translations: extra 1",
+        "❌ en.json has invalid translations: extra 4",
       ],
       "hasError": true,
       "infos": [
@@ -276,15 +280,19 @@ test('default locale null translations error', async () => {
       ],
       "output": [
         "✅ pt.json translations are up to date",
-        "❌ en.json has invalid translations: extra 1",
+        "❌ en.json has invalid translations: extra 4",
       ],
     }
   `);
 });
 
 test('undefined default locale translations should not return error', async () => {
-  const enWithoutHelloWorld = { ...enCorrectTranslations };
-  delete (enWithoutHelloWorld as Record<string, unknown>)['Hello World'];
+  // For default locale, string translations that equal their key are redundant and treated as extra
+  // So we need a file that truly has no issues: only plural translations or translations with different values
+  const enWithOnlyPlurals = {
+    '# Hello World': enCorrectTranslations['# Hello World'],
+    '# Hello {1}': enCorrectTranslations['# Hello {1}'],
+  };
 
   const ctx = createCliTestContext({
     src: {
@@ -292,7 +300,7 @@ test('undefined default locale translations should not return error', async () =
       'main2.ts': main2Ts,
     },
     config: {
-      'en.json': JSON.stringify(enWithoutHelloWorld),
+      'en.json': JSON.stringify(enWithOnlyPlurals),
       'pt.json': JSON.stringify(ptCorrectTranslations),
     },
   });
@@ -316,8 +324,8 @@ test('undefined default locale translations should not return error', async () =
 });
 
 test('undefined plural translations should return error in default locale too', async () => {
-  const ptWithoutPluralHello = { ...ptCorrectTranslations };
-  delete (ptWithoutPluralHello as Record<string, unknown>)['# Hello World'];
+  const enWithoutPluralHello = { ...enCorrectTranslations };
+  delete (enWithoutPluralHello as Record<string, unknown>)['# Hello World'];
 
   const ctx = createCliTestContext({
     src: {
@@ -325,17 +333,20 @@ test('undefined plural translations should return error in default locale too', 
       'main2.ts': main2Ts,
     },
     config: {
-      'en.json': JSON.stringify(ptWithoutPluralHello),
-      'pt.json': JSON.stringify(enCorrectTranslations),
+      'en.json': JSON.stringify(enWithoutPluralHello),
+      'pt.json': JSON.stringify(ptCorrectTranslations),
     },
   });
 
-  const result = await ctx.validate({ defaultLocale: 'pt' });
+  const result = await ctx.validate({ defaultLocale: 'en' });
 
+  // en.json (defaultLocale) is missing '# Hello World' (1 missing)
+  // en.json has 4 string translations equal to their key = 4 extra
+  // (Hello World~~2 has a different value so it's valid)
   expect(result).toMatchInlineSnapshot(`
     {
       "errors": [
-        "❌ en.json has invalid translations: missing 1",
+        "❌ en.json has invalid translations: missing 1, extra 4",
       ],
       "hasError": true,
       "infos": [
@@ -343,7 +354,7 @@ test('undefined plural translations should return error in default locale too', 
       ],
       "output": [
         "✅ pt.json translations are up to date",
-        "❌ en.json has invalid translations: missing 1",
+        "❌ en.json has invalid translations: missing 1, extra 4",
       ],
     }
   `);
@@ -984,6 +995,188 @@ test('default locale allows null for string but requires plural object', async (
   });
 
   const result = await ctx.validate({ defaultLocale: 'en' });
+
+  expect(result).toMatchInlineSnapshot(`
+    {
+      "errors": [],
+      "hasError": false,
+      "infos": [
+        "✅ en.json translations are up to date",
+      ],
+      "output": [
+        "✅ en.json translations are up to date",
+      ],
+    }
+  `);
+});
+
+// === Variant and $ Prefixed Translation Validation ===
+
+test('variant translation equal to key is invalid', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.ts': `
+        import { i18nitialize } from '@ls-stack/server-i18n';
+        const i18n = i18nitialize({ locales: { en: {} } }).with('en');
+        export const t = i18n.__\`Hello~~formal\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({
+        'Hello~~formal': 'Hello~~formal',
+      }),
+    },
+  });
+
+  const result = await ctx.validate();
+
+  expect(result.hasError).toBe(true);
+  expect(result.errors).toContainEqual(
+    expect.stringContaining('invalid special translations'),
+  );
+  expect(result.errors[0]).toContain('Hello~~formal');
+});
+
+test('$ prefixed translation equal to key is invalid', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.ts': `
+        import { i18nitialize } from '@ls-stack/server-i18n';
+        const i18n = i18nitialize({ locales: { en: {} } }).with('en');
+        export const t = i18n.__\`$terms\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({
+        $terms: '$terms',
+      }),
+    },
+  });
+
+  const result = await ctx.validate();
+
+  expect(result.hasError).toBe(true);
+  expect(result.errors).toContainEqual(
+    expect.stringContaining('invalid special translations'),
+  );
+  expect(result.errors[0]).toContain('$terms');
+});
+
+test('variant translation with different value is valid', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.ts': `
+        import { i18nitialize } from '@ls-stack/server-i18n';
+        const i18n = i18nitialize({ locales: { en: {} } }).with('en');
+        export const t1 = i18n.__\`Hello\`;
+        export const t2 = i18n.__\`Hello~~formal\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({
+        Hello: 'Hello',
+        'Hello~~formal': 'Good day',
+      }),
+    },
+  });
+
+  const result = await ctx.validate();
+
+  expect(result).toMatchInlineSnapshot(`
+    {
+      "errors": [],
+      "hasError": false,
+      "infos": [
+        "✅ en.json translations are up to date",
+      ],
+      "output": [
+        "✅ en.json translations are up to date",
+      ],
+    }
+  `);
+});
+
+test('$ prefixed translation with different value is valid', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.ts': `
+        import { i18nitialize } from '@ls-stack/server-i18n';
+        const i18n = i18nitialize({ locales: { en: {} } }).with('en');
+        export const t = i18n.__\`$terms\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({
+        $terms: 'Terms and conditions text here...',
+      }),
+    },
+  });
+
+  const result = await ctx.validate();
+
+  expect(result).toMatchInlineSnapshot(`
+    {
+      "errors": [],
+      "hasError": false,
+      "infos": [
+        "✅ en.json translations are up to date",
+      ],
+      "output": [
+        "✅ en.json translations are up to date",
+      ],
+    }
+  `);
+});
+
+test('variant translation with null value is valid (pending)', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.ts': `
+        import { i18nitialize } from '@ls-stack/server-i18n';
+        const i18n = i18nitialize({ locales: { en: {} } }).with('en');
+        export const t = i18n.__\`Hello~~formal\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({
+        'Hello~~formal': null,
+      }),
+    },
+  });
+
+  const result = await ctx.validate();
+
+  expect(result).toMatchInlineSnapshot(`
+    {
+      "errors": [],
+      "hasError": false,
+      "infos": [
+        "✅ en.json translations are up to date",
+      ],
+      "output": [
+        "✅ en.json translations are up to date",
+      ],
+    }
+  `);
+});
+
+test('$ prefixed translation with null value is valid (pending)', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.ts': `
+        import { i18nitialize } from '@ls-stack/server-i18n';
+        const i18n = i18nitialize({ locales: { en: {} } }).with('en');
+        export const t = i18n.__\`$terms\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({
+        $terms: null,
+      }),
+    },
+  });
+
+  const result = await ctx.validate();
 
   expect(result).toMatchInlineSnapshot(`
     {

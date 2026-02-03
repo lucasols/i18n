@@ -1,5 +1,9 @@
 import path from 'path';
-import { validateTranslations, type FileSystem, type Logger } from './validation';
+import {
+  validateTranslations,
+  type FileSystem,
+  type Logger,
+} from './validation';
 
 export type VirtualFileTree = {
   [path: string]: string | VirtualFileTree;
@@ -48,7 +52,9 @@ export function createVirtualFs(
     readFileSync(filePath, _encoding) {
       const content = files.get(filePath);
       if (content === undefined) {
-        throw new Error(`ENOENT: no such file or directory, open '${filePath}'`);
+        throw new Error(
+          `ENOENT: no such file or directory, open '${filePath}'`,
+        );
       }
       return content;
     },
@@ -113,7 +119,10 @@ export function createCliTestContext(fixture: {
   const srcDir = '/virtual/src';
   const configDir = '/virtual/config';
 
-  const { fs: srcFs, getFile: getSrcFile } = createVirtualFs(srcDir, fixture.src);
+  const { fs: srcFs, getFile: getSrcFile } = createVirtualFs(
+    srcDir,
+    fixture.src,
+  );
   const { fs: configFs, getFile: getConfigFile } = createVirtualFs(
     configDir,
     fixture.config,
@@ -143,10 +152,7 @@ export function createCliTestContext(fixture: {
     },
   };
 
-  async function validate(options?: {
-    fix?: boolean;
-    defaultLocale?: string;
-  }) {
+  async function validate(options?: { fix?: boolean; defaultLocale?: string }) {
     log.clear();
     const result = await validateTranslations({
       configDir,
@@ -173,11 +179,6 @@ export function createCliTestContext(fixture: {
     log,
     validate,
     getSrcFile,
-    getConfigFileContent(filename: string): Record<string, unknown> | undefined {
-      const content = getConfigFile(filename);
-      if (content === undefined) return undefined;
-      return JSON.parse(content) as Record<string, unknown>;
-    },
     getConfigFileRaw(filename: string): string | undefined {
       return getConfigFile(filename);
     },
