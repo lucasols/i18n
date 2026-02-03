@@ -3,6 +3,7 @@
  */
 import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { __date, __num, i18nitialize, resetState } from '../src/main';
+import { configure, getRegionLocale } from '../src/state';
 import { createTestController } from './test-utils';
 
 beforeEach(() => {
@@ -127,19 +128,15 @@ describe('getRegionLocale fallback chain', () => {
 
     expect(controller.getRegionLocale()).toBe('en-GB');
   });
-
-  test('returns en-US as final fallback when no locale loaded and no fallbackLocale matches browser locales', () => {
-    vi.stubGlobal('navigator', {
-      languages: ['fr-FR', 'de-DE'],
-    });
-
-    const controller = i18nitialize({
-      persistenceKey: 'test-fallback',
-      fallbackLocale: 'en',
+  test('throws in dev when no locale loaded and no fallbackLocale configured', () => {
+    configure({
       locales: [],
+      persistenceKey: 'test-dev-fallback',
+      fallbackLocale: null,
+      dev: true,
     });
 
-    expect(controller.getRegionLocale()).toBe('en');
+    expect(() => getRegionLocale()).toThrowError(/No locale configured/i);
   });
 });
 
@@ -194,4 +191,3 @@ describe('formatters use inferred region locale', () => {
     expect(formatted).toMatch(/1\.234,56/);
   });
 });
-

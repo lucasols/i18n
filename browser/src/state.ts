@@ -151,6 +151,12 @@ export function getRegionLocale(): string {
     return inferRegionLocale(fallbackLocale);
   }
 
+  if (devMode) {
+    throw new Error(
+      'I18n error: No locale configured; call i18nitialize() with a fallbackLocale',
+    );
+  }
+
   return 'en-US';
 }
 
