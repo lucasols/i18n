@@ -24,7 +24,7 @@ describe('constant-translation', () => {
 
     expect(result.hasError).toBe(true);
     expect(result.errors).toContainEqual(
-      expect.stringContaining('constant translation "OK" is identical in all locales'),
+      expect.stringContaining('constant translation "OK" has the same value in all locales'),
     );
   });
 
@@ -156,7 +156,7 @@ describe('unnecessary-plural', () => {
 
     expect(result.hasError).toBe(true);
     expect(result.errors).toContainEqual(
-      expect.stringContaining('unnecessary plural "# items" only uses +2 form'),
+      expect.stringContaining('unnecessary plural "# items" only uses the +2 form'),
     );
   });
 
@@ -242,7 +242,7 @@ describe('jsx-without-interpolation', () => {
 
     expect(result.hasError).toBe(true);
     expect(result.errors).toContainEqual(
-      expect.stringContaining('jsx without interpolation "Hello World"'),
+      expect.stringContaining('__jsx used without interpolations for "Hello World"'),
     );
   });
 
@@ -266,7 +266,7 @@ describe('jsx-without-interpolation', () => {
     const result = await ctx.validate();
 
     expect(result.errors).not.toContainEqual(
-      expect.stringContaining('jsx without interpolation'),
+      expect.stringContaining('__jsx used without interpolations'),
     );
   });
 
@@ -288,7 +288,7 @@ describe('jsx-without-interpolation', () => {
     const result = await ctx.validate();
 
     expect(result.errors).not.toContainEqual(
-      expect.stringContaining('jsx without interpolation'),
+      expect.stringContaining('__jsx used without interpolations'),
     );
   });
 });
@@ -315,7 +315,7 @@ describe('jsx-without-jsx-nodes', () => {
 
     expect(result.hasError).toBe(true);
     expect(result.errors).toContainEqual(
-      expect.stringContaining('jsx without jsx nodes "Hello {1}"'),
+      expect.stringContaining('__jsx used but all interpolations are primitives'),
     );
   });
 
@@ -340,7 +340,7 @@ describe('jsx-without-jsx-nodes', () => {
 
     expect(result.hasError).toBe(true);
     expect(result.errors).toContainEqual(
-      expect.stringContaining('jsx without jsx nodes'),
+      expect.stringContaining('__jsx used but all interpolations are primitives'),
     );
   });
 
@@ -364,7 +364,7 @@ describe('jsx-without-jsx-nodes', () => {
     const result = await ctx.validate();
 
     expect(result.errors).not.toContainEqual(
-      expect.stringContaining('jsx without jsx nodes'),
+      expect.stringContaining('__jsx used but all interpolations are primitives'),
     );
   });
 
@@ -388,7 +388,7 @@ describe('jsx-without-jsx-nodes', () => {
     const result = await ctx.validate();
 
     expect(result.errors).not.toContainEqual(
-      expect.stringContaining('jsx without jsx nodes'),
+      expect.stringContaining('__jsx used but all interpolations are primitives'),
     );
   });
 
@@ -413,7 +413,7 @@ describe('jsx-without-jsx-nodes', () => {
 
     expect(result.hasError).toBe(true);
     expect(result.errors).toContainEqual(
-      expect.stringContaining('jsx without jsx nodes'),
+      expect.stringContaining('__jsx used but all interpolations are primitives'),
     );
   });
 });
@@ -441,7 +441,7 @@ describe('unnecessary-interpolated-affix', () => {
 
     expect(result.hasError).toBe(true);
     expect(result.errors).toContainEqual(
-      expect.stringContaining('unnecessary interpolated prefix "Error: "'),
+      expect.stringContaining('prefix "Error: " before interpolation'),
     );
   });
 
@@ -467,7 +467,7 @@ describe('unnecessary-interpolated-affix', () => {
 
     expect(result.hasError).toBe(true);
     expect(result.errors).toContainEqual(
-      expect.stringContaining('unnecessary interpolated suffix " items!"'),
+      expect.stringContaining('suffix " items!" after interpolation'),
     );
   });
 
@@ -492,7 +492,7 @@ describe('unnecessary-interpolated-affix', () => {
     const result = await ctx.validate();
 
     expect(result.errors).not.toContainEqual(
-      expect.stringContaining('unnecessary interpolated prefix'),
+      expect.stringContaining('prefix'),
     );
   });
 
@@ -517,7 +517,7 @@ describe('unnecessary-interpolated-affix', () => {
     const result = await ctx.validate();
 
     expect(result.errors).not.toContainEqual(
-      expect.stringContaining('unnecessary interpolated suffix'),
+      expect.stringContaining('suffix'),
     );
   });
 
@@ -539,7 +539,7 @@ describe('unnecessary-interpolated-affix', () => {
     const result = await ctx.validate();
 
     expect(result.errors).not.toContainEqual(
-      expect.stringContaining('unnecessary interpolated'),
+      expect.stringContaining('interpolation'),
     );
   });
 });
@@ -568,7 +568,7 @@ describe('max-translation-id-size', () => {
 
     expect(result.hasError).toBe(true);
     expect(result.errors).toContainEqual(
-      expect.stringContaining('translation ID too long'),
+      expect.stringContaining('translation ID exceeds'),
     );
   });
 
@@ -592,13 +592,13 @@ describe('max-translation-id-size', () => {
 
     const resultDefault = await ctx.validate();
     expect(resultDefault.errors).not.toContainEqual(
-      expect.stringContaining('translation ID too long'),
+      expect.stringContaining('translation ID exceeds'),
     );
 
     const resultCustom = await ctx.validate({ maxTranslationIdSize: 50 });
     expect(resultCustom.hasError).toBe(true);
     expect(resultCustom.errors).toContainEqual(
-      expect.stringContaining('translation ID too long'),
+      expect.stringContaining('translation ID exceeds'),
     );
   });
 
@@ -624,7 +624,7 @@ describe('max-translation-id-size', () => {
     const result = await ctx.validate();
 
     expect(result.errors).not.toContainEqual(
-      expect.stringContaining('translation ID too long'),
+      expect.stringContaining('translation ID exceeds'),
     );
   });
 });
@@ -738,7 +738,7 @@ describe('configuration options', () => {
       expect.stringContaining('constant translation'),
     );
     expect(result.infos).toContainEqual(
-      expect.stringContaining('jsx without interpolation'),
+      expect.stringContaining('__jsx used without interpolations'),
     );
     expect(result.errors).toContainEqual(
       expect.stringContaining('unnecessary plural'),
@@ -890,7 +890,7 @@ describe('edge cases', () => {
 
     expect(result.hasError).toBe(true);
     expect(result.errors).toContainEqual(
-      expect.stringContaining('jsx without interpolation'),
+      expect.stringContaining('__jsx used without interpolations'),
     );
   });
 
@@ -939,14 +939,14 @@ describe('edge cases', () => {
 
     const result = await ctx.validate();
 
-    expect(result.errors.filter((e) => e.includes('jsx without'))).toHaveLength(
+    expect(result.errors.filter((e) => e.includes('__jsx used'))).toHaveLength(
       1,
     );
     expect(result.errors).toContainEqual(
-      expect.stringContaining('jsx without interpolation'),
+      expect.stringContaining('__jsx used without interpolations'),
     );
     expect(result.errors).not.toContainEqual(
-      expect.stringContaining('jsx without jsx nodes'),
+      expect.stringContaining('__jsx used but all interpolations are primitives'),
     );
   });
 });
