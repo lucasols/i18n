@@ -42,6 +42,7 @@ let devMode = false;
 let loadingLocaleId: string | null = null;
 let loadingPromise: Promise<void> | null = null;
 let loadedLocaleId: string | null = null;
+let loadRequestId = 0;
 let clearIntlCacheFn: (() => void) | null = null;
 let fallbackLocale: string | null = null;
 
@@ -165,6 +166,7 @@ export async function setLocale(localeId: string): Promise<void> {
     throw new Error(`Locale "${localeId}" not found`);
   }
 
+  const requestId = ++loadRequestId;
   loadingLocaleId = localeId;
 
   updateState({
@@ -179,6 +181,10 @@ export async function setLocale(localeId: string): Promise<void> {
         retryAttempts,
         { delayBetweenRetriesMs: retryDelay },
       );
+
+      if (requestId !== loadRequestId) {
+        return;
+      }
 
       if (clearIntlCacheFn) {
         clearIntlCacheFn();
@@ -217,6 +223,9 @@ export async function setLocale(localeId: string): Promise<void> {
       loadingPromise = null;
       notifyListeners();
     } catch (error) {
+      if (requestId !== loadRequestId) {
+        return;
+      }
       loadingLocaleId = null;
       loadingPromise = null;
       updateState({
@@ -295,4 +304,5 @@ export function resetState(): void {
   loadingLocaleId = null;
   loadingPromise = null;
   loadedLocaleId = null;
+  loadRequestId = 0;
 }

@@ -13,12 +13,18 @@ beforeEach(() => {
 });
 
 describe('loading states', () => {
-  test('getLoadedLocale is null before loading', () => {
+  test('getLoadedLocale is null before loading', async () => {
+    vi.useFakeTimers();
+
     const controller = createTestController({
       locales: { en: {} },
     });
 
     expect(controller.getLoadedLocale()).toBe(null);
+
+    // Flush initial load to avoid cross-test leakage
+    await vi.advanceTimersByTimeAsync(100);
+    await controller.setLocale('en');
   });
 
   test('getLoadedLocale returns locale after loading', async () => {
@@ -131,13 +137,18 @@ describe('locale switching', () => {
 
     const controller = createTestController({
       locales: { en: {}, pt: {}, fr: {} },
+      loadingTimes: { en: 200, fr: 50 },
     });
 
     const enPromise = controller.setLocale('en');
     const frPromise = controller.setLocale('fr');
 
-    await vi.advanceTimersByTimeAsync(200);
-    await Promise.all([enPromise, frPromise]);
+    await vi.advanceTimersByTimeAsync(50);
+    await frPromise;
+    expect(controller.getLoadedLocale()).toBe('fr');
+
+    await vi.advanceTimersByTimeAsync(150);
+    await enPromise;
 
     expect(controller.getLoadedLocale()).toBe('fr');
   });

@@ -9,6 +9,7 @@ export function createTestController<
   fallbackLocale,
   locales,
   loadingTime = 100,
+  loadingTimes,
   persistenceKey = 'test',
   ...options
 }: Omit<
@@ -18,6 +19,7 @@ export function createTestController<
   fallbackLocale?: keyof L & string;
   locales: L;
   loadingTime?: number;
+  loadingTimes?: Partial<Record<keyof L & string, number>>;
   persistenceKey?: string;
 }) {
   const invokedLoaderIds: string[] = [];
@@ -28,7 +30,9 @@ export function createTestController<
       loader: async (): Promise<{ default: Locale }> => {
         invokedLoaderIds.push(id as string);
 
-        await sleep(loadingTime);
+        const delay =
+          loadingTimes?.[id as keyof L & string] ?? loadingTime;
+        await sleep(delay);
 
         if (isPromise(localeOrError)) {
           return { default: await localeOrError };
