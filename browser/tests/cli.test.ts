@@ -99,6 +99,35 @@ test('detects missing translations in tsx files', async () => {
   );
 });
 
+test('default locale skips string translations in non-fix mode', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.tsx': `
+        import { __ } from '@ls-stack/i18n';
+        export const t = __\`Hello\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({}),
+    },
+  });
+
+  const result = await ctx.validate({ defaultLocale: 'en' });
+
+  expect(result).toMatchInlineSnapshot(`
+    {
+      "errors": [],
+      "hasError": false,
+      "infos": [
+        "✅ en.json translations are up to date",
+      ],
+      "output": [
+        "✅ en.json translations are up to date",
+      ],
+    }
+  `);
+});
+
 test('handles mixed .ts and .tsx files', async () => {
   const utilTs = `
 import { __ } from '@ls-stack/i18n';
@@ -345,6 +374,52 @@ test('handles mixed __, __p, __jsx, and __pjsx in same file', async () => {
         export const plural = __p(5)\`# items\`;
         export const jsx = __jsx\`Click \${<b>here</b>}\`;
         export const jsxPlural = __pjsx(5)\`# \${<b>items</b>} selected\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({
+        'Plain text': 'Plain text',
+        '# items': {
+          zero: 'No items',
+          one: '1 item',
+          '+2': '# items',
+        },
+        'Click {1}': 'Click {1}',
+        '# {1} selected': {
+          zero: 'No {1} selected',
+          one: '1 {1} selected',
+          '+2': '# {1} selected',
+        },
+      }),
+    },
+  });
+
+  const result = await ctx.validate();
+
+  expect(result).toMatchInlineSnapshot(`
+    {
+      "errors": [],
+      "hasError": false,
+      "infos": [
+        "✅ en.json translations are up to date",
+      ],
+      "output": [
+        "✅ en.json translations are up to date",
+      ],
+    }
+  `);
+});
+
+test('detects property access translation functions', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.tsx': `
+        import * as i18n from '@ls-stack/i18n';
+
+        export const text = i18n.__\`Plain text\`;
+        export const plural = i18n.__p(5)\`# items\`;
+        export const jsx = i18n.__jsx\`Click \${<b>here</b>}\`;
+        export const jsxPlural = i18n.__pjsx(5)\`# \${<b>items</b>} selected\`;
       `,
     },
     config: {
