@@ -9,7 +9,6 @@ import {
   getState,
   registerClearIntlCache,
   setLocale,
-  setMockedRegionLocale,
   subscribe,
   subscribeToState,
   type LocaleConfig,
@@ -25,7 +24,6 @@ export type I18nController<T extends string = string> = {
     loadError: Error | null;
     loadedLocale: T | null;
   };
-  __mockRegionLocale: (locale: string) => void;
 };
 
 export type I18nOptions<T extends string> = {
@@ -84,7 +82,6 @@ export function i18nitialize<T extends string>(
         loadedLocale: snapshot.loadedLocale as T | null,
       };
     },
-    __mockRegionLocale: setMockedRegionLocale,
   };
 
   const persistedLocale = getPersistedLocale() as T | null;

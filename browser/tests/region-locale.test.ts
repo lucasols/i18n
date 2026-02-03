@@ -143,33 +143,3 @@ describe('getRegionLocale fallback chain', () => {
   });
 });
 
-describe('__mockRegionLocale', () => {
-  test('overrides inferred region locale', async () => {
-    vi.stubGlobal('navigator', {
-      languages: ['en-US'],
-    });
-
-    const controller = createTestController({
-      locales: { en: {} },
-    });
-
-    await controller.setLocale('en');
-    expect(controller.getRegionLocale()).toBe('en-US');
-
-    controller.__mockRegionLocale('en-GB');
-
-    expect(controller.getRegionLocale()).toBe('en-GB');
-  });
-
-  test('persists across getRegionLocale calls', async () => {
-    const controller = createTestController({
-      locales: { en: {} },
-    });
-
-    await controller.setLocale('en');
-    controller.__mockRegionLocale('de-DE');
-
-    expect(controller.getRegionLocale()).toBe('de-DE');
-    expect(controller.getRegionLocale()).toBe('de-DE');
-  });
-});

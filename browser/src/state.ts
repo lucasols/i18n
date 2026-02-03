@@ -42,7 +42,6 @@ let devMode = false;
 let loadingLocaleId: string | null = null;
 let loadingPromise: Promise<void> | null = null;
 let loadedLocaleId: string | null = null;
-let mockedRegionLocale: string | null = null;
 let clearIntlCacheFn: (() => void) | null = null;
 let fallbackLocale: string | null = null;
 
@@ -131,18 +130,7 @@ function inferRegionLocale(localeId: string): string {
   return localeId;
 }
 
-export function setMockedRegionLocale(locale: string): void {
-  mockedRegionLocale = locale;
-  if (state.activeLocale) {
-    updateState({ regionLocale: locale });
-  }
-}
-
 export function getRegionLocale(): string {
-  if (mockedRegionLocale) {
-    return mockedRegionLocale;
-  }
-
   if (state.regionLocale) {
     return state.regionLocale;
   }
@@ -307,5 +295,4 @@ export function resetState(): void {
   loadingLocaleId = null;
   loadingPromise = null;
   loadedLocaleId = null;
-  mockedRegionLocale = null;
 }
