@@ -400,7 +400,8 @@ export async function validateTranslations(
             }
 
             try {
-              const aiResults = await aiTranslator.translateBatch(contexts);
+              const { translations: aiResults, usage } =
+                await aiTranslator.translateBatch(contexts);
 
               for (const hash of missingHashs) {
                 const aiResult = aiResults.get(hash);
@@ -423,6 +424,12 @@ export async function validateTranslations(
                     : null;
                   missingMap.set(hash, fallbackValue);
                 }
+              }
+
+              if (usage) {
+                log.info(
+                  `   Tokens: ${usage.inputTokens} in / ${usage.outputTokens} out (${usage.totalTokens} total)`,
+                );
               }
 
               useAIMarkers = false;

@@ -355,14 +355,14 @@ function mockTranslator(
 ): AITranslator {
   return {
     translateBatch(contexts) {
-      const results = new Map<string, TranslationResult>();
+      const translations = new Map<string, TranslationResult>();
       for (const ctx of contexts) {
         const result = handler(ctx);
         if (result) {
-          results.set(ctx.sourceKey, result);
+          translations.set(ctx.sourceKey, result);
         }
       }
-      return Promise.resolve(results);
+      return Promise.resolve({ translations });
     },
   };
 }
@@ -394,14 +394,14 @@ function trackingTranslator(): {
     translator: {
       translateBatch(ctxs) {
         contexts = ctxs;
-        const results = new Map<string, TranslationResult>();
+        const translations = new Map<string, TranslationResult>();
         for (const ctx of ctxs) {
-          results.set(ctx.sourceKey, {
+          translations.set(ctx.sourceKey, {
             type: 'string',
             value: `translated:${ctx.sourceKey}`,
           });
         }
-        return Promise.resolve(results);
+        return Promise.resolve({ translations });
       },
     },
     getContexts: () => contexts,

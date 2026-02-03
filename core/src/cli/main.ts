@@ -2,6 +2,8 @@ export {
   createAITranslator,
   type AIProvider,
   type AITranslator,
+  type TokenUsage,
+  type TranslateBatchResult,
   type TranslationContext,
   type TranslationResult,
 } from './ai-translator';

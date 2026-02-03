@@ -20,10 +20,19 @@ export type TranslationResult =
   | { type: 'string'; value: string }
   | { type: 'plural'; value: PluralTranslation };
 
+export type TokenUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+};
+
+export type TranslateBatchResult = {
+  translations: Map<string, TranslationResult>;
+  usage?: TokenUsage;
+};
+
 export interface AITranslator {
-  translateBatch(
-    contexts: TranslationContext[],
-  ): Promise<Map<string, TranslationResult>>;
+  translateBatch(contexts: TranslationContext[]): Promise<TranslateBatchResult>;
 }
 
 const pluralTranslationSchema = z.object({
@@ -123,9 +132,9 @@ export function createAITranslator(
   return {
     async translateBatch(
       contexts: TranslationContext[],
-    ): Promise<Map<string, TranslationResult>> {
+    ): Promise<TranslateBatchResult> {
       if (contexts.length === 0) {
-        return new Map();
+        return { translations: new Map() };
       }
 
       const ai = await import('ai');
@@ -155,10 +164,20 @@ export function createAITranslator(
       const output = result.output as z.infer<typeof translationsSchema> | undefined;
 
       if (!output) {
-        return new Map();
+        return { translations: new Map() };
       }
 
-      return parseGeneratedObject(output, contexts);
+      const { inputTokens, outputTokens, totalTokens } = result.usage;
+
+      return {
+        translations: parseGeneratedObject(output, contexts),
+        usage:
+          inputTokens !== undefined &&
+          outputTokens !== undefined &&
+          totalTokens !== undefined ?
+            { inputTokens, outputTokens, totalTokens }
+          : undefined,
+      };
     },
   };
 }
