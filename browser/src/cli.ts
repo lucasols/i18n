@@ -3,6 +3,8 @@ import {
   validateTranslations,
   type AIProvider,
   type AITranslator,
+  type ValidationRuleConfig,
+  type ValidationRuleName,
 } from '@ls-stack/i18n-core/cli';
 import { styleText } from 'node:util';
 import { typeFlag } from 'type-flag';
@@ -31,6 +33,18 @@ const parsed = typeFlag({
   },
   ai: {
     type: String,
+  },
+  'max-id-size': {
+    type: Number,
+    default: 80,
+  },
+  'disable-rule': {
+    type: [String],
+    default: [],
+  },
+  'warn-rule': {
+    type: [String],
+    default: [],
   },
 });
 
@@ -76,6 +90,33 @@ if (aiProviderInput) {
   }
 }
 
+const validRuleNames: ValidationRuleName[] = [
+  'constant-translation',
+  'unnecessary-plural',
+  'jsx-without-interpolation',
+  'jsx-without-jsx-nodes',
+  'unnecessary-interpolated-affix',
+  'max-translation-id-size',
+];
+
+const rules: ValidationRuleConfig = {};
+
+for (const rule of parsed.flags['disable-rule']) {
+  if (!validRuleNames.includes(rule as ValidationRuleName)) {
+    console.error(`Unknown rule: ${rule}`);
+    process.exit(1);
+  }
+  rules[rule as ValidationRuleName] = 'off';
+}
+
+for (const rule of parsed.flags['warn-rule']) {
+  if (!validRuleNames.includes(rule as ValidationRuleName)) {
+    console.error(`Unknown rule: ${rule}`);
+    process.exit(1);
+  }
+  rules[rule as ValidationRuleName] = 'warning';
+}
+
 const { hasError } = await validateTranslations({
   srcDir,
   configDir,
@@ -84,6 +125,8 @@ const { hasError } = await validateTranslations({
   noColor: parsed.flags['no-color'],
   colorFn: (color, text) => styleText(color, text),
   aiTranslator,
+  rules,
+  maxTranslationIdSize: parsed.flags['max-id-size'],
 });
 
 if (hasError) {

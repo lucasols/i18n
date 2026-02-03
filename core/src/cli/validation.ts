@@ -10,9 +10,12 @@ import {
   rc_string,
   rc_union,
 } from 'runcheck';
-import type { PluralTranslation } from '../types';
 import type { AITranslator, TranslationContext } from './ai-translator';
-import { getI18nUsagesInCode } from './findMissingTranslations';
+import {
+  getI18nUsagesInCode,
+  type I18nUsagesResult,
+  type TranslationUsage,
+} from './findMissingTranslations';
 import { findSimilarTranslations } from './similarity';
 
 export type FileSystem = {
@@ -28,6 +31,20 @@ export type FileSystem = {
 
 export type Logger = Pick<Console, 'log' | 'error' | 'info'>;
 
+export type ValidationRuleName =
+  | 'constant-translation'
+  | 'unnecessary-plural'
+  | 'jsx-without-interpolation'
+  | 'jsx-without-jsx-nodes'
+  | 'unnecessary-interpolated-affix'
+  | 'max-translation-id-size';
+
+export type RuleSeverity = 'error' | 'warning' | 'off';
+
+export type ValidationRuleConfig = {
+  [K in ValidationRuleName]?: RuleSeverity;
+};
+
 export type ValidationOptions = {
   configDir: string;
   srcDir: string;
@@ -38,6 +55,8 @@ export type ValidationOptions = {
   fs?: FileSystem;
   log?: Logger;
   aiTranslator?: AITranslator;
+  rules?: ValidationRuleConfig;
+  maxTranslationIdSize?: number;
 };
 
 const pluralTranslationSchema = rc_object({
@@ -55,6 +74,16 @@ const translationValueSchema = rc_union(
 );
 
 const translationFileSchema = rc_record(translationValueSchema);
+
+type PluralTranslation = {
+  manyLimit?: number;
+  zero?: string;
+  one?: string;
+  '+2': string;
+  many?: string;
+};
+
+type TranslationValue = string | null | PluralTranslation;
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -81,11 +110,9 @@ function calculateInsertPosition(
 
   const sortedKeys = [...missingKeys].sort();
 
-  // Start with key count for initial entropy
   let hash = sortedKeys.length | 0;
 
   for (const key of sortedKeys) {
-    // Mix in key length first (adds entropy for same-char-sum keys)
     hash = ((hash << 5) - hash + key.length) | 0;
 
     for (let i = 0; i < key.length; i++) {
@@ -94,14 +121,12 @@ function calculateInsertPosition(
     hash = ((hash << 5) - hash + 0xff) | 0;
   }
 
-  // MurmurHash3-style finalizer with proper 32-bit multiplication
   hash ^= hash >>> 16;
   hash = Math.imul(hash, 0x85ebca6b);
   hash ^= hash >>> 13;
   hash = Math.imul(hash, 0xc2b2ae35);
   hash ^= hash >>> 16;
 
-  // Use unsigned right shift to ensure positive (avoids Math.abs edge case)
   return (hash >>> 0) % totalKeys;
 }
 
@@ -167,6 +192,62 @@ export const defaultFs: FileSystem = {
   },
 };
 
+function hasInterpolationPlaceholder(hash: string): boolean {
+  return /\{[0-9]+\}/.test(hash);
+}
+
+function getInterpolationPrefix(value: string): string {
+  const match = value.match(/^(.*?)\{[0-9]+\}/);
+  return match ? match[1] ?? '' : '';
+}
+
+function getInterpolationSuffix(value: string): string {
+  const match = value.match(/\{[0-9]+\}([^{]*)$/);
+  return match ? match[1] ?? '' : '';
+}
+
+function isPluralOnlyPlus2(value: Record<string, unknown>): boolean {
+  return (
+    value.zero === undefined &&
+    value.one === undefined &&
+    value.many === undefined
+  );
+}
+
+function getStringValue(value: TranslationValue | undefined): string | null {
+  if (value === undefined || value === null) {
+    return null;
+  }
+  if (typeof value === 'string') {
+    return value;
+  }
+  return value['+2'];
+}
+
+type ValidationIssue = {
+  rule: ValidationRuleName;
+  hash: string;
+  message: string;
+  locations: Array<{ file: string; line: number; column: number }>;
+};
+
+function formatIssue(
+  issue: ValidationIssue,
+  severity: 'error' | 'warning',
+  srcPath: string,
+): string {
+  const icon = severity === 'error' ? '❌' : '⚠️';
+  const location = issue.locations[0];
+  if (location) {
+    const relativePath = path.relative(
+      path.dirname(srcPath),
+      path.join(srcPath, location.file),
+    );
+    return `${icon} ${relativePath}:${location.line}:${location.column} ${issue.message}`;
+  }
+  return `${icon} ${issue.message}`;
+}
+
 export async function validateTranslations(
   options: ValidationOptions,
 ): Promise<{ hasError: boolean }> {
@@ -180,7 +261,13 @@ export async function validateTranslations(
     fs = defaultFs,
     log = console,
     aiTranslator,
+    rules = {},
+    maxTranslationIdSize = 80,
   } = options;
+
+  const getRuleSeverity = (rule: ValidationRuleName): RuleSeverity => {
+    return rules[rule] ?? 'error';
+  };
 
   const allStringTranslationHashs = new Set<string>();
   const allPluralTranslationHashs = new Set<string>();
@@ -188,15 +275,25 @@ export async function validateTranslations(
 
   const srcPath =
     path.isAbsolute(srcDir) ? srcDir : path.join(process.cwd(), srcDir);
+
+  const globalUsageMap = new Map<string, TranslationUsage>();
+  const globalJsxStringTranslations = new Set<string>();
+  const globalJsxPluralTranslations = new Set<string>();
+  const globalPrimitiveOnlyJsx = new Set<string>();
+
   for await (const entry of fs.scanDir(srcPath, {
     fileFilter: (entry) =>
       entry.path.endsWith('.ts') || entry.path.endsWith('.tsx'),
   })) {
-    const { fullPath, basename } = entry;
+    const { fullPath } = entry;
 
     const fileTextContent = fs.readFileSync(fullPath, 'utf-8');
 
-    const i18nUsages = getI18nUsagesInCode(basename, fileTextContent);
+    const relativePath = path.relative(srcPath, fullPath);
+    const i18nUsages: I18nUsagesResult = getI18nUsagesInCode(
+      relativePath,
+      fileTextContent,
+    );
 
     for (const hash of i18nUsages.stringTranslations) {
       allStringTranslationHashs.add(hash);
@@ -204,6 +301,30 @@ export async function validateTranslations(
 
     for (const hash of i18nUsages.pluralTranslations) {
       allPluralTranslationHashs.add(hash);
+    }
+
+    for (const hash of i18nUsages.jsxStringTranslations) {
+      globalJsxStringTranslations.add(hash);
+    }
+
+    for (const hash of i18nUsages.jsxPluralTranslations) {
+      globalJsxPluralTranslations.add(hash);
+    }
+
+    for (const hash of i18nUsages.primitiveOnlyJsx) {
+      globalPrimitiveOnlyJsx.add(hash);
+    }
+
+    for (const [hash, usage] of i18nUsages.usageMap) {
+      const existing = globalUsageMap.get(hash);
+      if (existing) {
+        existing.locations.push(...usage.locations);
+        if (!usage.hasOnlyPrimitiveInterpolations) {
+          existing.hasOnlyPrimitiveInterpolations = false;
+        }
+      } else {
+        globalUsageMap.set(hash, { ...usage });
+      }
     }
   }
 
@@ -216,16 +337,21 @@ export async function validateTranslations(
   }
 
   const configPath =
-    path.isAbsolute(configDir) ? configDir : (
-      path.join(process.cwd(), configDir)
-    );
+    path.isAbsolute(configDir) ? configDir : path.join(process.cwd(), configDir);
+
+  const allLocaleTranslations = new Map<
+    string,
+    Record<string, TranslationValue>
+  >();
+  const localeFiles: Array<{ fullPath: string; basename: string }> = [];
+
   for await (const entry of fs.scanDir(configPath, {
     fileFilter: (entry) => entry.path.endsWith('.json'),
   })) {
-    const { fullPath, basename } = entry;
-    const invalidPluralTranslations: string[] = [];
-    const invalidSpecialTranslations: string[] = [];
+    localeFiles.push(entry);
+  }
 
+  for (const { fullPath, basename } of localeFiles) {
     const fileParseResult = rc_parse(
       JSON.parse(fs.readFileSync(fullPath, 'utf-8')),
       translationFileSchema,
@@ -235,7 +361,187 @@ export async function validateTranslations(
       hasError = true;
       continue;
     }
-    const localeTranslations = fileParseResult.value;
+    const localeId = basename.replace('.json', '');
+    allLocaleTranslations.set(localeId, fileParseResult.value);
+  }
+
+  const validationIssues: ValidationIssue[] = [];
+
+  const allHashes = new Set([
+    ...allStringTranslationHashs,
+    ...allPluralTranslationHashs,
+  ]);
+
+  for (const hash of allHashes) {
+    const isSpecial = hash.startsWith('$') || hash.includes('~~');
+    if (isSpecial) continue;
+
+    const usage = globalUsageMap.get(hash);
+    const locations = usage?.locations ?? [];
+
+    const maxIdSizeSeverity = getRuleSeverity('max-translation-id-size');
+    if (maxIdSizeSeverity !== 'off' && hash.length > maxTranslationIdSize) {
+      const truncated =
+        hash.length > 40 ? `${hash.slice(0, 37)}...` : hash;
+      validationIssues.push({
+        rule: 'max-translation-id-size',
+        hash,
+        message: `translation ID too long (${hash.length} chars, max ${maxTranslationIdSize}): "${truncated}"`,
+        locations,
+      });
+    }
+
+    const constantSeverity = getRuleSeverity('constant-translation');
+    if (constantSeverity !== 'off') {
+      const values: string[] = [];
+      for (const [, translations] of allLocaleTranslations) {
+        const value = translations[hash];
+        const strValue = getStringValue(value);
+        if (strValue !== null) {
+          values.push(strValue);
+        }
+      }
+
+      if (values.length >= 2 && new Set(values).size === 1) {
+        validationIssues.push({
+          rule: 'constant-translation',
+          hash,
+          message: `constant translation "${hash}" is identical in all locales`,
+          locations,
+        });
+      }
+    }
+
+    const unnecessaryPluralSeverity = getRuleSeverity('unnecessary-plural');
+    if (
+      unnecessaryPluralSeverity !== 'off' &&
+      allPluralTranslationHashs.has(hash)
+    ) {
+      let allOnlyPlus2 = true;
+      let hasAnyPluralTranslation = false;
+
+      for (const [, translations] of allLocaleTranslations) {
+        const value = translations[hash];
+        if (value !== null && value !== undefined && isObject(value)) {
+          hasAnyPluralTranslation = true;
+          if (!isPluralOnlyPlus2(value)) {
+            allOnlyPlus2 = false;
+            break;
+          }
+        }
+      }
+
+      if (hasAnyPluralTranslation && allOnlyPlus2) {
+        validationIssues.push({
+          rule: 'unnecessary-plural',
+          hash,
+          message: `unnecessary plural "${hash}" only uses +2 form, consider using string interpolation`,
+          locations,
+        });
+      }
+    }
+
+    const jsxWithoutInterpolationSeverity = getRuleSeverity(
+      'jsx-without-interpolation',
+    );
+    if (jsxWithoutInterpolationSeverity !== 'off') {
+      const isJsx =
+        globalJsxStringTranslations.has(hash) ||
+        globalJsxPluralTranslations.has(hash);
+      if (isJsx && !hasInterpolationPlaceholder(hash)) {
+        validationIssues.push({
+          rule: 'jsx-without-interpolation',
+          hash,
+          message: `jsx without interpolation "${hash}" - consider using __ instead of __jsx`,
+          locations,
+        });
+      }
+    }
+
+    const jsxWithoutJsxNodesSeverity = getRuleSeverity('jsx-without-jsx-nodes');
+    if (jsxWithoutJsxNodesSeverity !== 'off') {
+      const isJsx =
+        globalJsxStringTranslations.has(hash) ||
+        globalJsxPluralTranslations.has(hash);
+      const isPrimitiveOnly = globalPrimitiveOnlyJsx.has(hash);
+      if (isJsx && isPrimitiveOnly && hasInterpolationPlaceholder(hash)) {
+        validationIssues.push({
+          rule: 'jsx-without-jsx-nodes',
+          hash,
+          message: `jsx without jsx nodes "${hash}" - all interpolations are primitives, consider using __ instead of __jsx`,
+          locations,
+        });
+      }
+    }
+
+    const unnecessaryAffixSeverity = getRuleSeverity(
+      'unnecessary-interpolated-affix',
+    );
+    if (
+      unnecessaryAffixSeverity !== 'off' &&
+      hasInterpolationPlaceholder(hash)
+    ) {
+      const prefixes: string[] = [];
+      const suffixes: string[] = [];
+
+      for (const [, translations] of allLocaleTranslations) {
+        const value = translations[hash];
+        const strValue = getStringValue(value);
+        if (strValue !== null) {
+          prefixes.push(getInterpolationPrefix(strValue));
+          suffixes.push(getInterpolationSuffix(strValue));
+        }
+      }
+
+      if (prefixes.length >= 2) {
+        const uniquePrefixes = new Set(prefixes);
+        if (uniquePrefixes.size === 1 && prefixes[0] !== '') {
+          validationIssues.push({
+            rule: 'unnecessary-interpolated-affix',
+            hash,
+            message: `unnecessary interpolated prefix "${prefixes[0]}" in "${hash}" is identical in all locales`,
+            locations,
+          });
+        }
+      }
+
+      if (suffixes.length >= 2) {
+        const uniqueSuffixes = new Set(suffixes);
+        if (uniqueSuffixes.size === 1 && suffixes[0] !== '') {
+          validationIssues.push({
+            rule: 'unnecessary-interpolated-affix',
+            hash,
+            message: `unnecessary interpolated suffix "${suffixes[0]}" in "${hash}" is identical in all locales`,
+            locations,
+          });
+        }
+      }
+    }
+  }
+
+  for (const issue of validationIssues) {
+    const severity = getRuleSeverity(issue.rule);
+    if (severity === 'off') continue;
+
+    const message = formatIssue(issue, severity, srcPath);
+    if (severity === 'error') {
+      hasError = true;
+      log.error(message);
+    } else {
+      log.info(message);
+    }
+  }
+
+  for (const { fullPath, basename } of localeFiles) {
+    const invalidPluralTranslations: string[] = [];
+    const invalidSpecialTranslations: string[] = [];
+
+    const localeId = basename.replace('.json', '');
+    const localeTranslations = allLocaleTranslations.get(localeId);
+
+    if (!localeTranslations) {
+      continue;
+    }
 
     const isDefaultLocale = basename === `${defaultLocale}.json`;
 
@@ -263,15 +569,13 @@ export async function validateTranslations(
 
         if (isUnneededDefaultHash) {
           missingHashs.delete(hash);
-        } else if (isIncompleteNonDefaultTranslation) {
-          // Keep in missingHashs (still needs translation)
-          // Keep in extraHashs (remove from current position, re-add under marker)
-        } else {
+        } else if (!isIncompleteNonDefaultTranslation) {
           missingHashs.delete(hash);
           extraHashs.delete(hash);
         }
 
-        const isVariantOrPlaceholder = hash.includes('~~') || hash.startsWith('$');
+        const isVariantOrPlaceholder =
+          hash.includes('~~') || hash.startsWith('$');
         if (isVariantOrPlaceholder && translationValue === hash) {
           invalidSpecialTranslations.push(hash);
         }

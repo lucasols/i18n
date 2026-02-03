@@ -38,20 +38,20 @@ const ptCorrectTranslations = {
   'Hello World': 'Olá Mundo',
   'Hello {1}': 'Olá {1}',
   'Hello {1} {2}': 'Olá {1} {2}',
-  'Hello World~~2': 'Olá Mundo~~2',
+  'Hello World~~2': 'Olá Mundo variante',
   'Imported usage': 'Uso importado',
   '# Hello World': {
-    zero: 'Nenhuma x',
-    one: '1 x',
-    '+2': '# x',
-    many: 'Muitas x',
+    zero: 'Nenhuma saudação',
+    one: '1 saudação',
+    '+2': '# saudações',
+    many: 'Muitas saudações',
     manyLimit: 50,
   },
   '# Hello {1}': {
-    zero: 'Nenhuma x',
-    one: '1 x',
-    '+2': '# x',
-    many: 'Muitas x',
+    zero: 'Nenhum {1}',
+    one: '{1}: 1',
+    '+2': '{1}: #',
+    many: '{1}: muitos',
     manyLimit: 50,
   },
 };
@@ -63,17 +63,17 @@ const enCorrectTranslations = {
   'Hello World~~2': 'Hello World (variant 2)',
   'Imported usage': 'Imported usage',
   '# Hello World': {
-    zero: 'No x',
-    one: '1 x',
-    '+2': '# x',
-    many: 'A lot of x',
+    zero: 'No greetings',
+    one: '1 greeting',
+    '+2': '# greetings',
+    many: 'Many greetings',
     manyLimit: 50,
   },
   '# Hello {1}': {
-    zero: 'No x',
-    one: '1 x',
-    '+2': '# x',
-    many: 'A lot of x',
+    zero: 'No {1}',
+    one: '1 {1}',
+    '+2': '# {1}',
+    many: 'Many {1}',
     manyLimit: 50,
   },
 };
@@ -197,17 +197,17 @@ test('fix extra translations', async () => {
       "Hello World~~2": "Hello World (variant 2)",
       "Imported usage": "Imported usage",
       "# Hello World": {
-        "zero": "No x",
-        "one": "1 x",
-        "+2": "# x",
-        "many": "A lot of x",
+        "zero": "No greetings",
+        "one": "1 greeting",
+        "+2": "# greetings",
+        "many": "Many greetings",
         "manyLimit": 50
       },
       "# Hello {1}": {
-        "zero": "No x",
-        "one": "1 x",
-        "+2": "# x",
-        "many": "A lot of x",
+        "zero": "No {1}",
+        "one": "1 {1}",
+        "+2": "# {1}",
+        "many": "Many {1}",
         "manyLimit": 50
       },
       "": ""
@@ -219,20 +219,20 @@ test('fix extra translations', async () => {
       "Hello World": "Olá Mundo",
       "Hello {1}": "Olá {1}",
       "Hello {1} {2}": "Olá {1} {2}",
-      "Hello World~~2": "Olá Mundo~~2",
+      "Hello World~~2": "Olá Mundo variante",
       "Imported usage": "Uso importado",
       "# Hello World": {
-        "zero": "Nenhuma x",
-        "one": "1 x",
-        "+2": "# x",
-        "many": "Muitas x",
+        "zero": "Nenhuma saudação",
+        "one": "1 saudação",
+        "+2": "# saudações",
+        "many": "Muitas saudações",
         "manyLimit": 50
       },
       "# Hello {1}": {
-        "zero": "Nenhuma x",
-        "one": "1 x",
-        "+2": "# x",
-        "many": "Muitas x",
+        "zero": "Nenhum {1}",
+        "one": "{1}: 1",
+        "+2": "{1}: #",
+        "many": "{1}: muitos",
         "manyLimit": 50
       },
       "": ""
@@ -284,13 +284,13 @@ test('fix invalid plural translations', async () => {
         "+2": "# x"
       },
       "👆 missing end 👆": "🛑 delete this line 🛑",
-      "Hello World~~2": "Olá Mundo~~2",
+      "Hello World~~2": "Olá Mundo variante",
       "Imported usage": "Uso importado",
       "# Hello {1}": {
-        "zero": "Nenhuma x",
-        "one": "1 x",
-        "+2": "# x",
-        "many": "Muitas x",
+        "zero": "Nenhum {1}",
+        "one": "{1}: 1",
+        "+2": "{1}: #",
+        "many": "{1}: muitos",
         "manyLimit": 50
       },
       "": ""
@@ -334,17 +334,17 @@ test('fix default locale null translations', async () => {
     "{
       "Hello World~~2": "Hello World (variant 2)",
       "# Hello World": {
-        "zero": "No x",
-        "one": "1 x",
-        "+2": "# x",
-        "many": "A lot of x",
+        "zero": "No greetings",
+        "one": "1 greeting",
+        "+2": "# greetings",
+        "many": "Many greetings",
         "manyLimit": 50
       },
       "# Hello {1}": {
-        "zero": "No x",
-        "one": "1 x",
-        "+2": "# x",
-        "many": "A lot of x",
+        "zero": "No {1}",
+        "one": "1 {1}",
+        "+2": "# {1}",
+        "many": "Many {1}",
         "manyLimit": 50
       },
       "": ""

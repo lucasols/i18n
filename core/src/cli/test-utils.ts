@@ -4,6 +4,7 @@ import {
   validateTranslations,
   type FileSystem,
   type Logger,
+  type ValidationRuleConfig,
 } from './validation';
 
 export type VirtualFileTree = {
@@ -157,6 +158,8 @@ export function createCliTestContext(fixture: {
     fix?: boolean;
     defaultLocale?: string;
     aiTranslator?: AITranslator;
+    rules?: ValidationRuleConfig;
+    maxTranslationIdSize?: number;
   }) {
     log.clear();
     const result = await validateTranslations({
@@ -168,6 +171,8 @@ export function createCliTestContext(fixture: {
       noColor: true,
       fs: combinedFs,
       log,
+      rules: options?.rules,
+      maxTranslationIdSize: options?.maxTranslationIdSize,
     });
 
     return {

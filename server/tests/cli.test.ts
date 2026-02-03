@@ -38,20 +38,20 @@ const ptCorrectTranslations = {
   'Hello World': 'Olá Mundo',
   'Hello {1}': 'Olá {1}',
   'Hello {1} {2}': 'Olá {1} {2}',
-  'Hello World~~2': 'Olá Mundo~~2',
+  'Hello World~~2': 'Olá Mundo variante',
   'Imported usage': 'Uso importado',
   '# Hello World': {
-    zero: 'Nenhuma x',
-    one: '1 x',
-    '+2': '# x',
-    many: 'Muitas x',
+    zero: 'Nenhuma saudação',
+    one: '1 saudação',
+    '+2': '# saudações',
+    many: 'Muitas saudações',
     manyLimit: 50,
   },
   '# Hello {1}': {
-    zero: 'Nenhuma x',
-    one: '1 x',
-    '+2': '# x',
-    many: 'Muitas x',
+    zero: 'Nenhum {1}',
+    one: '{1}: 1',
+    '+2': '{1}: #',
+    many: '{1}: muitos',
     manyLimit: 50,
   },
 };
@@ -63,17 +63,17 @@ const enCorrectTranslations = {
   'Hello World~~2': 'Hello World (variant 2)',
   'Imported usage': 'Imported usage',
   '# Hello World': {
-    zero: 'No x',
-    one: '1 x',
-    '+2': '# x',
-    many: 'A lot of x',
+    zero: 'No greetings',
+    one: '1 greeting',
+    '+2': '# greetings',
+    many: 'Many greetings',
     manyLimit: 50,
   },
   '# Hello {1}': {
-    zero: 'No x',
-    one: '1 x',
-    '+2': '# x',
-    many: 'A lot of x',
+    zero: 'No {1}',
+    one: '1 {1}',
+    '+2': '# {1}',
+    many: 'Many {1}',
     manyLimit: 50,
   },
 };
@@ -120,7 +120,7 @@ test('correct translations', async () => {
     },
   });
 
-  const result = await ctx.validate();
+  const result = await ctx.validate({});
 
   expect(result).toMatchInlineSnapshot(`
     {
@@ -156,7 +156,7 @@ test('extra translations error', async () => {
     },
   });
 
-  const result = await ctx.validate();
+  const result = await ctx.validate({});
 
   expect(result).toMatchInlineSnapshot(`
     {
@@ -189,7 +189,7 @@ test('invalid plural translations error', async () => {
     },
   });
 
-  const result = await ctx.validate();
+  const result = await ctx.validate({});
 
   expect(result).toMatchInlineSnapshot(`
     {
@@ -230,7 +230,7 @@ test('missing and extra translations errors', async () => {
     },
   });
 
-  const result = await ctx.validate();
+  const result = await ctx.validate({});
 
   expect(result).toMatchInlineSnapshot(`
     {
@@ -634,7 +634,9 @@ test('accepts plural with only required +2 field', async () => {
     },
   });
 
-  const result = await ctx.validate();
+  const result = await ctx.validate({
+    rules: { 'unnecessary-plural': 'off' },
+  });
 
   expect(result).toMatchInlineSnapshot(`
     {

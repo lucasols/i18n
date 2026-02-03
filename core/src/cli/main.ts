@@ -7,7 +7,12 @@ export {
   type TranslationContext,
   type TranslationResult,
 } from './ai-translator';
-export { getI18nUsagesInCode } from './findMissingTranslations';
+export {
+  getI18nUsagesInCode,
+  type I18nUsagesResult,
+  type TranslationLocation,
+  type TranslationUsage,
+} from './findMissingTranslations';
 export {
   findSimilarTranslations,
   type SimilarityMatch,
@@ -24,5 +29,8 @@ export {
   validateTranslations,
   type FileSystem,
   type Logger,
+  type RuleSeverity,
   type ValidationOptions,
+  type ValidationRuleConfig,
+  type ValidationRuleName,
 } from './validation';

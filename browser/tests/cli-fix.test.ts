@@ -28,10 +28,10 @@ const ptCorrectTranslations = {
   'Hello World': 'Olá Mundo',
   'Hello {1}': 'Olá {1}',
   '# Hello World': {
-    zero: 'Nenhuma x',
-    one: '1 x',
-    '+2': '# x',
-    many: 'Muitas x',
+    zero: 'Nenhuma saudação',
+    one: '1 saudação',
+    '+2': '# saudações',
+    many: 'Muitas saudações',
     manyLimit: 50,
   },
 };
@@ -40,10 +40,10 @@ const enCorrectTranslations = {
   'Hello World': 'Hello World',
   'Hello {1}': 'Hello {1}',
   '# Hello World': {
-    zero: 'No x',
-    one: '1 x',
-    '+2': '# x',
-    many: 'A lot of x',
+    zero: 'No greetings',
+    one: '1 greeting',
+    '+2': '# greetings',
+    many: 'Many greetings',
     manyLimit: 50,
   },
 };
@@ -119,7 +119,7 @@ test('fix extra translations in tsx files', async () => {
       }),
       'pt.json': JSON.stringify({
         ...ptCorrectTranslations,
-        'Extra translation': 'Extra translation',
+        'Extra translation': 'Tradução extra',
       }),
     },
   });
@@ -146,10 +146,10 @@ test('fix extra translations in tsx files', async () => {
       "Hello World": "Hello World",
       "Hello {1}": "Hello {1}",
       "# Hello World": {
-        "zero": "No x",
-        "one": "1 x",
-        "+2": "# x",
-        "many": "A lot of x",
+        "zero": "No greetings",
+        "one": "1 greeting",
+        "+2": "# greetings",
+        "many": "Many greetings",
         "manyLimit": 50
       },
       "": ""
@@ -161,10 +161,10 @@ test('fix extra translations in tsx files', async () => {
       "Hello World": "Olá Mundo",
       "Hello {1}": "Olá {1}",
       "# Hello World": {
-        "zero": "Nenhuma x",
-        "one": "1 x",
-        "+2": "# x",
-        "many": "Muitas x",
+        "zero": "Nenhuma saudação",
+        "one": "1 saudação",
+        "+2": "# saudações",
+        "many": "Muitas saudações",
         "manyLimit": 50
       },
       "": ""
@@ -394,7 +394,10 @@ test('fix default locale null translations', async () => {
     },
   });
 
-  const result = await ctx.validate({ fix: true, defaultLocale: 'en' });
+  const result = await ctx.validate({
+    fix: true,
+    defaultLocale: 'en',
+  });
 
   expect(result).toMatchInlineSnapshot(`
     {
@@ -414,10 +417,10 @@ test('fix default locale null translations', async () => {
   expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
     "{
       "# Hello World": {
-        "zero": "No x",
-        "one": "1 x",
-        "+2": "# x",
-        "many": "A lot of x",
+        "zero": "No greetings",
+        "one": "1 greeting",
+        "+2": "# greetings",
+        "many": "Many greetings",
         "manyLimit": 50
       },
       "": ""

@@ -28,10 +28,10 @@ const ptCorrectTranslations = {
   'Hello World': 'Olá Mundo',
   'Hello {1}': 'Olá {1}',
   '# Hello World': {
-    zero: 'Nenhuma x',
-    one: '1 x',
-    '+2': '# x',
-    many: 'Muitas x',
+    zero: 'Nenhuma saudação',
+    one: '1 saudação',
+    '+2': '# saudações',
+    many: 'Muitas saudações',
     manyLimit: 50,
   },
 };
@@ -40,10 +40,10 @@ const enCorrectTranslations = {
   'Hello World': 'Hello World',
   'Hello {1}': 'Hello {1}',
   '# Hello World': {
-    zero: 'No x',
-    one: '1 x',
-    '+2': '# x',
-    many: 'A lot of x',
+    zero: 'No greetings',
+    one: '1 greeting',
+    '+2': '# greetings',
+    many: 'Many greetings',
     manyLimit: 50,
   },
 };
