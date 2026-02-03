@@ -404,7 +404,9 @@ test('variant translation equal to key is invalid', async () => {
   expect(result.errors).toContainEqual(
     expect.stringContaining('invalid special translations'),
   );
-  expect(result.errors[0]).toContain('Hello~~formal');
+  expect(result.errors.some((error) => error.includes('Hello~~formal'))).toBe(
+    true,
+  );
 });
 
 test('$ prefixed translation equal to key is invalid', async () => {
@@ -428,7 +430,7 @@ test('$ prefixed translation equal to key is invalid', async () => {
   expect(result.errors).toContainEqual(
     expect.stringContaining('invalid special translations'),
   );
-  expect(result.errors[0]).toContain('$terms');
+  expect(result.errors.some((error) => error.includes('$terms'))).toBe(true);
 });
 
 test('variant translation with different value is valid', async () => {

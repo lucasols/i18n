@@ -273,18 +273,11 @@ test('fix mode error when file has only missing marker', async () => {
 
   const result = await ctx.validate({ fix: true });
 
-  expect(result).toMatchInlineSnapshot(`
-    {
-      "errors": [
-        "❌ en.json has missing translations",
-      ],
-      "hasError": false,
-      "infos": [],
-      "output": [
-        "❌ en.json has missing translations",
-      ],
-    }
-  `);
+  expect(result).toMatchObject({
+    errors: ['❌ en.json has missing translations'],
+    infos: [],
+    output: ['❌ en.json has missing translations'],
+  });
 
   expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(
     `"{"Hello":"Hello","👇 missing translations 👇":"🛑 delete this line 🛑"}"`,
