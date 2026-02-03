@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { clearIntlCache } from './formatters';
 import {
   configure,
+  findBestMatchingLocale,
   getLoadedLocaleSnapshot,
   getLocalesConfig,
   getPersistedLocale,
@@ -15,7 +16,7 @@ import {
 } from './state';
 
 export type I18nController<T extends string> = {
-  setLocale: (localeId: T) => Promise<boolean>;
+  setLocale: (localeId: T | 'auto') => Promise<boolean>;
   getLoadedLocale: () => T | null;
   getRegionLocale: () => string;
   onLoad: (callback: (localeId: T) => void) => () => void;
@@ -29,7 +30,7 @@ export type I18nController<T extends string> = {
 export type I18nOptions<T extends string> = {
   locales: LocaleConfig<T>[];
   persistenceKey: string;
-  fallbackLocale: T;
+  fallbackLocale: T | ['auto', T];
   retryAttempts?: number;
   retryDelay?: number;
   dev?: boolean;
@@ -38,10 +39,48 @@ export type I18nOptions<T extends string> = {
 export function i18nitialize<T extends string>(
   options: I18nOptions<T>,
 ): I18nController<T> {
+  const availableIds = options.locales.map((l) => l.id);
+
+  const findBestMatchingLocaleFromOptions = (): T | null => {
+    const nav = typeof navigator !== 'undefined' ? navigator : null;
+    if (!nav?.languages) {
+      return null;
+    }
+
+    for (const browserLocale of nav.languages) {
+      if (availableIds.includes(browserLocale as T)) {
+        return browserLocale as T;
+      }
+
+      const browserBase = browserLocale.split('-')[0];
+      if (browserBase && availableIds.includes(browserBase as T)) {
+        return browserBase as T;
+      }
+
+      const matchingLocale = availableIds.find((id) => {
+        const localeBase = id.split('-')[0];
+        return localeBase === browserBase;
+      });
+      if (matchingLocale) {
+        return matchingLocale;
+      }
+    }
+
+    return null;
+  };
+
+  let resolvedFallback: T | null;
+  if (Array.isArray(options.fallbackLocale)) {
+    const autoLocale = findBestMatchingLocaleFromOptions();
+    resolvedFallback = autoLocale ?? options.fallbackLocale[1];
+  } else {
+    resolvedFallback = options.fallbackLocale;
+  }
+
   configure({
     locales: options.locales,
     persistenceKey: options.persistenceKey,
-    fallbackLocale: options.fallbackLocale,
+    fallbackLocale: resolvedFallback,
     retryAttempts: options.retryAttempts,
     retryDelay: options.retryDelay,
     dev: options.dev,
@@ -49,16 +88,31 @@ export function i18nitialize<T extends string>(
 
   registerClearIntlCache(clearIntlCache);
 
-  const setLocaleWithFallback = async (localeId: T): Promise<boolean> => {
-    const locales = getLocalesConfig();
-    const localeExists = locales.some((l) => l.id === localeId);
+  const resolveLocaleId = (localeId: T | 'auto'): T => {
+    if (localeId === 'auto') {
+      const autoLocale = findBestMatchingLocale();
+      if (autoLocale) return autoLocale as T;
+      if (resolvedFallback) return resolvedFallback;
+      throw new Error(
+        'No locales match browser settings and no fallback configured',
+      );
+    }
+    return localeId;
+  };
 
-    if (!localeExists && options.fallbackLocale) {
-      await setLocale(options.fallbackLocale);
+  const setLocaleWithFallback = async (
+    localeId: T | 'auto',
+  ): Promise<boolean> => {
+    const resolvedLocaleId = resolveLocaleId(localeId);
+    const locales = getLocalesConfig();
+    const localeExists = locales.some((l) => l.id === resolvedLocaleId);
+
+    if (!localeExists && resolvedFallback) {
+      await setLocale(resolvedFallback);
       return false;
     }
 
-    await setLocale(localeId);
+    await setLocale(resolvedLocaleId);
     return true;
   };
 
@@ -85,7 +139,7 @@ export function i18nitialize<T extends string>(
   };
 
   const persistedLocale = getPersistedLocale() as T | null;
-  const initialLocale = persistedLocale ?? options.fallbackLocale;
+  const initialLocale = persistedLocale ?? resolvedFallback;
 
   if (initialLocale) {
     setLocaleWithFallback(initialLocale).catch((error) => {

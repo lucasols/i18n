@@ -52,6 +52,8 @@ pnpm --filter @ls-stack/server-i18n test-cli:fix
 - Run all tests via `pnpm test` or run package-specific tests via `pnpm --filter <package> test`
 - Always use realistic test scenarios and data, tests should reflect the real-world usage of the code.
   - Don't use unrealistic timelines
+- For browser tests, use `createTestController` from `test-utils.ts` to create a test controller with mock locale loaders. Extend or modify `createTestController` itself to add new testing capabilities if needed.
+- Tests should follow and test the correct expected behavior of the lib. Don't change test just to make them pass.
 
 ## Key Features
 

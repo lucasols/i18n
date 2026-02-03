@@ -44,12 +44,11 @@ describe('loading states', () => {
       locales: { en: {}, pt: {} },
     });
 
-    const setLocalePromise = controller.setLocale('pt');
+    void controller.setLocale('pt');
 
     expect(controller.getLoadedLocale()).toBe(null);
 
     await vi.advanceTimersByTimeAsync(100);
-    await setLocalePromise;
 
     expect(controller.getLoadedLocale()).toBe('pt');
   });
@@ -97,12 +96,11 @@ describe('locale switching', () => {
     // Wait for initial load of fallback locale
     await vi.advanceTimersByTimeAsync(100);
 
-    const loadPromise = controller.setLocale('pt');
+    void controller.setLocale('pt');
 
     expect(controller.getLoadedLocale()).toBe('en');
 
     await vi.advanceTimersByTimeAsync(100);
-    await loadPromise;
 
     expect(controller.getLoadedLocale()).toBe('pt');
   });
@@ -140,15 +138,13 @@ describe('locale switching', () => {
       loadingTimes: { en: 200, fr: 50 },
     });
 
-    const enPromise = controller.setLocale('en');
-    const frPromise = controller.setLocale('fr');
+    void controller.setLocale('en');
+    void controller.setLocale('fr');
 
     await vi.advanceTimersByTimeAsync(50);
-    await frPromise;
     expect(controller.getLoadedLocale()).toBe('fr');
 
     await vi.advanceTimersByTimeAsync(150);
-    await enPromise;
 
     expect(controller.getLoadedLocale()).toBe('fr');
   });
@@ -269,11 +265,10 @@ describe('retry logic', () => {
       ],
     });
 
-    const loadPromise = controller.setLocale('en');
+    void controller.setLocale('en');
 
     // First attempt (100ms) fails + retry delay (100ms) + second attempt (100ms) succeeds
     await vi.advanceTimersByTimeAsync(300);
-    await loadPromise;
 
     expect(attempts).toBe(2);
     expect(controller.getLoadedLocale()).toBe('en');

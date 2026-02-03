@@ -16,7 +16,7 @@ export function createTestController<
   I18nOptions<keyof L & string>,
   'persistenceKey' | 'fallbackLocale' | 'locales'
 > & {
-  fallbackLocale?: keyof L & string;
+  fallbackLocale?: (keyof L & string) | ['auto', keyof L & string];
   locales: L;
   loadingTime?: number;
   loadingTimes?: Partial<Record<keyof L & string, number>>;
@@ -30,8 +30,7 @@ export function createTestController<
       loader: async (): Promise<{ default: Locale }> => {
         invokedLoaderIds.push(id as string);
 
-        const delay =
-          loadingTimes?.[id as keyof L & string] ?? loadingTime;
+        const delay = loadingTimes?.[id as keyof L & string] ?? loadingTime;
         await sleep(delay);
 
         if (isPromise(localeOrError)) {
@@ -44,6 +43,11 @@ export function createTestController<
         return { default: localeOrError };
       },
     }),
+  );
+
+  invariant(
+    loadingTime > 0,
+    'loadingTime must be greater than 0 to reflect real-world behavior',
   );
 
   invariant(normalizedLocales[0], 'At least one locale is required');

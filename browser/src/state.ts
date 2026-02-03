@@ -49,7 +49,7 @@ let fallbackLocale: string | null = null;
 export function configure<T extends string>(options: {
   locales: LocaleConfig<T>[];
   persistenceKey: string;
-  fallbackLocale: T;
+  fallbackLocale: T | null;
   retryAttempts?: number;
   retryDelay?: number;
   dev?: boolean;
@@ -251,6 +251,39 @@ export function getPersistedLocale(): string | null {
 
 export function getDefaultLocale(): string | null {
   return localesConfig[0]?.id ?? null;
+}
+
+export function findBestMatchingLocale(): string | null {
+  const nav = typeof navigator !== 'undefined' ? navigator : null;
+  if (!nav?.languages) {
+    return null;
+  }
+
+  const availableIds = localesConfig.map((l) => l.id);
+
+  for (const browserLocale of nav.languages) {
+    // Priority 1: Exact match (e.g., 'en-US' matches 'en-US')
+    if (availableIds.includes(browserLocale)) {
+      return browserLocale;
+    }
+
+    // Priority 2: Browser regional matches our base (e.g., 'en-GB' matches 'en')
+    const browserBase = browserLocale.split('-')[0];
+    if (browserBase && availableIds.includes(browserBase)) {
+      return browserBase;
+    }
+
+    // Priority 3: Browser base matches our locale's base (e.g., 'en-GB' matches 'en-US')
+    const matchingLocale = availableIds.find((id) => {
+      const localeBase = id.split('-')[0];
+      return localeBase === browserBase;
+    });
+    if (matchingLocale) {
+      return matchingLocale;
+    }
+  }
+
+  return null;
 }
 
 type LoadedLocaleSnapshot = {
