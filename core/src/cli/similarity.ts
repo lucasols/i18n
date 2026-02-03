@@ -1,14 +1,16 @@
-import type { PluralTranslation } from '../types';
+import type { DefaultLocalePluralTranslation } from '../types';
+
+type SimilarityTranslation = string | DefaultLocalePluralTranslation;
 
 export type SimilarityMatch = {
   key: string;
-  translation: string | PluralTranslation;
+  translation: SimilarityTranslation;
   score: number;
 };
 
 type SimilarityEntry = {
   key: string;
-  translation: string | PluralTranslation;
+  translation: SimilarityTranslation;
   wordTokens: Set<string>;
   gramTokens: Set<string>;
   normalizedKey: string;
@@ -167,7 +169,7 @@ function weightedJaccard(
   return union === 0 ? 0 : intersectionWeight / union;
 }
 
-function toTranslationText(translation: string | PluralTranslation): string {
+function toTranslationText(translation: SimilarityTranslation): string {
   if (typeof translation === 'string') return translation;
 
   const parts: string[] = [];
@@ -179,7 +181,7 @@ function toTranslationText(translation: string | PluralTranslation): string {
 }
 
 export function createSimilarityIndex(
-  existingTranslations: Map<string, string | PluralTranslation>,
+  existingTranslations: Map<string, SimilarityTranslation>,
 ): SimilarityIndex {
   const entries: SimilarityEntry[] = [];
   const tokenToEntries = new Map<string, number[]>();
@@ -382,7 +384,7 @@ export function findSimilarFromIndex(
 
 export function findSimilarTranslations(
   sourceKey: string,
-  existingTranslations: Map<string, string | PluralTranslation>,
+  existingTranslations: Map<string, SimilarityTranslation>,
   maxResults = 5,
 ): SimilarityMatch[] {
   if (existingTranslations.size === 0) {

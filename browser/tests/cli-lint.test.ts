@@ -824,6 +824,96 @@ export const t3 = __\`OK\`;
   });
 });
 
+describe('incomplete plural translations', () => {
+  test('error when non-default locale has +2: null', async () => {
+    const ctx = createCliTestContext({
+      src: {
+        'main.tsx': `
+          import { __p } from '@ls-stack/i18n';
+          export const t = __p(5)\`# items\`;
+        `,
+      },
+      config: {
+        'en.json': JSON.stringify({
+          '# items': {
+            '+2': '# items',
+          },
+        }),
+        'pt.json': JSON.stringify({
+          '# items': {
+            '+2': null,
+          },
+        }),
+      },
+    });
+
+    const result = await ctx.validate({ defaultLocale: 'en' });
+
+    expect(result.hasError).toBe(true);
+    expect(result.errors).toContainEqual(
+      expect.stringContaining("incomplete plural translations ('+2' is null"),
+    );
+  });
+
+  test('no error when default locale has +2: null', async () => {
+    const ctx = createCliTestContext({
+      src: {
+        'main.tsx': `
+          import { __p } from '@ls-stack/i18n';
+          export const t = __p(5)\`# items\`;
+        `,
+      },
+      config: {
+        'en.json': JSON.stringify({
+          '# items': {
+            '+2': null,
+          },
+        }),
+        'pt.json': JSON.stringify({
+          '# items': {
+            '+2': '# itens',
+          },
+        }),
+      },
+    });
+
+    const result = await ctx.validate({ defaultLocale: 'en' });
+
+    expect(result.errors).not.toContainEqual(
+      expect.stringContaining("incomplete plural translations"),
+    );
+  });
+
+  test('no error when +2 has a value in non-default locale', async () => {
+    const ctx = createCliTestContext({
+      src: {
+        'main.tsx': `
+          import { __p } from '@ls-stack/i18n';
+          export const t = __p(5)\`# items\`;
+        `,
+      },
+      config: {
+        'en.json': JSON.stringify({
+          '# items': {
+            '+2': '# items',
+          },
+        }),
+        'pt.json': JSON.stringify({
+          '# items': {
+            '+2': '# itens',
+          },
+        }),
+      },
+    });
+
+    const result = await ctx.validate({ defaultLocale: 'en' });
+
+    expect(result.errors).not.toContainEqual(
+      expect.stringContaining("incomplete plural translations"),
+    );
+  });
+});
+
 describe('edge cases', () => {
   test('handles plural with null translation gracefully', async () => {
     const ctx = createCliTestContext({

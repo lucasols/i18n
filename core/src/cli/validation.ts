@@ -63,7 +63,7 @@ const pluralTranslationSchema = rc_object({
   manyLimit: rc_number.optional(),
   zero: rc_string.optional(),
   one: rc_string.optional(),
-  '+2': rc_string,
+  '+2': rc_union(rc_string, rc_null),
   many: rc_string.optional(),
 });
 
@@ -79,7 +79,7 @@ type PluralTranslation = {
   manyLimit?: number;
   zero?: string;
   one?: string;
-  '+2': string;
+  '+2': string | null;
   many?: string;
 };
 
@@ -536,6 +536,7 @@ export async function validateTranslations(
   for (const { fullPath, basename } of localeFiles) {
     const invalidPluralTranslations: string[] = [];
     const invalidSpecialTranslations: string[] = [];
+    const incompletePluralTranslations: string[] = [];
 
     const localeId = basename.replace('.json', '');
     const localeTranslations = allLocaleTranslations.get(localeId);
@@ -583,16 +584,20 @@ export async function validateTranslations(
         missingHashs.delete(hash);
         extraHashs.delete(hash);
 
-        if (
-          localeTranslations[hash] !== undefined &&
-          !isObject(localeTranslations[hash])
-        ) {
+        const pluralValue = localeTranslations[hash];
+        if (pluralValue !== undefined && !isObject(pluralValue)) {
           invalidPluralTranslations.push(hash);
           delete localeTranslations[hash];
 
           if (fix) {
             missingHashs.add(hash);
           }
+        } else if (
+          !isDefaultLocale &&
+          isObject(pluralValue) &&
+          pluralValue['+2'] === null
+        ) {
+          incompletePluralTranslations.push(hash);
         }
       } else {
         missingHashs.delete(hash);
@@ -603,7 +608,8 @@ export async function validateTranslations(
       missingHashs.size > 0 ||
       extraHashs.size > 0 ||
       invalidPluralTranslations.length > 0 ||
-      invalidSpecialTranslations.length > 0
+      invalidSpecialTranslations.length > 0 ||
+      incompletePluralTranslations.length > 0
     ) {
       if (!fix) {
         hasError = true;
@@ -612,6 +618,13 @@ export async function validateTranslations(
           log.error(
             `❌ ${basename} has invalid plural translations: `,
             invalidPluralTranslations,
+          );
+        }
+
+        if (incompletePluralTranslations.length > 0) {
+          log.error(
+            `❌ ${basename} has incomplete plural translations ('+2' is null, which is only allowed in the default locale): `,
+            incompletePluralTranslations,
           );
         }
 
