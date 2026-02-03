@@ -15,11 +15,12 @@
     "typescript": "^5.8.3"
   },
   "peerDependencies": {
-    "typescript": "^5.8.3",
     "@ls-stack/utils": "^3.68.0",
-    "@types/node": "^25.1.0"
+    "@types/node": "^25.1.0",
+    "typescript": "^5.8.3"
   },
   "dependencies": {
-    "readdirp": "^5.0.0"
+    "readdirp": "^5.0.0",
+    "runcheck": "^1.15.0"
   }
 }

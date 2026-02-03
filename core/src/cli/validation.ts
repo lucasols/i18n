@@ -1,7 +1,15 @@
-import { __LEGIT_CAST__ } from '@ls-stack/utils/saferTyping';
 import { readFileSync, writeFileSync } from 'fs';
 import path from 'path';
 import { readdirp, type EntryInfo } from 'readdirp';
+import {
+  rc_null,
+  rc_number,
+  rc_object,
+  rc_parse,
+  rc_record,
+  rc_string,
+  rc_union,
+} from 'runcheck';
 import { getI18nUsagesInCode } from './findMissingTranslations';
 
 export type ValidationOptions = {
@@ -13,16 +21,21 @@ export type ValidationOptions = {
   colorFn?: (color: string, text: string) => string;
 };
 
-type TranslationValue =
-  | string
-  | null
-  | {
-      manyLimit?: number;
-      zero?: string;
-      one?: string;
-      '+2'?: string;
-      many?: string;
-    };
+const pluralTranslationSchema = rc_object({
+  manyLimit: rc_number.optional(),
+  zero: rc_string.optional(),
+  one: rc_string.optional(),
+  '+2': rc_string.optional(),
+  many: rc_string.optional(),
+});
+
+const translationValueSchema = rc_union(
+  rc_string,
+  rc_null,
+  pluralTranslationSchema,
+);
+
+const translationFileSchema = rc_record(translationValueSchema);
 
 function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
@@ -95,9 +108,16 @@ export async function validateTranslations(
     const fullPath: string = entry.fullPath;
     const basename: string = entry.basename;
 
-    const localeTranslations = __LEGIT_CAST__<Record<string, TranslationValue>>(
+    const fileParseResult = rc_parse(
       JSON.parse(readFileSync(fullPath, 'utf-8')),
+      translationFileSchema,
     );
+    if (!fileParseResult.ok) {
+      console.error(`❌ ${basename} has invalid format:`, fileParseResult.errors);
+      hasError = true;
+      continue;
+    }
+    const localeTranslations = fileParseResult.value;
 
     const isDefaultLocale = basename === `${defaultLocale}.json`;
 

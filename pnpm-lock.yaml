@@ -105,6 +105,9 @@ importers:
       readdirp:
         specifier: ^5.0.0
         version: 5.0.0
+      runcheck:
+        specifier: ^1.15.0
+        version: 1.15.0
     devDependencies:
       typescript:
         specifier: ^5.8.3
@@ -1502,6 +1505,10 @@ packages:
     resolution: {integrity: sha512-oQL6lgK3e2QZeQ7gcgIkS2YZPg5slw37hYufJ3edKlfQSGGm8ICoxswK15ntSzF/a8+h7ekRy7k7oWc3BQ7y8A==}
     engines: {node: '>=18.0.0', npm: '>=8.0.0'}
     hasBin: true
+
+  runcheck@1.15.0:
+    resolution: {integrity: sha512-Ysv2X3FWkrD2dLd/53Hl9FIw1+gTfaG7a7mGsEqbm+IU2yFV6gJkmkpI6/MFMEbCEhioL16wdVsq5g8qFP0fhA==}
+    engines: {node: '>=14.6.0'}
 
   saxes@6.0.0:
     resolution: {integrity: sha512-xAg7SOnEhrm5zI3puOOKyy1OMcMlIJZYNJY7xLBwSze0UjhPLnWfj2GF2EpT0jmzaJKIWKHLsaSSajf35bcYnA==}
@@ -3118,6 +3125,8 @@ snapshots:
       '@rollup/rollup-win32-x64-gnu': 4.57.1
       '@rollup/rollup-win32-x64-msvc': 4.57.1
       fsevents: 2.3.3
+
+  runcheck@1.15.0: {}
 
   saxes@6.0.0:
     dependencies:
