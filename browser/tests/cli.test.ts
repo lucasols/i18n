@@ -556,3 +556,30 @@ test('$ prefixed translation with null value is valid (pending)', async () => {
     }
   `);
 });
+
+test('check mode reports existing null translations as missing for non-default locale', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.tsx': `
+        import { __ } from '@ls-stack/i18n';
+        export const t1 = __\`Hello\`;
+        export const t2 = __\`World\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({
+        Hello: 'Hello translation',
+        World: 'World translation',
+      }),
+      'pt.json': JSON.stringify({
+        Hello: 'Olá tradução',
+        World: null,
+      }),
+    },
+  });
+
+  const result = await ctx.validate({ fix: false, defaultLocale: 'en' });
+
+  expect(result.hasError).toBe(true);
+  expect(result.errors).toContainEqual(expect.stringContaining('missing 1'));
+});

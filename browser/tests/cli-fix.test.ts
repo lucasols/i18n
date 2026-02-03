@@ -557,3 +557,77 @@ test('fix mode reports error for $ prefixed translation equal to key', async () 
     `"{"$terms":"$terms"}"`,
   );
 });
+
+test('fix moves existing null translations under missing marker for non-default locale', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.tsx': `
+        import { __ } from '@ls-stack/i18n';
+        export const t1 = __\`Hello\`;
+        export const t2 = __\`World\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({
+        Hello: 'Hello translation',
+        World: 'World translation',
+      }),
+      'pt.json': JSON.stringify({
+        Hello: 'Olá tradução',
+        World: null,
+      }),
+    },
+  });
+
+  const result = await ctx.validate({ fix: true, defaultLocale: 'en' });
+
+  expect(result.infos).toContainEqual(
+    expect.stringContaining('pt.json translations keys were added'),
+  );
+
+  expect(ctx.getConfigFileRaw('pt.json')).toMatchInlineSnapshot(`
+    "{
+      "Hello": "Olá tradução",
+      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "World": null,
+      "": ""
+    }"
+  `);
+});
+
+test('fix moves multiple existing null translations under missing marker for non-default locale', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.tsx': `
+        import { __ } from '@ls-stack/i18n';
+        export const t1 = __\`Hello\`;
+        export const t2 = __\`World\`;
+        export const t3 = __\`Foo\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({
+        Hello: 'Hello',
+        World: 'World',
+        Foo: 'Foo',
+      }),
+      'pt.json': JSON.stringify({
+        Hello: null,
+        World: 'Mundo tradução',
+        Foo: null,
+      }),
+    },
+  });
+
+  await ctx.validate({ fix: true, defaultLocale: 'en' });
+
+  expect(ctx.getConfigFileRaw('pt.json')).toMatchInlineSnapshot(`
+    "{
+      "World": "Mundo tradução",
+      "👇 missing translations 👇": "🛑 delete this line 🛑",
+      "Hello": null,
+      "Foo": null,
+      "": ""
+    }"
+  `);
+});

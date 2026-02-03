@@ -156,24 +156,33 @@ export async function validateTranslations(
     extraHashs.delete('');
 
     for (const hash of localeFileHashs) {
-      missingHashs.delete(hash);
-
       if (allStringTranslationHashs.has(hash)) {
+        const translationValue = localeTranslations[hash];
+        const isNullTranslation = translationValue === null;
+
         const isUnneededDefaultHash =
           isDefaultLocale &&
-          (localeTranslations[hash] === null ||
-            localeTranslations[hash] === hash);
+          (isNullTranslation || translationValue === hash);
 
-        if (!isUnneededDefaultHash) {
+        const isIncompleteNonDefaultTranslation =
+          defaultLocale !== undefined && !isDefaultLocale && isNullTranslation;
+
+        if (isUnneededDefaultHash) {
+          missingHashs.delete(hash);
+        } else if (isIncompleteNonDefaultTranslation) {
+          // Keep in missingHashs (still needs translation)
+          // Keep in extraHashs (remove from current position, re-add under marker)
+        } else {
+          missingHashs.delete(hash);
           extraHashs.delete(hash);
         }
 
         const isVariantOrPlaceholder = hash.includes('~~') || hash.startsWith('$');
-        const translationValue = localeTranslations[hash];
         if (isVariantOrPlaceholder && translationValue === hash) {
           invalidSpecialTranslations.push(hash);
         }
       } else if (allPluralTranslationHashs.has(hash)) {
+        missingHashs.delete(hash);
         extraHashs.delete(hash);
 
         if (
@@ -187,6 +196,8 @@ export async function validateTranslations(
             missingHashs.add(hash);
           }
         }
+      } else {
+        missingHashs.delete(hash);
       }
     }
 
@@ -251,6 +262,14 @@ export async function validateTranslations(
         } else {
           delete localeTranslations[''];
 
+          if (extraHashs.size > 0) {
+            for (const hash of extraHashs) {
+              if (hash === MISSING_TRANSLATIONS_KEY) continue;
+
+              delete localeTranslations[hash];
+            }
+          }
+
           if (
             !localeTranslations[MISSING_TRANSLATIONS_KEY] &&
             missingHashs.size > 0
@@ -271,14 +290,6 @@ export async function validateTranslations(
                     manyLimit: undefined,
                   }
                 : null;
-            }
-          }
-
-          if (extraHashs.size > 0) {
-            for (const hash of extraHashs) {
-              if (hash === MISSING_TRANSLATIONS_KEY) continue;
-
-              delete localeTranslations[hash];
             }
           }
 
