@@ -80,6 +80,4 @@ pnpm --filter @ls-stack/server-i18n test-cli:fix
 
 ### CLI Tool
 
-- Scans source files for `___` and `___p` tagged templates (triple underscore in source)
-- Validates JSON translation files against found usages
-- Options: `--config-dir`, `--src-dir`, `--default`, `--fix`, `--no-color`
+- Scans source files for translations, add missing translations to the language files and validate the language files.

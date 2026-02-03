@@ -28,7 +28,11 @@ export function getI18nUsagesInCode(
   stringTranslations: string[];
 } {
   const checkFile =
-    code.includes('i18n') || code.includes('__`') || code.includes('__p(');
+    code.includes('i18n') ||
+    code.includes('__`') ||
+    code.includes('__p(') ||
+    code.includes('__jsx`') ||
+    code.includes('__pjsx(');
 
   if (!checkFile) {
     return {
@@ -52,15 +56,19 @@ export function getI18nUsagesInCode(
     if (ts.isTaggedTemplateExpression(node)) {
       const tteNode = node;
 
-      const isTripleUnderscore = (id: ts.Identifier | ts.PrivateIdentifier) =>
-        ts.idText(id as ts.Identifier) === '___';
-      const isTripleUnderscoreP = (id: ts.Identifier | ts.PrivateIdentifier) =>
-        ts.idText(id as ts.Identifier) === '___p';
+      const isTranslationFn = (id: ts.Identifier | ts.PrivateIdentifier) => {
+        const name = ts.idText(id as ts.Identifier);
+        return name === '__' || name === '__jsx';
+      };
+      const isPluralTranslationFn = (id: ts.Identifier | ts.PrivateIdentifier) => {
+        const name = ts.idText(id as ts.Identifier);
+        return name === '__p' || name === '__pjsx';
+      };
 
       if (
-        (ts.isIdentifier(tteNode.tag) && isTripleUnderscore(tteNode.tag)) ||
+        (ts.isIdentifier(tteNode.tag) && isTranslationFn(tteNode.tag)) ||
         (ts.isPropertyAccessExpression(tteNode.tag) &&
-          isTripleUnderscore(tteNode.tag.name))
+          isTranslationFn(tteNode.tag.name))
       ) {
         const template = tteNode.template;
 
@@ -70,9 +78,9 @@ export function getI18nUsagesInCode(
       } else if (ts.isCallExpression(tteNode.tag)) {
         if (
           (ts.isIdentifier(tteNode.tag.expression) &&
-            isTripleUnderscoreP(tteNode.tag.expression)) ||
+            isPluralTranslationFn(tteNode.tag.expression)) ||
           (ts.isPropertyAccessExpression(tteNode.tag.expression) &&
-            isTripleUnderscoreP(tteNode.tag.expression.name))
+            isPluralTranslationFn(tteNode.tag.expression.name))
         ) {
           const hash = getHashFromTemplate(tteNode.template);
 

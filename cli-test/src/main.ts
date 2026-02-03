@@ -8,16 +8,16 @@ const i18n = i18nitialize({
   },
 });
 
-export const { __: ___, __p: ___p } = i18n.with('pt');
+export const { __, __p } = i18n.with('pt');
 
-export const translation = ___`Hello World`;
+export const translation = __`Hello World`;
 
-export const pluralTranslation = ___p(1)`# Hello World`;
+export const pluralTranslation = __p(1)`# Hello World`;
 
-export const translationWithInterpolation = ___`Hello ${'World'}`;
+export const translationWithInterpolation = __`Hello ${'World'}`;
 
-export const pluralTranslationWithInterpolation = ___p(1)`# Hello ${'World'}`;
+export const pluralTranslationWithInterpolation = __p(1)`# Hello ${'World'}`;
 
-export const translationWithMultipleInterpolations = ___`Hello ${'World'} ${'foo'}`;
+export const translationWithMultipleInterpolations = __`Hello ${'World'} ${'foo'}`;
 
-export const alternateTranslation = ___`Hello World~~2`;
+export const alternateTranslation = __`Hello World~~2`;

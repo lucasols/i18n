@@ -12,6 +12,19 @@ import {
 } from 'runcheck';
 import { getI18nUsagesInCode } from './findMissingTranslations';
 
+export type FileSystem = {
+  readFileSync: (path: string, encoding: 'utf-8') => string;
+  writeFileSync: (path: string, content: string) => void;
+  scanDir: (
+    dirPath: string,
+    options: { fileFilter: (entry: { path: string }) => boolean },
+  ) =>
+    | AsyncIterable<{ fullPath: string; basename: string }>
+    | Iterable<{ fullPath: string; basename: string }>;
+};
+
+export type Logger = Pick<Console, 'log' | 'error' | 'info'>;
+
 export type ValidationOptions = {
   configDir: string;
   srcDir: string;
@@ -19,6 +32,8 @@ export type ValidationOptions = {
   fix?: boolean;
   noColor?: boolean;
   colorFn?: (color: 'red', text: string) => string;
+  fs?: FileSystem;
+  log?: Logger;
 };
 
 const pluralTranslationSchema = rc_object({
@@ -44,6 +59,21 @@ function isObject(value: unknown): value is Record<string, unknown> {
 const MISSING_TRANSLATIONS_KEY = '👇 missing translations 👇';
 const MISSING_TRANSLATION_VALUE = '🛑 delete this line 🛑';
 
+export const defaultFs: FileSystem = {
+  readFileSync: (filePath, encoding) => readFileSync(filePath, encoding),
+  writeFileSync: (filePath, content) => writeFileSync(filePath, content),
+  async *scanDir(dirPath, options) {
+    for await (const entry_ of readdirp(dirPath, {
+      fileFilter: options.fileFilter,
+      directoryFilter: (entry) =>
+        !entry.path.includes('node_modules') && !entry.path.includes('.git'),
+    })) {
+      const entry = entry_ as EntryInfo;
+      yield { fullPath: entry.fullPath, basename: entry.basename };
+    }
+  },
+};
+
 export async function validateTranslations(
   options: ValidationOptions,
 ): Promise<{ hasError: boolean }> {
@@ -54,6 +84,8 @@ export async function validateTranslations(
     fix = false,
     noColor = false,
     colorFn = (_, text) => text,
+    fs = defaultFs,
+    log = console,
   } = options;
 
   const allStringTranslationHashs = new Set<string>();
@@ -62,17 +94,13 @@ export async function validateTranslations(
 
   const srcPath =
     path.isAbsolute(srcDir) ? srcDir : path.join(process.cwd(), srcDir);
-  for await (const entry_ of readdirp(srcPath, {
+  for await (const entry of fs.scanDir(srcPath, {
     fileFilter: (entry) =>
       entry.path.endsWith('.ts') || entry.path.endsWith('.tsx'),
-    directoryFilter: (entry) =>
-      !entry.path.includes('node_modules') && !entry.path.includes('.git'),
   })) {
-    const entry = entry_ as EntryInfo;
-    const fullPath: string = entry.fullPath;
-    const basename: string = entry.basename;
+    const { fullPath, basename } = entry;
 
-    const fileTextContent = readFileSync(fullPath, 'utf-8');
+    const fileTextContent = fs.readFileSync(fullPath, 'utf-8');
 
     const i18nUsages = getI18nUsagesInCode(basename, fileTextContent);
 
@@ -89,7 +117,7 @@ export async function validateTranslations(
     allStringTranslationHashs.size === 0 &&
     allPluralTranslationHashs.size === 0
   ) {
-    console.error('❌ No translations found in dir: ', srcDir);
+    log.error('❌ No translations found in dir: ', srcDir);
     return { hasError: true };
   }
 
@@ -97,26 +125,18 @@ export async function validateTranslations(
     path.isAbsolute(configDir) ? configDir : (
       path.join(process.cwd(), configDir)
     );
-  for await (const entry_ of readdirp(configPath, {
+  for await (const entry of fs.scanDir(configPath, {
     fileFilter: (entry) => entry.path.endsWith('.json'),
-    directoryFilter: (entry) =>
-      !entry.path.includes('node_modules') && !entry.path.includes('.git'),
   })) {
-    const entry = entry_ as EntryInfo;
+    const { fullPath, basename } = entry;
     const invalidPluralTranslations: string[] = [];
 
-    const fullPath: string = entry.fullPath;
-    const basename: string = entry.basename;
-
     const fileParseResult = rc_parse(
-      JSON.parse(readFileSync(fullPath, 'utf-8')),
+      JSON.parse(fs.readFileSync(fullPath, 'utf-8')),
       translationFileSchema,
     );
     if (!fileParseResult.ok) {
-      console.error(
-        `❌ ${basename} has invalid format:`,
-        fileParseResult.errors,
-      );
+      log.error(`❌ ${basename} has invalid format:`, fileParseResult.errors);
       hasError = true;
       continue;
     }
@@ -170,7 +190,7 @@ export async function validateTranslations(
         hasError = true;
 
         if (invalidPluralTranslations.length > 0) {
-          console.error(
+          log.error(
             `❌ ${basename} has invalid plural translations: `,
             invalidPluralTranslations,
           );
@@ -195,7 +215,7 @@ export async function validateTranslations(
             parts.push(`extra ${countStr}`);
           }
 
-          console.error(
+          log.error(
             `❌ ${basename} has invalid translations: ${parts.join(', ')}`,
           );
         }
@@ -205,7 +225,7 @@ export async function validateTranslations(
           extraHashs.size === 1 &&
           extraHashs.has(MISSING_TRANSLATIONS_KEY)
         ) {
-          console.error(`❌ ${basename} has missing translations`);
+          log.error(`❌ ${basename} has missing translations`);
         } else {
           delete localeTranslations[''];
 
@@ -243,16 +263,16 @@ export async function validateTranslations(
           localeTranslations[''] = '';
 
           if (missingHashs.size > 0) {
-            console.info(`🟠 ${basename} translations keys were added`);
+            log.info(`🟠 ${basename} translations keys were added`);
           } else {
-            console.info(`✅ ${basename} translations fixed`);
+            log.info(`✅ ${basename} translations fixed`);
           }
 
-          writeFileSync(fullPath, JSON.stringify(localeTranslations, null, 2));
+          fs.writeFileSync(fullPath, JSON.stringify(localeTranslations, null, 2));
         }
       }
     } else {
-      console.info(`✅ ${basename} translations are up to date`);
+      log.info(`✅ ${basename} translations are up to date`);
     }
   }
 

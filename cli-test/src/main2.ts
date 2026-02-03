@@ -1,4 +1,4 @@
 /* eslint-disable no-console */
-import { ___ } from './main';
+import { __ } from './main';
 
-console.log(___`Imported usage`);
+console.log(__`Imported usage`);
