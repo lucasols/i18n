@@ -11,7 +11,7 @@
     {
       "label": "bump version and deploy browser package",
       "type": "shell",
-      "command": "pnpm pre-publish && pnpm version ${input:version} && pnpm publish --access public",
+      "command": "pnpm pre-publish && pnpm version ${input:version} && pnpm publish --access public --no-git-checks",
       "options": {
         "cwd": "${workspaceFolder}/browser"
       },
