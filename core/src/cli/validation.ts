@@ -386,7 +386,7 @@ export async function validateTranslations(
       validationIssues.push({
         rule: 'max-translation-id-size',
         hash,
-        message: `translation ID too long (${hash.length} chars, max ${maxTranslationIdSize}): "${truncated}"`,
+        message: `translation ID exceeds ${maxTranslationIdSize} chars (${hash.length}): "${truncated}". Use a $shortId instead, e.g.: __\`$myKey\``,
         locations,
       });
     }
@@ -406,7 +406,7 @@ export async function validateTranslations(
         validationIssues.push({
           rule: 'constant-translation',
           hash,
-          message: `constant translation "${hash}" is identical in all locales`,
+          message: `constant translation "${hash}" has the same value in all locales. Either translate it differently per locale, or move it to code if it doesn't need translation`,
           locations,
         });
       }
@@ -435,7 +435,7 @@ export async function validateTranslations(
         validationIssues.push({
           rule: 'unnecessary-plural',
           hash,
-          message: `unnecessary plural "${hash}" only uses +2 form, consider using string interpolation`,
+          message: `unnecessary plural "${hash}" only uses the +2 form in all locales. Use __\`# items\` with interpolation instead of __p(count)\`# items\`, or add zero/one/many forms if needed`,
           locations,
         });
       }
@@ -452,7 +452,7 @@ export async function validateTranslations(
         validationIssues.push({
           rule: 'jsx-without-interpolation',
           hash,
-          message: `jsx without interpolation "${hash}" - consider using __ instead of __jsx`,
+          message: `__jsx used without interpolations for "${hash}". Use __\`${hash}\` instead since there are no JSX elements to interpolate`,
           locations,
         });
       }
@@ -468,7 +468,7 @@ export async function validateTranslations(
         validationIssues.push({
           rule: 'jsx-without-jsx-nodes',
           hash,
-          message: `jsx without jsx nodes "${hash}" - all interpolations are primitives, consider using __ instead of __jsx`,
+          message: `__jsx used but all interpolations are primitives (strings/numbers) for "${hash}". Use __\`...\` instead of __jsx\`...\` when not interpolating JSX elements`,
           locations,
         });
       }
@@ -499,7 +499,7 @@ export async function validateTranslations(
           validationIssues.push({
             rule: 'unnecessary-interpolated-affix',
             hash,
-            message: `unnecessary interpolated prefix "${prefixes[0]}" in "${hash}" is identical in all locales`,
+            message: `prefix "${prefixes[0]}" before interpolation in "${hash}" is identical in all locales. Move it outside the translation: "${prefixes[0]}" + __\`...\``,
             locations,
           });
         }
@@ -511,7 +511,7 @@ export async function validateTranslations(
           validationIssues.push({
             rule: 'unnecessary-interpolated-affix',
             hash,
-            message: `unnecessary interpolated suffix "${suffixes[0]}" in "${hash}" is identical in all locales`,
+            message: `suffix "${suffixes[0]}" after interpolation in "${hash}" is identical in all locales. Move it outside the translation: __\`...\` + "${suffixes[0]}"`,
             locations,
           });
         }
