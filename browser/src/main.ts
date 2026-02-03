@@ -16,7 +16,7 @@ import {
 } from './state';
 
 export type I18nController<T extends string = string> = {
-  setLocale: (localeId: T) => Promise<void>;
+  setLocale: (localeId: T) => Promise<boolean>;
   getLoadedLocale: () => T | null;
   getRegionLocale: () => string;
   onLoad: (callback: (localeId: T) => void) => () => void;
@@ -50,16 +50,17 @@ export function i18nitialize<T extends string>(
 
   registerClearIntlCache(clearIntlCache);
 
-  const setLocaleWithFallback = async (localeId: T): Promise<void> => {
+  const setLocaleWithFallback = async (localeId: T): Promise<boolean> => {
     const locales = getLocalesConfig();
     const localeExists = locales.some((l) => l.id === localeId);
 
     if (!localeExists && options.fallbackLocale) {
       await setLocale(options.fallbackLocale);
-      return;
+      return false;
     }
 
     await setLocale(localeId);
+    return true;
   };
 
   const controller: I18nController<T> = {
