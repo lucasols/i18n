@@ -101,6 +101,103 @@ describe('__relativeTime fallback (no Intl.RelativeTimeFormat)', () => {
   });
 });
 
+describe('__relativeTimeFromNow rounding thresholds fallback (no Intl.RelativeTimeFormat)', () => {
+  beforeEach(() => {
+    vi.resetModules();
+    vi.stubGlobal('navigator', { languages: ['en-US'] });
+    vi.stubGlobal('Intl', {
+      ...OriginalIntl,
+      RelativeTimeFormat: undefined,
+    });
+  });
+
+  const setupTest = async () => {
+    const { __relativeTimeFromNow, resetState } = await import('../src/main');
+    const { createTestController } = await import('./test-utils');
+    resetState();
+
+    const controller = createTestController({ locales: { en: {} } });
+    await controller.setLocale('en');
+    const now = new Date('2024-01-15T12:00:00Z');
+    return { __relativeTimeFromNow, now };
+  };
+
+  const addSeconds = (date: Date, seconds: number) =>
+    new Date(date.getTime() - seconds * 1000);
+
+  test('29 seconds shows as 29 seconds ago', async () => {
+    const { __relativeTimeFromNow, now } = await setupTest();
+    const date = addSeconds(now, 29);
+    expect(__relativeTimeFromNow(date, { now })).toBe('29 seconds ago');
+  });
+
+  test('54 seconds shows as 54 seconds ago', async () => {
+    const { __relativeTimeFromNow, now } = await setupTest();
+    const date = addSeconds(now, 54);
+    expect(__relativeTimeFromNow(date, { now })).toBe('54 seconds ago');
+  });
+
+  test('55 seconds shows as 1 minute ago', async () => {
+    const { __relativeTimeFromNow, now } = await setupTest();
+    const date = addSeconds(now, 55);
+    expect(__relativeTimeFromNow(date, { now })).toBe('1 minute ago');
+  });
+
+  test('25 hours shows as 1 day ago (not 2 days)', async () => {
+    const { __relativeTimeFromNow, now } = await setupTest();
+    const date = addSeconds(now, 25 * 60 * 60);
+    expect(__relativeTimeFromNow(date, { now })).toBe('1 day ago');
+  });
+
+  test('36 hours shows as 1 day ago (not 2 days)', async () => {
+    const { __relativeTimeFromNow, now } = await setupTest();
+    const date = addSeconds(now, 36 * 60 * 60);
+    expect(__relativeTimeFromNow(date, { now })).toBe('1 day ago');
+  });
+
+  test('42 hours shows as 1 day ago (floor, 18h past day < 22h threshold)', async () => {
+    const { __relativeTimeFromNow, now } = await setupTest();
+    const date = addSeconds(now, 42 * 60 * 60);
+    expect(__relativeTimeFromNow(date, { now })).toBe('1 day ago');
+  });
+
+  test('46 hours shows as 2 days ago (rounds at >= 22h past day)', async () => {
+    const { __relativeTimeFromNow, now } = await setupTest();
+    const date = addSeconds(now, 46 * 60 * 60);
+    expect(__relativeTimeFromNow(date, { now })).toBe('2 days ago');
+  });
+
+  test('45 minutes shows as 1 hour ago', async () => {
+    const { __relativeTimeFromNow, now } = await setupTest();
+    const date = addSeconds(now, 45 * 60);
+    expect(__relativeTimeFromNow(date, { now })).toBe('1 hour ago');
+  });
+
+  test('90 minutes shows as 1 hour ago (floor)', async () => {
+    const { __relativeTimeFromNow, now } = await setupTest();
+    const date = addSeconds(now, 90 * 60);
+    expect(__relativeTimeFromNow(date, { now })).toBe('1 hour ago');
+  });
+
+  test('115 minutes shows as 2 hours ago (rounds at >= 55 min past hour)', async () => {
+    const { __relativeTimeFromNow, now } = await setupTest();
+    const date = addSeconds(now, 115 * 60);
+    expect(__relativeTimeFromNow(date, { now })).toBe('2 hours ago');
+  });
+
+  test('120 minutes shows as 2 hours ago', async () => {
+    const { __relativeTimeFromNow, now } = await setupTest();
+    const date = addSeconds(now, 120 * 60);
+    expect(__relativeTimeFromNow(date, { now })).toBe('2 hours ago');
+  });
+
+  test('future: 25 hours in future shows as in 1 day', async () => {
+    const { __relativeTimeFromNow, now } = await setupTest();
+    const date = new Date(now.getTime() + 25 * 60 * 60 * 1000);
+    expect(__relativeTimeFromNow(date, { now })).toBe('in 1 day');
+  });
+});
+
 describe('__list fallback (no Intl.ListFormat)', () => {
   beforeEach(() => {
     vi.resetModules();

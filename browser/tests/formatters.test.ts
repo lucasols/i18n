@@ -166,6 +166,340 @@ describe('__relativeTimeFromNow', () => {
   });
 });
 
+describe('__relativeTimeFromNow rounding thresholds', () => {
+  const setup = async () => {
+    const controller = createTestController({
+      locales: { en: {} },
+    });
+    await controller.setLocale('en');
+    return new Date('2024-01-15T12:00:00Z');
+  };
+
+  const addSeconds = (date: Date, seconds: number) =>
+    new Date(date.getTime() - seconds * 1000);
+
+  describe('seconds threshold (0...55 secs)', () => {
+    test('29 seconds shows as seconds', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 29);
+      expect(__relativeTimeFromNow(date, { now })).toBe('29 seconds ago');
+    });
+
+    test('54 seconds shows as seconds', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 54);
+      expect(__relativeTimeFromNow(date, { now })).toBe('54 seconds ago');
+    });
+
+    test('55 seconds shows as 1 minute', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 55);
+      expect(__relativeTimeFromNow(date, { now })).toBe('1 minute ago');
+    });
+  });
+
+  describe('1 minute threshold (55 secs...1m 55s)', () => {
+    test('56 seconds shows as 1 minute', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 56);
+      expect(__relativeTimeFromNow(date, { now })).toBe('1 minute ago');
+    });
+
+    test('114 seconds shows as 1 minute', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 114);
+      expect(__relativeTimeFromNow(date, { now })).toBe('1 minute ago');
+    });
+
+    test('115 seconds shows as 2 minutes (rounds at >= 55s past minute)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 115);
+      expect(__relativeTimeFromNow(date, { now })).toBe('2 minutes ago');
+    });
+
+    test('120 seconds shows as 2 minutes', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 120);
+      expect(__relativeTimeFromNow(date, { now })).toBe('2 minutes ago');
+    });
+  });
+
+  describe('minutes threshold (1m 30s...44m 30s)', () => {
+    test('44 minutes shows as 44 minutes', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 44 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('44 minutes ago');
+    });
+
+    test('44 minutes 30 seconds shows as 44 minutes', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 44 * 60 + 29);
+      expect(__relativeTimeFromNow(date, { now })).toBe('44 minutes ago');
+    });
+
+    test('44 minutes 31 seconds shows as 1 hour', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 44 * 60 + 31);
+      expect(__relativeTimeFromNow(date, { now })).toBe('1 hour ago');
+    });
+  });
+
+  describe('1 hour threshold (44m 30s...89m 30s)', () => {
+    test('45 minutes shows as 1 hour', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 45 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('1 hour ago');
+    });
+
+    test('89 minutes shows as 1 hour', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 89 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('1 hour ago');
+    });
+
+    test('90 minutes shows as 1 hour (floor)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 90 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('1 hour ago');
+    });
+
+    test('114 minutes shows as 1 hour (floor, < 55 min past hour)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 114 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('1 hour ago');
+    });
+
+    test('115 minutes shows as 2 hours (rounds at >= 55 min past hour)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 115 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('2 hours ago');
+    });
+
+    test('120 minutes shows as 2 hours', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 120 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('2 hours ago');
+    });
+  });
+
+  describe('hours threshold (89m 30s...23h 59m 30s)', () => {
+    test('23 hours shows as 23 hours', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 23 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('23 hours ago');
+    });
+
+    test('23 hours 54 minutes shows as 23 hours (floor)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 23 * 60 * 60 + 54 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('23 hours ago');
+    });
+
+    test('23 hours 55 minutes shows as 24 hours (rounds at >= 55 min)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 23 * 60 * 60 + 55 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('24 hours ago');
+    });
+
+    test('23 hours 59 minutes 30 seconds shows as 1 day', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 23 * 60 * 60 + 59 * 60 + 30);
+      expect(__relativeTimeFromNow(date, { now })).toBe('1 day ago');
+    });
+  });
+
+  describe('1 day threshold (23h 59m 30s...41h 59m 30s) - KEY FIX', () => {
+    test('24 hours shows as 1 day', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 24 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('1 day ago');
+    });
+
+    test('25 hours shows as 1 day (not 2 days)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 25 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('1 day ago');
+    });
+
+    test('36 hours shows as 1 day (not 2 days)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 36 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('1 day ago');
+    });
+
+    test('40 hours shows as 1 day (not 2 days)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 40 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('1 day ago');
+    });
+
+    test('41 hours 59 minutes shows as 1 day', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 41 * 60 * 60 + 59 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('1 day ago');
+    });
+
+    test('42 hours shows as 1 day (floor, 18h past day < 22h threshold)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 42 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('1 day ago');
+    });
+  });
+
+  describe('days threshold (41h 59m 30s...29d 23h 59m 30s)', () => {
+    test('43 hours shows as 1 day (floor, < 22h past day)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 43 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('1 day ago');
+    });
+
+    test('45 hours shows as 1 day (floor, < 22h past day)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 45 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('1 day ago');
+    });
+
+    test('46 hours shows as 2 days (rounds at >= 22h past day)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 46 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('2 days ago');
+    });
+
+    test('48 hours shows as 2 days', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 48 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('2 days ago');
+    });
+
+    test('29 days shows as 29 days', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 29 * 24 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('29 days ago');
+    });
+
+    test('30 days shows as 1 month', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 30 * 24 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('1 month ago');
+    });
+  });
+
+  describe('1 month threshold (29d 23h 59m 30s...44d 23h 59m 30s)', () => {
+    test('44 days shows as 1 month', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 44 * 24 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('1 month ago');
+    });
+
+    test('45 days shows as 2 months', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 45 * 24 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('2 months ago');
+    });
+  });
+
+  describe('2 months threshold (44d 23h 59m 30s...59d 23h 59m 30s)', () => {
+    test('59 days shows as 2 months', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 59 * 24 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('2 months ago');
+    });
+
+    test('60 days shows as 2 months (calculated)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 60 * 24 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('2 months ago');
+    });
+  });
+
+  describe('months threshold (59d 23h 59m 30s...~1yr)', () => {
+    test('90 days shows as 3 months (floor)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 90 * 24 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('3 months ago');
+    });
+
+    test('114 days shows as 3 months (floor, < 25 days past month)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 114 * 24 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('3 months ago');
+    });
+
+    test('115 days shows as 4 months (rounds at >= 25 days past month)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 115 * 24 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('4 months ago');
+    });
+
+    test('180 days shows as 6 months', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 180 * 24 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('6 months ago');
+    });
+
+    test('364 days shows as 12 months', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 364 * 24 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('12 months ago');
+    });
+  });
+
+  describe('years threshold', () => {
+    test('365 days shows as 1 year', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 365 * 24 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('1 year ago');
+    });
+
+    test('1 year + 10 months shows as 1 year (floor)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, (365 + 300) * 24 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('1 year ago');
+    });
+
+    test('1 year + 11 months shows as 2 years (rounds at >= 11 months)', async () => {
+      const now = await setup();
+      const date = addSeconds(now, (365 + 330) * 24 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('2 years ago');
+    });
+
+    test('730 days shows as 2 years', async () => {
+      const now = await setup();
+      const date = addSeconds(now, 730 * 24 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('2 years ago');
+    });
+  });
+
+  describe('future times with thresholds', () => {
+    const addSecondsFuture = (date: Date, seconds: number) =>
+      new Date(date.getTime() + seconds * 1000);
+
+    test('25 hours in future shows as in 1 day (not in 2 days)', async () => {
+      const now = await setup();
+      const date = addSecondsFuture(now, 25 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('in 1 day');
+    });
+
+    test('36 hours in future shows as in 1 day', async () => {
+      const now = await setup();
+      const date = addSecondsFuture(now, 36 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('in 1 day');
+    });
+
+    test('42 hours in future shows as in 1 day (floor)', async () => {
+      const now = await setup();
+      const date = addSecondsFuture(now, 42 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('in 1 day');
+    });
+
+    test('46 hours in future shows as in 2 days (rounds at >= 22h)', async () => {
+      const now = await setup();
+      const date = addSecondsFuture(now, 46 * 60 * 60);
+      expect(__relativeTimeFromNow(date, { now })).toBe('in 2 days');
+    });
+  });
+});
+
 describe('__list', () => {
   test('formats lists', async () => {
     const controller = createTestController({

@@ -228,6 +228,13 @@ export function __num(num: number, options?: Intl.NumberFormatOptions): string {
   return formatter.format(num);
 }
 
+// Thresholds in seconds
+const MINUTE_SECS = 60;
+const HOUR_SECS = 60 * 60;
+const DAY_SECS = 24 * HOUR_SECS;
+const MONTH_SECS = 30 * DAY_SECS;
+const YEAR_SECS = 365 * DAY_SECS;
+
 function getUnit(
   from: Date | string | number | undefined,
   to: Date | string | number | undefined,
@@ -236,41 +243,81 @@ function getUnit(
   const toDate_ = toDate(to ?? new Date());
 
   const diffMs = fromDate.getTime() - toDate_.getTime();
-  const diffSecs = diffMs / 1000;
+  const absDiffSecs = Math.abs(diffMs / 1000);
+  const isNegative = diffMs < 0;
 
-  if (Math.abs(diffSecs) < 60) {
-    return { value: Math.round(diffSecs), unit: 'second' };
+  const applySign = (val: number) => (isNegative ? -val : val);
+
+  // 0...55 secs → seconds
+  if (absDiffSecs < 55) {
+    return { value: applySign(Math.round(absDiffSecs)), unit: 'second' };
   }
-
-  const diffMins = diffSecs / 60;
-  if (Math.abs(diffMins) < 60) {
-    return { value: Math.floor(diffMins), unit: 'minute' };
+  // 55 secs...1m 55s → 1 minute
+  if (absDiffSecs < MINUTE_SECS + 55) {
+    return { value: applySign(1), unit: 'minute' };
   }
-
-  const diffHours = diffMins / 60;
-  if (Math.abs(diffHours) < 24) {
-    return { value: Math.floor(diffHours), unit: 'hour' };
+  // 1m 30s...44m 30s → [2..44] minutes (floor, but round if >= 55s past minute)
+  if (absDiffSecs < 44 * MINUTE_SECS + 30) {
+    const minutes = absDiffSecs / MINUTE_SECS;
+    const secondsPastMinute = absDiffSecs % MINUTE_SECS;
+    const roundedMinutes =
+      secondsPastMinute >= 55 ? Math.ceil(minutes) : Math.floor(minutes);
+    return {
+      value: applySign(roundedMinutes),
+      unit: 'minute',
+    };
   }
-
-  const diffDays = diffHours / 24;
-
-  const fromYear = fromDate.getFullYear();
-  const toYear = toDate_.getFullYear();
-  const yearDiff = fromYear - toYear;
-
-  if (Math.abs(yearDiff) > 0) {
-    return { value: yearDiff, unit: 'year' };
+  // 44m 30s...89m 30s → 1 hour
+  if (absDiffSecs < 89 * MINUTE_SECS + 30) {
+    return { value: applySign(1), unit: 'hour' };
   }
-
-  const fromMonth = fromDate.getMonth();
-  const toMonth = toDate_.getMonth();
-  const monthDiff = fromMonth - toMonth + (fromYear - toYear) * 12;
-
-  if (Math.abs(monthDiff) > 0) {
-    return { value: monthDiff, unit: 'month' };
+  // 89m 30s...23h 59m 30s → [2..24] hours (floor, but round if >= X hours 55 min)
+  if (absDiffSecs < 24 * HOUR_SECS - 30) {
+    const hours = absDiffSecs / HOUR_SECS;
+    const minutesPastHour = (absDiffSecs % HOUR_SECS) / 60;
+    const roundedHours =
+      minutesPastHour >= 55 ? Math.ceil(hours) : Math.floor(hours);
+    return {
+      value: applySign(roundedHours),
+      unit: 'hour',
+    };
   }
-
-  return { value: Math.floor(diffDays), unit: 'day' };
+  // 23h 59m 30s...41h 59m 30s → 1 day
+  if (absDiffSecs < 42 * HOUR_SECS - 30) {
+    return { value: applySign(1), unit: 'day' };
+  }
+  // 41h 59m 30s...29d 23h 59m 30s → [2..30] days (floor, but round if >= 22h past day)
+  if (absDiffSecs < 30 * DAY_SECS - 30) {
+    const days = absDiffSecs / DAY_SECS;
+    const hoursPastDay = (absDiffSecs % DAY_SECS) / HOUR_SECS;
+    const roundedDays = hoursPastDay >= 22 ? Math.ceil(days) : Math.floor(days);
+    return { value: applySign(roundedDays), unit: 'day' };
+  }
+  // 29d 23h 59m 30s...44d 23h 59m 30s → 1 month
+  if (absDiffSecs < 45 * DAY_SECS - 30) {
+    return { value: applySign(1), unit: 'month' };
+  }
+  // 44d 23h 59m 30s...59d 23h 59m 30s → 2 months
+  if (absDiffSecs < 60 * DAY_SECS - 30) {
+    return { value: applySign(2), unit: 'month' };
+  }
+  // 59d 23h 59m 30s...1yr → [2..12] months (floor, but round if >= 25 days past month)
+  if (absDiffSecs < YEAR_SECS - 30) {
+    const months = absDiffSecs / MONTH_SECS;
+    const daysPastMonth = (absDiffSecs % MONTH_SECS) / DAY_SECS;
+    const roundedMonths =
+      daysPastMonth >= 25 ? Math.ceil(months) : Math.floor(months);
+    return {
+      value: applySign(roundedMonths),
+      unit: 'month',
+    };
+  }
+  // Years (floor, but round if >= 11 months past year)
+  const years = absDiffSecs / YEAR_SECS;
+  const monthsPastYear = (absDiffSecs % YEAR_SECS) / MONTH_SECS;
+  const roundedYears =
+    monthsPastYear >= 11 ? Math.ceil(years) : Math.floor(years);
+  return { value: applySign(roundedYears), unit: 'year' };
 }
 
 export function __relativeTime(
