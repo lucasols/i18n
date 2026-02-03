@@ -1,5 +1,23 @@
+import type { Locale } from '@ls-stack/i18n-core';
 import { retryOnError } from '@ls-stack/utils/retryOnError';
-import type { I18nState, LocaleConfig } from './types';
+
+export type LocaleLoader = () => Promise<{ default: Locale }>;
+
+export type LocaleConfig<T extends string = string> = {
+  id: T;
+  loader: LocaleLoader;
+  currencyCode?: string;
+  regionLocale?: string;
+};
+
+export type I18nState<T extends string = string> = {
+  activeLocale: T | null;
+  isLoading: boolean;
+  isLoaded: boolean;
+  loadError: Error | null;
+  translations: Locale | null;
+  regionLocale: string | null;
+};
 
 let localesConfig: LocaleConfig<string>[] = [];
 let state: I18nState<string> = {
@@ -132,6 +150,10 @@ export function registerClearIntlCache(fn: () => void): void {
 export async function setLocale(localeId: string): Promise<void> {
   if (loadingLocaleId === localeId && loadingPromise) {
     return loadingPromise;
+  }
+
+  if (loadedLocaleId === localeId) {
+    return;
   }
 
   const localeConfig = localesConfig.find((l) => l.id === localeId);

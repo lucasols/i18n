@@ -1,10 +1,42 @@
 import { getActiveLocaleConfig, getRegionLocale, getState } from './state';
-import type {
-  DateTimeFormats,
-  DurationUnit,
-  RelativeTimeFormat,
-  RelativeTimeUnits,
-} from './types';
+
+export type DateTimeFormats = {
+  weekday?: 'narrow' | 'short' | 'long';
+  era?: 'narrow' | 'short' | 'long';
+  year?: 'numeric' | '2-digit';
+  month?: 'numeric' | '2-digit' | 'narrow' | 'short' | 'long';
+  day?: 'numeric' | '2-digit';
+  hour?: 'numeric' | '2-digit';
+  minute?: 'numeric' | '2-digit';
+  second?: 'numeric' | '2-digit';
+  timeZoneName?: 'short' | 'long';
+  dateStyle?: 'full' | 'long' | 'medium' | 'short';
+  timeStyle?: 'full' | 'long' | 'medium' | 'short';
+};
+
+export type RelativeTimeFormat = {
+  numeric?: 'always' | 'auto';
+  style?: 'long' | 'narrow';
+};
+
+export type RelativeTimeUnits =
+  | 'year'
+  | 'quarter'
+  | 'month'
+  | 'week'
+  | 'day'
+  | 'hour'
+  | 'minute'
+  | 'second';
+
+export type DurationUnit =
+  | 'years'
+  | 'months'
+  | 'days'
+  | 'hours'
+  | 'minutes'
+  | 'seconds'
+  | 'milliseconds';
 
 type PartialRecord<K extends string, V> = { [P in K]?: V };
 

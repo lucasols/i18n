@@ -12,8 +12,21 @@ import {
   setMockedRegionLocale,
   subscribe,
   subscribeToState,
+  type LocaleConfig,
 } from './state';
-import type { I18nController, LocaleConfig } from './types';
+
+export type I18nController<T extends string = string> = {
+  setLocale: (localeId: T) => Promise<void>;
+  getLoadedLocale: () => T | null;
+  getRegionLocale: () => string;
+  onLoad: (callback: (localeId: T) => void) => () => void;
+  useLoadedLocale: () => {
+    isLoading: { locale: T } | null;
+    loadError: Error | null;
+    loadedLocale: T | null;
+  };
+  __mockRegionLocale: (locale: string) => void;
+};
 
 export type I18nOptions<T extends string> = {
   locales: LocaleConfig<T>[];
@@ -93,21 +106,21 @@ export {
   __relativeTime,
   __relativeTimeFromNow,
   __timeDuration,
+  type DateTimeFormats,
+  type DurationUnit,
+  type RelativeTimeFormat,
+  type RelativeTimeUnits,
 } from './formatters';
-export { resetState } from './state';
-export { __, __jsx, __p, __pjsx } from './translate';
+export {
+  resetState,
+  type I18nState,
+  type LocaleConfig,
+  type LocaleLoader,
+} from './state';
+export { __, __jsx, __p, __pjsx, type JsxInterpolation } from './translate';
 
 export type {
-  DateTimeFormats,
-  DurationUnit,
-  I18nController,
-  I18nState,
-  JsxInterpolation,
   Locale,
-  LocaleConfig,
-  LocaleLoader,
   PluralTranslation,
-  RelativeTimeFormat,
-  RelativeTimeUnits,
   TranslationValue,
-} from './types';
+} from '@ls-stack/i18n-core';

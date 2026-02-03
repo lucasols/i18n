@@ -101,7 +101,7 @@ describe('locale switching', () => {
     expect(controller.getLoadedLocale()).toBe('pt');
   });
 
-  test('calling setLocale with current locale is a no-op', async () => {
+  test('calling setLocale with current locale does not re-invoke loader', async () => {
     const controller = createTestController({
       locales: { en: {} },
     });
@@ -110,6 +110,20 @@ describe('locale switching', () => {
     await controller.setLocale('en');
 
     expect(controller.getLoadedLocale()).toBe('en');
+    expect(controller.invokedLoaderIds).toEqual(['en']);
+  });
+
+  test('switching between locales invokes each loader', async () => {
+    const controller = createTestController({
+      locales: { en: {}, pt: {} },
+    });
+
+    await controller.setLocale('en');
+    await controller.setLocale('pt');
+    await controller.setLocale('en');
+
+    expect(controller.getLoadedLocale()).toBe('en');
+    expect(controller.invokedLoaderIds).toEqual(['en', 'pt', 'en']);
   });
 
   test('calling setLocale while loading supersedes previous load', async () => {
@@ -138,6 +152,7 @@ describe('error handling', () => {
 
     await controller.setLocale('unknown' as 'en');
     expect(controller.getLoadedLocale()).toBe('en');
+    expect(controller.invokedLoaderIds).toEqual(['en']);
   });
 
   test('throws error when loader fails after retries', async () => {

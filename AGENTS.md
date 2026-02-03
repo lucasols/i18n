@@ -42,9 +42,15 @@ pnpm --filter @ls-stack/server-i18n test-cli:check
 pnpm --filter @ls-stack/server-i18n test-cli:fix
 ```
 
+## Focus on performance
+
+- Code should be optimized for performance and memory efficiency, make sure tests are testing performance qualities and implementations are optimized for performance.
+
 ## Testing
 
-Tests should be run via `pnpm test` only, due to required environment variables.
+- Tests should be run via `pnpm test` only, due to required environment variables.
+- Always use realistic test scenarios and data, tests should reflect the real-world usage of the code.
+  - Don't use unrealistic timelines
 
 ## Key Features
 
