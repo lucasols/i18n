@@ -71,6 +71,7 @@ test('returns loaded state after successful load', async () => {
 
 test('returns error state on load failure', async () => {
   vi.useFakeTimers();
+  const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
 
   const controller = createTestController({
     locales: { en: new Error('Network error') },
@@ -105,6 +106,8 @@ test('returns error state on load failure', async () => {
     └─
     "
   `);
+
+  errorSpy.mockRestore();
 });
 
 test('updates when locale changes', async () => {

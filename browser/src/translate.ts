@@ -183,7 +183,7 @@ export function __pjsx(num: number) {
     const { translations } = getState();
 
     if (!translations) {
-      return interpolateJsx(fallbackTranslation, exprs);
+      return interpolateJsx(replaceHashWithNum(fallbackTranslation, num), exprs);
     }
 
     const selectedTranslation = translations[hash];

@@ -115,7 +115,9 @@ describe('getRegionLocale fallback chain', () => {
     expect(controller.getRegionLocale()).toBe('en');
   });
 
-  test('returns region locale based on fallbackLocale and browser locales when no locale loaded', () => {
+  test('returns region locale based on fallbackLocale and browser locales when no locale loaded', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
     vi.stubGlobal('navigator', {
       languages: ['pt-BR', 'en-GB', 'en-US'],
     });
@@ -127,6 +129,9 @@ describe('getRegionLocale fallback chain', () => {
     });
 
     expect(controller.getRegionLocale()).toBe('en-GB');
+
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    errorSpy.mockRestore();
   });
   test('throws in dev when no locale loaded and no fallbackLocale configured', () => {
     configure({
