@@ -51,7 +51,10 @@ interface IntlDurationFormat {
 }
 
 interface IntlDurationFormatConstructor {
-  new (locale?: string, options?: IntlDurationFormatOptions): IntlDurationFormat;
+  new (
+    locale?: string,
+    options?: IntlDurationFormatOptions,
+  ): IntlDurationFormat;
 }
 
 declare global {
@@ -106,8 +109,8 @@ function toDate(value: Date | string | number): Date {
 
 const hasRelativeTimeFormat = cachedGetter(
   () =>
-    typeof Intl !== 'undefined'
-    && typeof Intl.RelativeTimeFormat !== 'undefined',
+    typeof Intl !== 'undefined' &&
+    typeof Intl.RelativeTimeFormat !== 'undefined',
 );
 
 const hasListFormat = cachedGetter(
@@ -115,7 +118,8 @@ const hasListFormat = cachedGetter(
 );
 
 const hasDurationFormat = cachedGetter(
-  () => typeof Intl !== 'undefined' && typeof Intl.DurationFormat !== 'undefined',
+  () =>
+    typeof Intl !== 'undefined' && typeof Intl.DurationFormat !== 'undefined',
 );
 
 const hasUnitStyleSupport = cachedGetter(() => {
@@ -209,14 +213,8 @@ export function __date(
   return formatter.format(dateInstance);
 }
 
-export function __num(
-  num: number | null,
-  options?: Intl.NumberFormatOptions,
-): string {
+export function __num(num: number, options?: Intl.NumberFormatOptions): string {
   assertDevScope();
-  if (num === null) {
-    return '';
-  }
 
   const regionLocale = getRegionLocale();
   const cacheKey = `${regionLocale}:${getCacheKey(options)}`;
@@ -332,7 +330,11 @@ export function __relativeTime(
   }
 
   if (!hasRelativeTimeFormat.value) {
-    return formatRelativeFallback(diff, formatUnit as RelativeTimeUnits, format);
+    return formatRelativeFallback(
+      diff,
+      formatUnit as RelativeTimeUnits,
+      format,
+    );
   }
 
   const regionLocale = getRegionLocale();
@@ -395,9 +397,9 @@ export function __timeDuration(value: {
   const msBaseTime = 1736058575000;
 
   const autoUnit =
-    value.ms !== undefined
-      ? getUnit(new Date(msBaseTime + value.ms), new Date(msBaseTime))
-      : getUnit(value.to, value.from);
+    value.ms !== undefined ?
+      getUnit(new Date(msBaseTime + value.ms), new Date(msBaseTime))
+    : getUnit(value.to, value.from);
 
   const formatUnit = autoUnit.unit;
   const diff = autoUnit.value;
@@ -505,9 +507,8 @@ export function __formattedTimeDuration(
 
   const regionLocale = getRegionLocale();
 
-  const durationObjToUse: PartialRecord<DurationUnit, number> = maxUnitsToShow
-    ? {}
-    : durationObj;
+  const durationObjToUse: PartialRecord<DurationUnit, number> =
+    maxUnitsToShow ? {} : durationObj;
 
   if (maxUnitsToShow) {
     let unitsAdded = 0;

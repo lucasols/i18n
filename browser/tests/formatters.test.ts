@@ -48,6 +48,24 @@ describe('__date', () => {
     expect(formatted).toMatch(/1\/15\/24/);
   });
 
+  test('date-only strings are parsed as local midnight, not UTC', async () => {
+    const controller = createTestController({
+      locales: { en: {} },
+    });
+    await controller.setLocale('en');
+
+    // Without the T00:00 fix, "2024-01-15" would be parsed as UTC midnight,
+    // resulting in a non-midnight local time in any non-UTC timezone.
+    // This test verifies the time is 00:00 (local midnight).
+    const formatted = __date('2024-01-15', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    // en-US uses 12-hour format, so midnight is "12:00 AM"
+    expect(formatted).toBe('12:00 AM');
+  });
+
   test('returns Invalid Date for invalid input', async () => {
     const controller = createTestController({
       locales: { en: {} },
@@ -68,16 +86,6 @@ describe('__num', () => {
 
     const formatted = __num(1234.56);
     expect(formatted).toBe('1,234.56');
-  });
-
-  test('returns empty string for null', async () => {
-    const controller = createTestController({
-      locales: { en: {} },
-    });
-    await controller.setLocale('en');
-
-    const formatted = __num(null);
-    expect(formatted).toBe('');
   });
 });
 
