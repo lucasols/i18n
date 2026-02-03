@@ -35,7 +35,6 @@
     "node": ">=21.5.0"
   },
   "dependencies": {
-    "@ls-stack/i18n-core": "workspace:*",
     "@ls-stack/utils": "^3.68.0",
     "type-flag": "^3.0.0",
     "ai": "^6.0.69",
@@ -47,6 +46,7 @@
     "@ai-sdk/provider": "^3.0.7"
   },
   "devDependencies": {
+    "@ls-stack/i18n-core": "workspace:*",
     "@testing-library/react": "^16.0.0",
     "typescript": "^5.8.3"
   },

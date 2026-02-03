@@ -80,9 +80,6 @@ importers:
       '@ai-sdk/provider':
         specifier: ^3.0.7
         version: 3.0.7
-      '@ls-stack/i18n-core':
-        specifier: workspace:*
-        version: link:../core
       '@ls-stack/utils':
         specifier: ^3.68.0
         version: 3.68.0
@@ -108,6 +105,9 @@ importers:
         specifier: ^3.24.0
         version: 3.25.76
     devDependencies:
+      '@ls-stack/i18n-core':
+        specifier: workspace:*
+        version: link:../core
       '@testing-library/react':
         specifier: ^16.0.0
         version: 16.3.2(@testing-library/dom@10.4.1)(@types/react@18.3.27)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
@@ -151,9 +151,6 @@ importers:
 
   server:
     dependencies:
-      '@ls-stack/i18n-core':
-        specifier: workspace:*
-        version: link:../core
       '@ls-stack/utils':
         specifier: ^3.3.0
         version: 3.3.0
@@ -161,6 +158,9 @@ importers:
         specifier: ^3.0.0
         version: 3.0.0
     devDependencies:
+      '@ls-stack/i18n-core':
+        specifier: workspace:*
+        version: link:../core
       typescript:
         specifier: ^5.8.3
         version: 5.8.3

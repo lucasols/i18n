@@ -32,11 +32,11 @@
     "node": ">=21.5.0"
   },
   "dependencies": {
-    "@ls-stack/i18n-core": "workspace:*",
     "@ls-stack/utils": "^3.3.0",
     "type-flag": "^3.0.0"
   },
   "devDependencies": {
+    "@ls-stack/i18n-core": "workspace:*",
     "typescript": "^5.8.3"
   },
   "peerDependencies": {
