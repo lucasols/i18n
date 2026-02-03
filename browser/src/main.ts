@@ -43,6 +43,7 @@ export function i18nitialize<T extends string>(
   configure({
     locales: options.locales,
     persistenceKey: options.persistenceKey,
+    fallbackLocale: options.fallbackLocale,
     retryAttempts: options.retryAttempts,
     retryDelay: options.retryDelay,
     dev: options.dev,

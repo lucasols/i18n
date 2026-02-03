@@ -44,16 +44,19 @@ let loadingPromise: Promise<void> | null = null;
 let loadedLocaleId: string | null = null;
 let mockedRegionLocale: string | null = null;
 let clearIntlCacheFn: (() => void) | null = null;
+let fallbackLocale: string | null = null;
 
 export function configure<T extends string>(options: {
   locales: LocaleConfig<T>[];
   persistenceKey: string;
+  fallbackLocale: T;
   retryAttempts?: number;
   retryDelay?: number;
   dev?: boolean;
 }) {
   localesConfig = options.locales;
   persistenceKey = options.persistenceKey;
+  fallbackLocale = options.fallbackLocale;
   retryAttempts = options.retryAttempts ?? 3;
   retryDelay = options.retryDelay ?? 1000;
   devMode = options.dev ?? false;
@@ -139,8 +142,20 @@ export function getRegionLocale(): string {
   if (mockedRegionLocale) {
     return mockedRegionLocale;
   }
-  const fallback = state.regionLocale ?? state.activeLocale ?? 'en-US';
-  return fallback;
+
+  if (state.regionLocale) {
+    return state.regionLocale;
+  }
+
+  if (state.activeLocale) {
+    return state.activeLocale;
+  }
+
+  if (fallbackLocale) {
+    return inferRegionLocale(fallbackLocale);
+  }
+
+  return 'en-US';
 }
 
 export function registerClearIntlCache(fn: () => void): void {
@@ -285,6 +300,7 @@ export function resetState(): void {
   stateListeners.clear();
   cachedSnapshot = null;
   persistenceKey = null;
+  fallbackLocale = null;
   retryAttempts = 3;
   retryDelay = 1000;
   devMode = false;
