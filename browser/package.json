@@ -33,7 +33,7 @@
   },
   "dependencies": {
     "@ls-stack/i18n-core": "workspace:*",
-    "@ls-stack/utils": "^3.3.0",
+    "@ls-stack/utils": "^3.68.0",
     "type-flag": "^3.0.0"
   },
   "devDependencies": {

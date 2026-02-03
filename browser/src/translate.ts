@@ -4,14 +4,19 @@ import {
   selectPluralForm,
 } from '@ls-stack/i18n-core';
 import { createElement, Fragment, type ReactNode } from 'react';
-import { getState } from './state';
+import { assertDevScope, getState } from './state';
 
 export type JsxInterpolation = string | number | ReactNode;
+
+function replaceHashWithNum(fallback: string, num: number): string {
+  return fallback.replace('#', String(num));
+}
 
 export function __(
   strings: TemplateStringsArray,
   ...exprs: (string | number)[]
 ): string {
+  assertDevScope();
   const [hash, fallbackTranslation] = createHashAndFallbackTranslation(
     strings,
     exprs,
@@ -50,6 +55,7 @@ export function __p(num: number) {
     strings: TemplateStringsArray,
     ...exprs: (string | number)[]
   ): string => {
+    assertDevScope();
     const [hash, fallbackTranslation] = createHashAndFallbackTranslation(
       strings,
       exprs,
@@ -58,16 +64,13 @@ export function __p(num: number) {
     const { translations } = getState();
 
     if (!translations) {
-      return fallbackTranslation;
+      return replaceHashWithNum(fallbackTranslation, num);
     }
 
     const selectedTranslation = translations[hash];
 
     if (selectedTranslation === undefined) {
-      if (fallbackTranslation.startsWith('$')) {
-        return '…';
-      }
-      return fallbackTranslation;
+      return replaceHashWithNum(fallbackTranslation, num);
     }
 
     if (
@@ -78,7 +81,7 @@ export function __p(num: number) {
 
       if (translation === null) {
         console.error(`No plural configured for hash: ${hash}`);
-        return fallbackTranslation;
+        return replaceHashWithNum(fallbackTranslation, num);
       }
 
       return interpolate(translation, exprs) || fallbackTranslation;
@@ -124,6 +127,7 @@ export function __jsx(
   strings: TemplateStringsArray,
   ...exprs: JsxInterpolation[]
 ): ReactNode {
+  assertDevScope();
   const strExprs: (string | number)[] = exprs.map((e, i) =>
     typeof e === 'string' || typeof e === 'number' ? e : `{${i + 1}}`,
   );
@@ -166,6 +170,7 @@ export function __pjsx(num: number) {
     strings: TemplateStringsArray,
     ...exprs: JsxInterpolation[]
   ): ReactNode => {
+    assertDevScope();
     const strExprs: (string | number)[] = exprs.map((e, i) =>
       typeof e === 'string' || typeof e === 'number' ? e : `{${i + 1}}`,
     );
@@ -187,7 +192,7 @@ export function __pjsx(num: number) {
       if (fallbackTranslation.startsWith('$')) {
         return '…';
       }
-      return interpolateJsx(fallbackTranslation, exprs);
+      return interpolateJsx(replaceHashWithNum(fallbackTranslation, num), exprs);
     }
 
     if (
@@ -198,7 +203,7 @@ export function __pjsx(num: number) {
 
       if (translation === null) {
         console.error(`No plural configured for hash: ${hash}`);
-        return interpolateJsx(fallbackTranslation, exprs);
+        return interpolateJsx(replaceHashWithNum(fallbackTranslation, num), exprs);
       }
 
       return interpolateJsx(translation, exprs);

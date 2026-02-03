@@ -39,12 +39,16 @@ let persistenceKey: string | null = null;
 let retryAttempts = 3;
 let retryDelay = 1000;
 let devMode = false;
+let devEnvReady = false;
 let loadingLocaleId: string | null = null;
 let loadingPromise: Promise<void> | null = null;
 let loadedLocaleId: string | null = null;
 let loadRequestId = 0;
 let clearIntlCacheFn: (() => void) | null = null;
 let fallbackLocale: string | null = null;
+
+const invalidScopeErrorMessage =
+  'I18n error: Invalid usage of translation function, check if the translate function is called inside a React component scope';
 
 export function configure<T extends string>(options: {
   locales: LocaleConfig<T>[];
@@ -68,6 +72,16 @@ export function getState(): I18nState<string> {
 
 export function isDevMode(): boolean {
   return devMode;
+}
+
+export function devEnvIsReady(): void {
+  devEnvReady = true;
+}
+
+export function assertDevScope(): void {
+  if (devMode && !devEnvReady) {
+    throw new Error(invalidScopeErrorMessage);
+  }
 }
 
 export function getLocalesConfig(): LocaleConfig<string>[] {
@@ -334,6 +348,7 @@ export function resetState(): void {
   retryAttempts = 3;
   retryDelay = 1000;
   devMode = false;
+  devEnvReady = false;
   loadingLocaleId = null;
   loadingPromise = null;
   loadedLocaleId = null;

@@ -1,4 +1,11 @@
-import { getActiveLocaleConfig, getRegionLocale, getState } from './state';
+import { cachedGetter } from '@ls-stack/utils/cache';
+import { getCompositeKey } from '@ls-stack/utils/getCompositeKey';
+import {
+  assertDevScope,
+  getActiveLocaleConfig,
+  getRegionLocale,
+  getState,
+} from './state';
 
 export type DateTimeFormats = {
   weekday?: 'narrow' | 'short' | 'long';
@@ -67,6 +74,8 @@ const intlCache = {
   duration: new Map<string, IntlDurationFormat>(),
 };
 
+const cacheKeyMemo = new WeakMap<object, string>();
+
 export function clearIntlCache(): void {
   intlCache.date.clear();
   intlCache.number.clear();
@@ -77,7 +86,17 @@ export function clearIntlCache(): void {
 
 function getCacheKey(options: unknown): string {
   if (options === undefined) return '';
-  return JSON.stringify(options);
+
+  if (typeof options !== 'object' || options === null) {
+    return getCompositeKey(options);
+  }
+
+  const cached = cacheKeyMemo.get(options);
+  if (cached) return cached;
+
+  const key = getCompositeKey(options);
+  cacheKeyMemo.set(options, key);
+  return key;
 }
 
 function toDate(value: Date | string | number): Date {
@@ -90,10 +109,93 @@ function toDate(value: Date | string | number): Date {
   return new Date(value);
 }
 
+const hasRelativeTimeFormat = cachedGetter(
+  () =>
+    typeof Intl !== 'undefined'
+    && typeof Intl.RelativeTimeFormat !== 'undefined',
+);
+
+const hasListFormat = cachedGetter(
+  () => typeof Intl !== 'undefined' && typeof Intl.ListFormat !== 'undefined',
+);
+
+const hasDurationFormat = cachedGetter(
+  () => typeof Intl !== 'undefined' && typeof Intl.DurationFormat !== 'undefined',
+);
+
+const hasUnitStyleSupport = cachedGetter(() => {
+  if (typeof Intl === 'undefined' || typeof Intl.NumberFormat === 'undefined') {
+    return false;
+  }
+  try {
+    new Intl.NumberFormat('en', {
+      style: 'unit',
+      unit: 'second',
+      unitDisplay: 'long',
+    }).format(1);
+    return true;
+  } catch {
+    return false;
+  }
+});
+
+function formatRelativeFallback(
+  value: number,
+  unit: RelativeTimeUnits,
+  format?: RelativeTimeFormat,
+): string {
+  if (value === 0 && format?.numeric === 'auto') {
+    return 'now';
+  }
+
+  const absValue = Math.abs(value);
+  const unitLabel = absValue === 1 ? unit : `${unit}s`;
+
+  if (value > 0) {
+    return `in ${absValue} ${unitLabel}`;
+  }
+
+  return `${absValue} ${unitLabel} ago`;
+}
+
+function formatDurationFallback(
+  value: number,
+  unit: RelativeTimeUnits,
+  short: boolean | undefined,
+): string {
+  const absValue = Math.abs(value);
+  const unitLabels: Record<RelativeTimeUnits, string> = {
+    second: 'second',
+    minute: 'minute',
+    hour: 'hour',
+    day: 'day',
+    week: 'week',
+    month: 'month',
+    quarter: 'quarter',
+    year: 'year',
+  };
+
+  const shortLabels: Record<RelativeTimeUnits, string> = {
+    second: 'sec',
+    minute: 'min',
+    hour: 'hr',
+    day: 'day',
+    week: 'wk',
+    month: 'mo',
+    quarter: 'qtr',
+    year: 'yr',
+  };
+
+  const baseLabel = short ? shortLabels[unit] : unitLabels[unit];
+  const label = absValue === 1 ? baseLabel : `${baseLabel}s`;
+  return `${absValue} ${label}`;
+}
+
 export function __date(
   date: Date | string | number,
   format?: DateTimeFormats,
 ): string {
+  assertDevScope();
   const regionLocale = getRegionLocale();
   const cacheKey = `${regionLocale}:${getCacheKey(format)}`;
 
@@ -116,6 +218,7 @@ export function __num(
   num: number | null,
   options?: Intl.NumberFormatOptions,
 ): string {
+  assertDevScope();
   if (num === null) {
     return '';
   }
@@ -137,6 +240,7 @@ export function __currency(
   currencyCode?: string,
   options?: Omit<Intl.NumberFormatOptions, 'style' | 'currency'>,
 ): string {
+  assertDevScope();
   const regionLocale = getRegionLocale();
   const config = getActiveLocaleConfig();
   const currency = currencyCode ?? config?.currencyCode ?? 'USD';
@@ -209,14 +313,7 @@ export function __relativeTime(
   format?: RelativeTimeFormat,
   zeroFallback = -1,
 ): string {
-  const regionLocale = getRegionLocale();
-  const cacheKey = `${regionLocale}:${getCacheKey(format)}`;
-
-  let formatter = intlCache.relative.get(cacheKey);
-  if (!formatter) {
-    formatter = new Intl.RelativeTimeFormat(regionLocale, format);
-    intlCache.relative.set(cacheKey, formatter);
-  }
+  assertDevScope();
 
   let diff: number;
   let formatUnit: Intl.RelativeTimeFormatUnit;
@@ -266,6 +363,19 @@ export function __relativeTime(
     return 'Invalid Date';
   }
 
+  if (!hasRelativeTimeFormat.value) {
+    return formatRelativeFallback(diff, formatUnit as RelativeTimeUnits, format);
+  }
+
+  const regionLocale = getRegionLocale();
+  const cacheKey = `${regionLocale}:${getCacheKey(format)}`;
+
+  let formatter = intlCache.relative.get(cacheKey);
+  if (!formatter) {
+    formatter = new Intl.RelativeTimeFormat(regionLocale, format);
+    intlCache.relative.set(cacheKey, formatter);
+  }
+
   return formatter.format(diff, formatUnit);
 }
 
@@ -279,6 +389,7 @@ export function __relativeTimeFromNow(
     now?: Date;
   } = {},
 ): string {
+  assertDevScope();
   const {
     format,
     unit,
@@ -306,6 +417,7 @@ export function __timeDuration(value: {
   ms?: number;
   short?: boolean;
 }): { formatted: string; unit: RelativeTimeUnits } {
+  assertDevScope();
   const { translations } = getState();
 
   if (!translations) {
@@ -322,11 +434,17 @@ export function __timeDuration(value: {
   const formatUnit = autoUnit.unit;
   const diff = autoUnit.value;
 
-  const formatted = __num(Math.abs(diff), {
-    style: 'unit',
-    unit: formatUnit,
-    unitDisplay: value.short ? 'short' : 'long',
-  });
+  let formatted: string;
+
+  if (hasUnitStyleSupport.value) {
+    formatted = __num(Math.abs(diff), {
+      style: 'unit',
+      unit: formatUnit,
+      unitDisplay: value.short ? 'short' : 'long',
+    });
+  } else {
+    formatted = formatDurationFallback(diff, formatUnit, value.short);
+  }
 
   return {
     formatted,
@@ -341,6 +459,11 @@ type ListFormatOptions = {
 };
 
 export function __list(items: string[], options?: ListFormatOptions): string {
+  assertDevScope();
+  if (!hasListFormat.value) {
+    return items.join(', ');
+  }
+
   const regionLocale = getRegionLocale();
   const cacheKey = `${regionLocale}:${getCacheKey(options)}`;
 
@@ -409,6 +532,7 @@ export function __formattedTimeDuration(
     style?: 'narrow' | 'short' | 'long';
   } = {},
 ): string {
+  assertDevScope();
   const { maxUnitsToShow, style = 'narrow' } = options;
 
   const regionLocale = getRegionLocale();
@@ -449,7 +573,7 @@ export function __formattedTimeDuration(
   }
 
   try {
-    if (typeof Intl !== 'undefined' && Intl.DurationFormat) {
+    if (hasDurationFormat.value && Intl.DurationFormat) {
       const cacheKey = `${regionLocale}:${style}`;
       let formatter = intlCache.duration.get(cacheKey);
       if (!formatter) {

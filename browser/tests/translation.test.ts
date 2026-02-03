@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, test } from 'vitest';
+import { beforeEach, describe, expect, test, vi } from 'vitest';
 import { __, __p, resetState } from '../src/main';
 import { createTestController } from './test-utils';
 
@@ -66,6 +66,39 @@ describe('pluralization', () => {
     expect(__p(2)`# apples`).toBe('2 maçãs');
     expect(__p(0)`# apples`).toBe('nenhuma maçã');
     expect(__p(11)`# apples`).toBe('muitas maçãs');
+  });
+
+  test('missing plural translation falls back with # replacement', async () => {
+    const controller = createTestController({
+      locales: {
+        pt: {},
+      },
+    });
+
+    await controller.setLocale('pt');
+
+    expect(__p(2)`# apples`).toBe('2 apples');
+  });
+
+  test('missing plural form falls back with # replacement and logs error', async () => {
+    const controller = createTestController({
+      locales: {
+        pt: {
+          '# apples': {
+            one: 'uma maçã',
+          },
+        },
+      },
+    });
+
+    await controller.setLocale('pt');
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect(__p(2)`# apples`).toBe('2 apples');
+    expect(errorSpy).toHaveBeenCalled();
+
+    errorSpy.mockRestore();
   });
 });
 

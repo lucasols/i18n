@@ -72,8 +72,8 @@ importers:
         specifier: workspace:*
         version: link:../core
       '@ls-stack/utils':
-        specifier: ^3.3.0
-        version: 3.3.0
+        specifier: ^3.68.0
+        version: 3.68.0
       react:
         specifier: ^18.0.0 || ^19.0.0
         version: 19.2.4

@@ -2,6 +2,7 @@ import { useSyncExternalStore } from 'react';
 import { clearIntlCache } from './formatters';
 import {
   configure,
+  devEnvIsReady,
   findBestMatchingLocale,
   getLoadedLocaleSnapshot,
   getLocalesConfig,
@@ -20,6 +21,7 @@ export type I18nController<T extends string> = {
   getLoadedLocale: () => T | null;
   getRegionLocale: () => string;
   onLoad: (callback: (localeId: T) => void) => () => void;
+  devEnvIsReady: () => void;
   useLoadedLocale: () => {
     isLoading: { locale: T } | null;
     loadError: Error | null;
@@ -125,6 +127,7 @@ export function i18nitialize<T extends string>(
     getRegionLocale: () => getRegionLocale(),
     onLoad: (callback: (localeId: T) => void) =>
       subscribe(callback as (localeId: string) => void),
+    devEnvIsReady,
     useLoadedLocale: () => {
       const snapshot = useSyncExternalStore(
         subscribeToState,
