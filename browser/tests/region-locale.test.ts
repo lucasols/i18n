@@ -2,7 +2,7 @@
  * @vitest-environment happy-dom
  */
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { i18nitialize, resetState } from '../src/main';
+import { __date, __num, i18nitialize, resetState } from '../src/main';
 import { createTestController } from './test-utils';
 
 beforeEach(() => {
@@ -140,6 +140,58 @@ describe('getRegionLocale fallback chain', () => {
     });
 
     expect(controller.getRegionLocale()).toBe('en');
+  });
+});
+
+describe('formatters use inferred region locale', () => {
+  test('__date formats with en-US style (MM/DD/YY)', async () => {
+    vi.stubGlobal('navigator', {
+      languages: ['en-US', 'en'],
+    });
+
+    const controller = createTestController({
+      locales: { en: {} },
+    });
+    await controller.setLocale('en');
+
+    expect(controller.getRegionLocale()).toBe('en-US');
+
+    const date = new Date('2024-01-15T12:00:00Z');
+    const formatted = __date(date, { dateStyle: 'short' });
+    expect(formatted).toMatch(/1\/15\/24/);
+  });
+
+  test('__date formats with en-GB style (DD/MM/YYYY)', async () => {
+    vi.stubGlobal('navigator', {
+      languages: ['en-GB', 'en'],
+    });
+
+    const controller = createTestController({
+      locales: { en: {} },
+    });
+    await controller.setLocale('en');
+
+    expect(controller.getRegionLocale()).toBe('en-GB');
+
+    const date = new Date('2024-01-15T12:00:00Z');
+    const formatted = __date(date, { dateStyle: 'short' });
+    expect(formatted).toMatch(/15\/01\/2024/);
+  });
+
+  test('__num formats with region-specific decimal separator', async () => {
+    vi.stubGlobal('navigator', {
+      languages: ['pt-BR'],
+    });
+
+    const controller = createTestController({
+      locales: { pt: {} },
+    });
+    await controller.setLocale('pt');
+
+    expect(controller.getRegionLocale()).toBe('pt-BR');
+
+    const formatted = __num(1234.56);
+    expect(formatted).toMatch(/1\.234,56/);
   });
 });
 

@@ -1,11 +1,6 @@
 import { cachedGetter } from '@ls-stack/utils/cache';
 import { getCompositeKey } from '@ls-stack/utils/getCompositeKey';
-import {
-  assertDevScope,
-  getActiveLocaleConfig,
-  getRegionLocale,
-  getState,
-} from './state';
+import { assertDevScope, getRegionLocale, getState } from './state';
 
 export type DateTimeFormats = {
   weekday?: 'narrow' | 'short' | 'long';
@@ -229,33 +224,6 @@ export function __num(
   let formatter = intlCache.number.get(cacheKey);
   if (!formatter) {
     formatter = new Intl.NumberFormat(regionLocale, options);
-    intlCache.number.set(cacheKey, formatter);
-  }
-
-  return formatter.format(num);
-}
-
-export function __currency(
-  num: number,
-  currencyCode?: string,
-  options?: Omit<Intl.NumberFormatOptions, 'style' | 'currency'>,
-): string {
-  assertDevScope();
-  const regionLocale = getRegionLocale();
-  const config = getActiveLocaleConfig();
-  const currency = currencyCode ?? config?.currencyCode ?? 'USD';
-
-  const fullOptions: Intl.NumberFormatOptions = {
-    style: 'currency',
-    currency,
-    ...options,
-  };
-
-  const cacheKey = `${regionLocale}:${getCacheKey(fullOptions)}`;
-
-  let formatter = intlCache.number.get(cacheKey);
-  if (!formatter) {
-    formatter = new Intl.NumberFormat(regionLocale, fullOptions);
     intlCache.number.set(cacheKey, formatter);
   }
 

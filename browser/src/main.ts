@@ -154,7 +154,6 @@ export function i18nitialize<T extends string>(
 }
 
 export {
-  __currency,
   __date,
   __formattedTimeDuration,
   __list,

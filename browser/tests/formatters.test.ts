@@ -1,6 +1,5 @@
 import { beforeEach, expect, test, vi } from 'vitest';
 import {
-  __currency,
   __date,
   __formattedTimeDuration,
   __list,
@@ -66,16 +65,6 @@ test('__num returns empty string for null', async () => {
   
   const formatted = __num(null);
   expect(formatted).toBe('');
-});
-
-test('__currency formats currency', async () => {
-  const controller = createTestController({
-    locales: { en: {} },
-  });
-  await controller.setLocale('en');
-  
-  const formatted = __currency(1234.56, 'USD');
-  expect(formatted).toMatch(/\$1,234\.56/);
 });
 
 test('__relativeTime formats relative time with object API', async () => {
@@ -170,7 +159,7 @@ test('__formattedTimeDuration with maxUnitsToShow', async () => {
     locales: { en: {} },
   });
   await controller.setLocale('en');
-  
+
   const formatted = __formattedTimeDuration(
     { hours: 1, minutes: 30, seconds: 45 },
     { maxUnitsToShow: 2 },

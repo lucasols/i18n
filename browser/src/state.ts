@@ -6,8 +6,6 @@ export type LocaleLoader = () => Promise<{ default: Locale }>;
 export type LocaleConfig<T extends string = string> = {
   id: T;
   loader: LocaleLoader;
-  currencyCode?: string;
-  regionLocale?: string;
 };
 
 export type I18nState<T extends string = string> = {
@@ -86,11 +84,6 @@ export function assertDevScope(): void {
 
 export function getLocalesConfig(): LocaleConfig<string>[] {
   return localesConfig;
-}
-
-export function getActiveLocaleConfig(): LocaleConfig<string> | null {
-  if (!state.activeLocale) return null;
-  return localesConfig.find((l) => l.id === state.activeLocale) ?? null;
 }
 
 export function subscribe(callback: OnChangeCallback): () => void {
@@ -204,8 +197,7 @@ export async function setLocale(localeId: string): Promise<void> {
         clearIntlCacheFn();
       }
 
-      const regionLocale =
-        localeConfig.regionLocale ?? inferRegionLocale(localeId);
+      const regionLocale = inferRegionLocale(localeId);
 
       loadedLocaleId = localeId;
 
