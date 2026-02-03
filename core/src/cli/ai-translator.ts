@@ -28,6 +28,7 @@ export type TokenUsage = {
 
 export type TranslateBatchResult = {
   translations: Map<string, TranslationResult>;
+  model?: string;
   usage?: TokenUsage;
 };
 
@@ -171,6 +172,7 @@ export function createAITranslator(
 
       return {
         translations: parseGeneratedObject(output, contexts),
+        model: result.response.modelId,
         usage:
           inputTokens !== undefined &&
           outputTokens !== undefined &&

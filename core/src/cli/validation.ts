@@ -400,7 +400,7 @@ export async function validateTranslations(
             }
 
             try {
-              const { translations: aiResults, usage } =
+              const { translations: aiResults, model, usage } =
                 await aiTranslator.translateBatch(contexts);
 
               for (const hash of missingHashs) {
@@ -426,10 +426,14 @@ export async function validateTranslations(
                 }
               }
 
-              if (usage) {
-                log.info(
-                  `   Tokens: ${usage.inputTokens} in / ${usage.outputTokens} out (${usage.totalTokens} total)`,
-                );
+              if (model || usage) {
+                const parts: string[] = [];
+                if (model) parts.push(`Model: ${model}`);
+                if (usage)
+                  parts.push(
+                    `Tokens: ${usage.inputTokens} in / ${usage.outputTokens} out`,
+                  );
+                log.info(`   ${parts.join(' | ')}`);
               }
 
               useAIMarkers = false;
