@@ -1,6 +1,6 @@
-import type { DefaultLocalePluralTranslation } from '../types';
+import type { PluralTranslation } from '../types';
 
-type SimilarityTranslation = string | DefaultLocalePluralTranslation;
+type SimilarityTranslation = string | PluralTranslation;
 
 export type SimilarityMatch = {
   key: string;
