@@ -1,5 +1,5 @@
 import { validateTranslations } from '@ls-stack/i18n-core/cli';
-import { consoleFmt as c } from '@ls-stack/utils/consoleFmt';
+import { styleText } from 'node:util';
 import { typeFlag } from 'type-flag';
 
 const parsed = typeFlag({
@@ -44,7 +44,7 @@ const { hasError } = await validateTranslations({
   defaultLocale: parsed.flags.default,
   fix: parsed.flags.fix,
   noColor: parsed.flags['no-color'],
-  colorFn: (color: string, text: string) => c.color(color as 'red', text),
+  colorFn: (color, text) => styleText(color, text),
 });
 
 if (hasError) {

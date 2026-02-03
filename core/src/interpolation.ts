@@ -1,3 +1,5 @@
+const TRANSLATION_SPLITTER = /{(\d+)}/;
+
 export function interpolate(
   translation: string,
   exprs: (string | number)[],
@@ -7,7 +9,7 @@ export function interpolate(
   }
 
   let result = '';
-  const translationParts = translation.split(/{(\d+)}/);
+  const translationParts = translation.split(TRANSLATION_SPLITTER);
 
   for (let i = 0; i < translationParts.length; i++) {
     const part = translationParts[i];

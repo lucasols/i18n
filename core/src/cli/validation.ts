@@ -18,14 +18,14 @@ export type ValidationOptions = {
   defaultLocale?: string;
   fix?: boolean;
   noColor?: boolean;
-  colorFn?: (color: string, text: string) => string;
+  colorFn?: (color: 'red', text: string) => string;
 };
 
 const pluralTranslationSchema = rc_object({
   manyLimit: rc_number.optional(),
   zero: rc_string.optional(),
   one: rc_string.optional(),
-  '+2': rc_string.optional(),
+  '+2': rc_string,
   many: rc_string.optional(),
 });
 
@@ -113,7 +113,10 @@ export async function validateTranslations(
       translationFileSchema,
     );
     if (!fileParseResult.ok) {
-      console.error(`❌ ${basename} has invalid format:`, fileParseResult.errors);
+      console.error(
+        `❌ ${basename} has invalid format:`,
+        fileParseResult.errors,
+      );
       hasError = true;
       continue;
     }
