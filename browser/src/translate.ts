@@ -70,6 +70,9 @@ export function __p(num: number) {
     const selectedTranslation = translations[hash];
 
     if (selectedTranslation === undefined) {
+      if (fallbackTranslation.startsWith('$')) {
+        return '…';
+      }
       return replaceHashWithNum(fallbackTranslation, num);
     }
 

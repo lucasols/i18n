@@ -184,6 +184,105 @@ describe('__jsx $ prefix handling', () => {
     );
     expect(screen.getByTestId('result').textContent).toBe('…');
   });
+
+  test('returns actual translation when $ prefix translation exists', async () => {
+    const controller = createTestController({
+      locales: {
+        en: {
+          $terms_of_service: 'These are the terms of service...',
+          '$welcome {1}': 'Welcome to our platform, {1}!',
+        },
+      },
+    });
+
+    await controller.setLocale('en');
+
+    const { unmount } = render(
+      <div data-testid="result">{__jsx`$terms_of_service`}</div>,
+    );
+    expect(screen.getByTestId('result').textContent).toBe(
+      'These are the terms of service...',
+    );
+    unmount();
+
+    render(
+      <div data-testid="result">
+        {__jsx`$welcome ${<strong>John</strong>}`}
+      </div>,
+    );
+    expect(screen.getByTestId('result').textContent).toBe(
+      'Welcome to our platform, John!',
+    );
+    expect(screen.getByText('John').tagName).toBe('STRONG');
+  });
+});
+
+describe('__jsx translation variants (~~)', () => {
+  test('returns variant translation when found', async () => {
+    const controller = createTestController({
+      locales: {
+        pt: {
+          'hello {1}': 'olá {1}',
+          'hello {1}~~formal': 'olá {1}, como vai?',
+        },
+      },
+    });
+
+    await controller.setLocale('pt');
+
+    const { unmount } = render(
+      <div data-testid="result">{__jsx`hello ${<strong>Lucas</strong>}`}</div>,
+    );
+    expect(screen.getByTestId('result').textContent).toBe('olá Lucas');
+    unmount();
+
+    render(
+      <div data-testid="result">
+        {__jsx`hello ${<strong>Lucas</strong>}~~formal`}
+      </div>,
+    );
+    expect(screen.getByTestId('result').textContent).toBe('olá Lucas, como vai?');
+    expect(screen.getByText('Lucas').tagName).toBe('STRONG');
+  });
+
+  test('falls back to source string when variant missing', async () => {
+    const controller = createTestController({
+      locales: {
+        pt: {
+          'hello {1}': 'olá {1}',
+        },
+      },
+    });
+
+    await controller.setLocale('pt');
+
+    // Falls back to source string (hash) without variant suffix, not the base translation
+    render(
+      <div data-testid="result">
+        {__jsx`hello ${<strong>Lucas</strong>}~~formal`}
+      </div>,
+    );
+    expect(screen.getByTestId('result').textContent).toBe('hello Lucas');
+    expect(screen.getByText('Lucas').tagName).toBe('STRONG');
+  });
+
+  test('falls back to hash when base translation also missing', async () => {
+    const controller = createTestController({
+      locales: {
+        en: {},
+      },
+    });
+
+    await controller.setLocale('en');
+
+    render(
+      <div data-testid="result">
+        {__jsx`hello ${<strong>Lucas</strong>}~~formal`}
+      </div>,
+    );
+    expect(screen.getByTestId('result').textContent).toBe('hello Lucas');
+    expect(screen.getByText('Lucas').tagName).toBe('STRONG');
+  });
 });
 
 describe('__jsx error handling', () => {
@@ -346,6 +445,136 @@ describe('__pjsx $ prefix handling', () => {
 
     render(<div data-testid="result">{__pjsx(5)`$placeholder`}</div>);
     expect(screen.getByTestId('result').textContent).toBe('…');
+  });
+
+  test('returns actual plural translation when $ prefix translation exists', async () => {
+    const controller = createTestController({
+      locales: {
+        en: {
+          '$# large_items': {
+            zero: 'No items in your collection',
+            one: 'One item in your collection',
+            '+2': '# items in your collection',
+          },
+        },
+      },
+    });
+
+    await controller.setLocale('en');
+
+    const { unmount: unmount0 } = render(
+      <div data-testid="result">{__pjsx(0)`$# large_items`}</div>,
+    );
+    expect(screen.getByTestId('result').textContent).toBe(
+      'No items in your collection',
+    );
+    unmount0();
+
+    const { unmount: unmount1 } = render(
+      <div data-testid="result">{__pjsx(1)`$# large_items`}</div>,
+    );
+    expect(screen.getByTestId('result').textContent).toBe(
+      'One item in your collection',
+    );
+    unmount1();
+
+    render(<div data-testid="result">{__pjsx(5)`$# large_items`}</div>);
+    expect(screen.getByTestId('result').textContent).toBe(
+      '5 items in your collection',
+    );
+  });
+});
+
+describe('__pjsx translation variants (~~)', () => {
+  test('returns variant plural translation when found', async () => {
+    const controller = createTestController({
+      locales: {
+        en: {
+          '# items': {
+            one: '1 item',
+            '+2': '# items',
+          },
+          '# items~~verbose': {
+            one: 'You have exactly 1 item',
+            '+2': 'You have exactly # items',
+          },
+        },
+      },
+    });
+
+    await controller.setLocale('en');
+
+    const { unmount: unmount1 } = render(
+      <div data-testid="result">{__pjsx(1)`# items`}</div>,
+    );
+    expect(screen.getByTestId('result').textContent).toBe('1 item');
+    unmount1();
+
+    const { unmount: unmount5 } = render(
+      <div data-testid="result">{__pjsx(5)`# items`}</div>,
+    );
+    expect(screen.getByTestId('result').textContent).toBe('5 items');
+    unmount5();
+
+    const { unmount: unmountV1 } = render(
+      <div data-testid="result">{__pjsx(1)`# items~~verbose`}</div>,
+    );
+    expect(screen.getByTestId('result').textContent).toBe(
+      'You have exactly 1 item',
+    );
+    unmountV1();
+
+    render(<div data-testid="result">{__pjsx(5)`# items~~verbose`}</div>);
+    expect(screen.getByTestId('result').textContent).toBe(
+      'You have exactly 5 items',
+    );
+  });
+
+  test('variant plural with ReactNode interpolation', async () => {
+    const controller = createTestController({
+      locales: {
+        en: {
+          '# items for {1}': {
+            one: '1 item for {1}',
+            '+2': '# items for {1}',
+          },
+          '# items for {1}~~verbose': {
+            one: 'You have exactly 1 item for {1}',
+            '+2': 'You have exactly # items for {1}',
+          },
+        },
+      },
+    });
+
+    await controller.setLocale('en');
+
+    render(
+      <div data-testid="result">
+        {__pjsx(5)`# items for ${<strong>Lucas</strong>}~~verbose`}
+      </div>,
+    );
+    expect(screen.getByTestId('result').textContent).toBe(
+      'You have exactly 5 items for Lucas',
+    );
+    expect(screen.getByText('Lucas').tagName).toBe('STRONG');
+  });
+
+  test('variant plural falls back to base plural when variant missing', async () => {
+    const controller = createTestController({
+      locales: {
+        en: {
+          '# items': {
+            one: '1 item',
+            '+2': '# items',
+          },
+        },
+      },
+    });
+
+    await controller.setLocale('en');
+
+    render(<div data-testid="result">{__pjsx(5)`# items~~verbose`}</div>);
+    expect(screen.getByTestId('result').textContent).toBe('5 items');
   });
 });
 
