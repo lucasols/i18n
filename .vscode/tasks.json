@@ -9,9 +9,12 @@
       "script": "test"
     },
     {
-      "label": "bump version and deploy",
+      "label": "bump version and deploy browser package",
       "type": "shell",
       "command": "pnpm pre-publish && pnpm version ${input:version} && pnpm publish --access public",
+      "options": {
+        "cwd": "${workspaceFolder}/browser"
+      },
       "problemMatcher": []
     },
     {

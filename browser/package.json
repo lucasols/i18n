@@ -10,7 +10,8 @@
     "build:no-test": "tsdown",
     "build": "pnpm tsc && pnpm test && pnpm build:no-test",
     "test-cli:check": "pnpm build:no-test && node dist/cli.mjs --default en --config-dir ../cli-test/config --src-dir ../cli-test/src",
-    "test-cli:fix": "pnpm test-cli:check --fix"
+    "test-cli:fix": "pnpm test-cli:check --fix",
+    "pre-publish": "../scripts/check-if-is-sync.sh && pnpm build"
   },
   "files": [
     "dist"
@@ -47,15 +48,18 @@
   },
   "devDependencies": {
     "@testing-library/react": "^16.0.0",
-    "@types/react": "^18.2.0",
     "typescript": "^5.8.3"
   },
   "peerDependencies": {
     "react": "^18.0.0 || ^19.0.0",
+    "@types/react": "^18.0.0",
     "typescript": "^5.8.3"
   },
   "peerDependenciesMeta": {
     "react": {
+      "optional": true
+    },
+    "@types/react": {
       "optional": true
     }
   }
