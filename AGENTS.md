@@ -15,7 +15,6 @@ i18n/
 ├── browser/            # Browser/React i18n (@ls-stack/i18n)
 ├── cli-test/           # CLI test fixtures
 ├── pnpm-workspace.yaml
-├── vitest.workspace.ts
 └── eslint.config.js
 ```
 
@@ -25,8 +24,9 @@ i18n/
 # Run tests once (CI mode)
 pnpm test
 
-# Run a single test file
-pnpm vitest run server/tests/translation.test.ts
+# Run tests for a specific package
+pnpm --filter @ls-stack/server-i18n test
+pnpm --filter @ls-stack/i18n test
 
 # Lint (type-check + ESLint)
 pnpm lint
@@ -48,7 +48,8 @@ pnpm --filter @ls-stack/server-i18n test-cli:fix
 
 ## Testing
 
-- Tests should be run via `pnpm test` only, due to required environment variables.
+- Each package has its own `vitest.config.ts` (browser package uses `execArgv: ['--no-webstorage']` for happy-dom compatibility)
+- Run all tests via `pnpm test` or run package-specific tests via `pnpm --filter <package> test`
 - Always use realistic test scenarios and data, tests should reflect the real-world usage of the code.
   - Don't use unrealistic timelines
 

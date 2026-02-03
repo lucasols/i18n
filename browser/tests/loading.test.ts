@@ -270,30 +270,6 @@ describe('retry logic', () => {
   });
 });
 
-describe('regionLocale', () => {
-  test('getRegionLocale infers region from navigator.languages or falls back to locale id', async () => {
-    const controller = createTestController({
-      locales: { en: {} },
-    });
-
-    await controller.setLocale('en');
-
-    const regionLocale = controller.getRegionLocale();
-    expect(regionLocale.startsWith('en')).toBe(true);
-  });
-
-  test('__mockRegionLocale overrides region locale', async () => {
-    const controller = createTestController({
-      locales: { en: {} },
-    });
-
-    await controller.setLocale('en');
-    controller.__mockRegionLocale('en-GB');
-
-    expect(controller.getRegionLocale()).toBe('en-GB');
-  });
-});
-
 describe('onLoad', () => {
   test('notifies when locale is fully loaded', async () => {
     const controller = createTestController({

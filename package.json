@@ -5,8 +5,7 @@
   "version": "0.5.0",
   "license": "MIT",
   "scripts": {
-    "test": "NODE_OPTIONS='--no-webstorage' vitest run",
-    "test:ui": "NODE_OPTIONS='--no-webstorage' vitest --ui",
+    "test": "pnpm --filter @ls-stack/server-i18n test && pnpm --filter @ls-stack/i18n test",
     "lint": "pnpm tsc && pnpm eslint",
     "tsc": "pnpm -r tsc",
     "eslint": "CI=true eslint core/src/ server/src/ server/tests/ browser/src/ browser/tests/ --color --max-warnings=0",

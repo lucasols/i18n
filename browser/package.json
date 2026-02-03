@@ -4,6 +4,7 @@
   "version": "0.5.0",
   "license": "MIT",
   "scripts": {
+    "test": "vitest run",
     "tsc": "tsc -p tsconfig.prod.json",
     "build:no-test": "tsdown",
     "test-cli:check": "pnpm build:no-test && node dist/cli.mjs --default en --config-dir ../cli-test/config --src-dir ../cli-test/src",
