@@ -16,7 +16,7 @@ import {
   type I18nUsagesResult,
   type TranslationUsage,
 } from './findMissingTranslations';
-import { findSimilarTranslations } from './similarity';
+import { createSimilarityIndex, findSimilarFromIndex } from './similarity';
 
 export type FileSystem = {
   readFileSync: (path: string, encoding: 'utf-8') => string;
@@ -198,12 +198,12 @@ function hasInterpolationPlaceholder(hash: string): boolean {
 
 function getInterpolationPrefix(value: string): string {
   const match = value.match(/^(.*?)\{[0-9]+\}/);
-  return match ? match[1] ?? '' : '';
+  return match ? (match[1] ?? '') : '';
 }
 
 function getInterpolationSuffix(value: string): string {
   const match = value.match(/\{[0-9]+\}([^{]*)$/);
-  return match ? match[1] ?? '' : '';
+  return match ? (match[1] ?? '') : '';
 }
 
 function isPluralOnlyPlus2(value: Record<string, unknown>): boolean {
@@ -337,7 +337,9 @@ export async function validateTranslations(
   }
 
   const configPath =
-    path.isAbsolute(configDir) ? configDir : path.join(process.cwd(), configDir);
+    path.isAbsolute(configDir) ? configDir : (
+      path.join(process.cwd(), configDir)
+    );
 
   const allLocaleTranslations = new Map<
     string,
@@ -381,8 +383,7 @@ export async function validateTranslations(
 
     const maxIdSizeSeverity = getRuleSeverity('max-translation-id-size');
     if (maxIdSizeSeverity !== 'off' && hash.length > maxTranslationIdSize) {
-      const truncated =
-        hash.length > 40 ? `${hash.slice(0, 37)}...` : hash;
+      const truncated = hash.length > 40 ? `${hash.slice(0, 37)}...` : hash;
       validationIssues.push({
         rule: 'max-translation-id-size',
         hash,
@@ -561,8 +562,7 @@ export async function validateTranslations(
         const isNullTranslation = translationValue === null;
 
         const isUnneededDefaultHash =
-          isDefaultLocale &&
-          (isNullTranslation || translationValue === hash);
+          isDefaultLocale && (isNullTranslation || translationValue === hash);
 
         const isIncompleteNonDefaultTranslation =
           defaultLocale !== undefined && !isDefaultLocale && isNullTranslation;
@@ -689,11 +689,14 @@ export async function validateTranslations(
             }
 
             const contexts: TranslationContext[] = [];
+            const similarityIndex = createSimilarityIndex(
+              existingTranslationsMap,
+            );
             for (const hash of missingHashs) {
               const isPlural = allPluralTranslationHashs.has(hash);
-              const similarTranslations = findSimilarTranslations(
+              const similarTranslations = findSimilarFromIndex(
+                similarityIndex,
                 hash,
-                existingTranslationsMap,
               );
               contexts.push({
                 sourceKey: hash,
@@ -704,8 +707,11 @@ export async function validateTranslations(
             }
 
             try {
-              const { translations: aiResults, model, usage } =
-                await aiTranslator.translateBatch(contexts);
+              const {
+                translations: aiResults,
+                model,
+                usage,
+              } = await aiTranslator.translateBatch(contexts);
 
               for (const hash of missingHashs) {
                 const aiResult = aiResults.get(hash);

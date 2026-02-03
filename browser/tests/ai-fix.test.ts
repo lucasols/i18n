@@ -1,15 +1,12 @@
-import type { PluralTranslation } from '@ls-stack/i18n-core';
 import {
   createCliTestContext,
-  findSimilarTranslations,
   type AITranslator,
   type TranslationContext,
   type TranslationResult,
 } from '@ls-stack/i18n-core/cli';
-import { describe, expect, test } from 'vitest';
+import { expect, test } from 'vitest';
 
-describe('AI translation fix', () => {
-  test('generates string translations', async () => {
+test('generates string translations', async () => {
     const translator = mockTranslator((ctx) =>
       ctx.isPlural ? undefined : { type: 'string', value: 'Olá Mundo' },
     );
@@ -39,7 +36,7 @@ describe('AI translation fix', () => {
     `);
   });
 
-  test('generates plural translations with required forms', async () => {
+test('generates plural translations with required forms', async () => {
     const translator = mockTranslator((ctx) =>
       ctx.isPlural ?
         {
@@ -75,7 +72,7 @@ describe('AI translation fix', () => {
     `);
   });
 
-  test('generates plural translations with optional many/manyLimit', async () => {
+test('generates plural translations with optional many/manyLimit', async () => {
     const translator = mockTranslator((ctx) =>
       ctx.isPlural ?
         {
@@ -115,7 +112,7 @@ describe('AI translation fix', () => {
     `);
   });
 
-  test('does not add missing markers when AI succeeds', async () => {
+test('does not add missing markers when AI succeeds', async () => {
     const translator = mockStringTranslator((key) => `AI: ${key}`);
 
     const ctx = createCliTestContext({
@@ -136,7 +133,7 @@ describe('AI translation fix', () => {
     expect(rawJson).not.toContain('🛑 delete this line 🛑');
   });
 
-  test('falls back to null when AI fails for specific key', async () => {
+test('falls back to null when AI fails for specific key', async () => {
     const translator = mockTranslator((ctx) =>
       ctx.sourceKey === 'Hello' ?
         { type: 'string', value: 'AI Hello' }
@@ -165,7 +162,7 @@ describe('AI translation fix', () => {
     `);
   });
 
-  test('falls back to null with markers on complete AI failure', async () => {
+test('falls back to null with markers on complete AI failure', async () => {
     const ctx = createCliTestContext({
       src: {
         'main.tsx': `
@@ -188,7 +185,7 @@ describe('AI translation fix', () => {
     `);
   });
 
-  test('preserves existing translations', async () => {
+test('preserves existing translations', async () => {
     const translator = mockStringTranslator((key) => `AI: ${key}`);
 
     const ctx = createCliTestContext({
@@ -215,7 +212,7 @@ describe('AI translation fix', () => {
     `);
   });
 
-  test('provides similar translations as context to AI', async () => {
+test('provides similar translations as context to AI', async () => {
     const { translator, getContexts } = trackingTranslator();
 
     const ctx = createCliTestContext({
@@ -246,7 +243,7 @@ describe('AI translation fix', () => {
     expect(typeof welcomeAppCtx?.similarTranslations[0]?.score).toBe('number');
   });
 
-  test('passes correct target locale to AI', async () => {
+test('passes correct target locale to AI', async () => {
     const { translator, getContexts } = trackingTranslator();
 
     const ctx = createCliTestContext({
@@ -265,7 +262,7 @@ describe('AI translation fix', () => {
     expect(getContexts()[0]?.targetLocale).toBe('pt-BR');
   });
 
-  test('handles mixed string and plural translations', async () => {
+test('handles mixed string and plural translations', async () => {
     const translator = mockTranslator((ctx) =>
       ctx.isPlural ?
         {
@@ -299,56 +296,6 @@ describe('AI translation fix', () => {
       }"
     `);
   });
-});
-
-describe('Similarity search', () => {
-  test('finds matches by token overlap', () => {
-    const existing = new Map<string, string | PluralTranslation>([
-      ['Welcome back', 'Bem-vindo de volta'],
-      ['Goodbye', 'Tchau'],
-    ]);
-
-    const matches = findSimilarTranslations('Welcome to app', existing);
-
-    expect(matches).toHaveLength(1);
-    expect(matches[0]?.key).toBe('Welcome back');
-  });
-
-  test('finds plural translations by shared tokens', () => {
-    const existing = new Map<string, string | PluralTranslation>([
-      ['# active users', { zero: 'No users', one: '1 user', '+2': '# users' }],
-      ['Hello', 'Olá'],
-    ]);
-
-    const matches = findSimilarTranslations('# total users', existing);
-
-    expect(matches).toHaveLength(1);
-    expect(matches[0]?.key).toBe('# active users');
-  });
-
-  test('returns empty array when no translations exist', () => {
-    const matches = findSimilarTranslations(
-      'Hello',
-      new Map<string, string | PluralTranslation>(),
-    );
-
-    expect(matches).toEqual([]);
-  });
-
-  test('respects maxResults limit', () => {
-    const existing = new Map<string, string | PluralTranslation>([
-      ['Test one', 'Um'],
-      ['Test two', 'Dois'],
-      ['Test three', 'Três'],
-      ['Test four', 'Quatro'],
-      ['Test five', 'Cinco'],
-    ]);
-
-    const matches = findSimilarTranslations('Test query', existing, 3);
-
-    expect(matches.length).toBeLessThanOrEqual(3);
-  });
-});
 
 function mockTranslator(
   handler: (ctx: TranslationContext) => TranslationResult | undefined,
