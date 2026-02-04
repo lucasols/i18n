@@ -207,7 +207,7 @@ function getInterpolationSuffix(value: string): string {
 }
 
 function isIgnoredAffix(value: string): boolean {
-  return /^[\s?!.]*$/.test(value);
+  return /^[\s?!.()""'']*$/.test(value);
 }
 
 function isPluralOnlyPlus2(value: Record<string, unknown>): boolean {
