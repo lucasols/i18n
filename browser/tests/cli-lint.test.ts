@@ -627,23 +627,26 @@ describe('unnecessary-interpolated-affix', () => {
     );
   });
 
-  test('no error when affix is ? or !', async () => {
+  test('no error when affix is ? ! or .', async () => {
     const ctx = createCliTestContext({
       src: {
         'main.tsx': `
           import { __ } from '@ls-stack/i18n';
           export const t1 = __\`\${question}?\`;
           export const t2 = __\`\${exclaim}!\`;
+          export const t3 = __\`\${sentence}.\`;
         `,
       },
       config: {
         'en.json': JSON.stringify({
           '{1}?': '{1}?',
           '{1}!': '{1}!',
+          '{1}.': '{1}.',
         }),
         'pt.json': JSON.stringify({
           '{1}?': '{1}?',
           '{1}!': '{1}!',
+          '{1}.': '{1}.',
         }),
       },
     });
