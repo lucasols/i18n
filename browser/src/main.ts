@@ -1,3 +1,4 @@
+import { cachedGetter } from '@ls-stack/utils/cache';
 import { useSyncExternalStore } from 'react';
 import { clearIntlCache } from './formatters';
 import {
@@ -9,6 +10,7 @@ import {
   getPersistedLocale,
   getRegionLocale,
   getState,
+  inferRegionLocale,
   registerClearIntlCache,
   setLocale,
   subscribe,
@@ -18,9 +20,11 @@ import {
 
 export type I18nController<T extends string> = {
   setLocale: (localeId: T | 'auto') => Promise<boolean>;
+  setLocaleFromLang: (lang: string) => Promise<boolean>;
   getLoadedLocale: () => T | null;
   getRegionLocale: () => string;
-  getInitialLocale: () => T;
+  initialLocale: T;
+  getInitialRegionLocale: () => string;
   onLoad: (callback: (localeId: T) => void) => () => void;
   devEnvIsReady: () => void;
   useLoadedLocale: () => {
@@ -93,6 +97,9 @@ export function i18nitialize<T extends string>(
 
   const persistedLocale = getPersistedLocale() as T | null;
   const initialLocale: T = persistedLocale ?? resolvedFallback;
+  const cachedInitialRegionLocale = cachedGetter(() =>
+    inferRegionLocale(initialLocale),
+  );
 
   const resolveLocaleId = (localeId: T | 'auto'): T => {
     if (localeId === 'auto') {
@@ -129,7 +136,8 @@ export function i18nitialize<T extends string>(
       return state.activeLocale as T | null;
     },
     getRegionLocale: () => getRegionLocale(),
-    getInitialLocale: () => initialLocale,
+    initialLocale,
+    getInitialRegionLocale: () => cachedInitialRegionLocale.value,
     onLoad: (callback: (localeId: T) => void) =>
       subscribe(callback as (localeId: string) => void),
     devEnvIsReady,

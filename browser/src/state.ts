@@ -121,7 +121,7 @@ function updateState(newState: Partial<I18nState<string>>) {
   notifyStateListeners();
 }
 
-function inferRegionLocale(localeId: string): string {
+export function inferRegionLocale(localeId: string): string {
   if (localeId.includes('-')) {
     return localeId;
   }
