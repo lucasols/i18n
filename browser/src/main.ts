@@ -19,14 +19,47 @@ import {
 } from './state';
 
 export type I18nController<T extends string> = {
+  /**
+   * Sets the active locale. Pass 'auto' to detect from browser settings.
+   * @returns `true` if the locale was set successfully, `false` if it fell back to the fallback locale.
+   */
   setLocale: (localeId: T | 'auto') => Promise<boolean>;
+  /**
+   * Sets the nearest available locale from a language identifier (e.g., "en", "pt-BR").
+   * Matching priority: exact match → regional input matches base → base input matches regional.
+   * @returns `true` if a matching locale was found and set, `false` otherwise.
+   */
   setNearestLocale: (lang: string) => Promise<boolean>;
+  /**
+   * Returns the currently loaded locale, or `null` if no locale has been loaded yet.
+   */
   getLoadedLocale: () => T | null;
+  /**
+   * Returns the regional locale (e.g., "en-US") inferred from the loaded locale and browser settings.
+   */
   getRegionLocale: () => string;
+  /**
+   * The locale that was determined at initialization (from persistence or fallback).
+   * This value never changes after initialization.
+   */
   initialLocale: T;
+  /**
+   * Returns the regional locale inferred from `initialLocale` and browser settings.
+   * This value never changes after initialization.
+   */
   getInitialRegionLocale: () => string;
+  /**
+   * Registers a callback to be invoked whenever a locale finishes loading.
+   * @returns An unsubscribe function.
+   */
   onLoad: (callback: (localeId: T) => void) => () => void;
+  /**
+   * Signals that the dev environment is ready. Required in dev mode before translations work.
+   */
   devEnvIsReady: () => void;
+  /**
+   * React hook that returns the current loading state and loaded locale.
+   */
   useLoadedLocale: () => {
     isLoading: { locale: T } | null;
     loadError: Error | null;
