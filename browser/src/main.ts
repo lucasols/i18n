@@ -68,11 +68,32 @@ export type I18nController<T extends string> = {
 };
 
 export type I18nOptions<T extends string> = {
+  /**
+   * Array of locale configurations with id and loader.
+   */
   locales: LocaleConfig<T>[];
+  /**
+   * Key used to persist the selected locale in localStorage.
+   */
   persistenceKey: string;
+  /**
+   * The fallback locale to use when no persisted locale exists.
+   * Use `['auto', localeId]` to auto-detect from browser settings with a fallback.
+   */
   fallbackLocale: T | ['auto', T];
+  /**
+   * Number of retry attempts when loading a locale fails.
+   * @default 0
+   */
   retryAttempts?: number;
+  /**
+   * Delay in milliseconds between retry attempts.
+   * @default 0
+   */
   retryDelay?: number;
+  /**
+   * Enable dev mode. When true, translations are blocked until `devEnvIsReady()` is called.
+   */
   dev?: boolean;
 };
 
