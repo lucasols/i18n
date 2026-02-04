@@ -436,6 +436,76 @@ describe('getInitialRegionLocale', () => {
   });
 });
 
+describe('setLocaleFromLang', () => {
+  test('exact match sets locale and returns true', async () => {
+    const controller = createTestController({
+      locales: { en: {}, pt: {} },
+      fallbackLocale: 'en',
+    });
+
+    await controller.setLocale('en');
+
+    const result = await controller.setLocaleFromLang('pt');
+
+    expect(result).toBe(true);
+    expect(controller.getLoadedLocale()).toBe('pt');
+  });
+
+  test('regional input matches base locale', async () => {
+    const controller = createTestController({
+      locales: { en: {}, pt: {} },
+      fallbackLocale: 'en',
+    });
+
+    await controller.setLocale('en');
+
+    const result = await controller.setLocaleFromLang('pt-BR');
+
+    expect(result).toBe(true);
+    expect(controller.getLoadedLocale()).toBe('pt');
+  });
+
+  test('base input matches regional locale', async () => {
+    const controller = createTestController({
+      locales: { 'en-US': {}, 'pt-BR': {} },
+      fallbackLocale: 'en-US',
+    });
+
+    await controller.setLocale('en-US');
+
+    const result = await controller.setLocaleFromLang('pt');
+
+    expect(result).toBe(true);
+    expect(controller.getLoadedLocale()).toBe('pt-BR');
+  });
+
+  test('no match returns false', async () => {
+    const controller = createTestController({
+      locales: { en: {}, pt: {} },
+      fallbackLocale: 'en',
+    });
+
+    await controller.setLocale('en');
+
+    const result = await controller.setLocaleFromLang('fr');
+
+    expect(result).toBe(false);
+  });
+
+  test('no match does not change locale', async () => {
+    const controller = createTestController({
+      locales: { en: {}, pt: {} },
+      fallbackLocale: 'en',
+    });
+
+    await controller.setLocale('pt');
+
+    await controller.setLocaleFromLang('fr');
+
+    expect(controller.getLoadedLocale()).toBe('pt');
+  });
+});
+
 describe('persistenceKey', () => {
   test('persists locale to localStorage after successful load', async () => {
     const key = 'test-persistence-save';

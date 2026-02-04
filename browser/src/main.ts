@@ -113,6 +113,30 @@ export function i18nitialize<T extends string>(
     return localeId;
   };
 
+  const findLocaleFromLang = (lang: string): T | null => {
+    // Priority 1: Exact match (e.g., 'en-US' matches 'en-US')
+    if (availableIds.includes(lang as T)) {
+      return lang as T;
+    }
+
+    // Priority 2: Input has region, match base (e.g., 'en-US' input matches 'en' config)
+    const langBase = lang.split('-')[0];
+    if (langBase && availableIds.includes(langBase as T)) {
+      return langBase as T;
+    }
+
+    // Priority 3: Input is base, match regional (e.g., 'en' input matches 'en-US' config)
+    const matchingLocale = availableIds.find((id) => {
+      const localeBase = id.split('-')[0];
+      return localeBase === langBase;
+    });
+    if (matchingLocale) {
+      return matchingLocale;
+    }
+
+    return null;
+  };
+
   const setLocaleWithFallback = async (
     localeId: T | 'auto',
   ): Promise<boolean> => {
@@ -131,6 +155,14 @@ export function i18nitialize<T extends string>(
 
   const controller: I18nController<T> = {
     setLocale: setLocaleWithFallback,
+    setLocaleFromLang: async (lang: string): Promise<boolean> => {
+      const matchedLocale = findLocaleFromLang(lang);
+      if (matchedLocale) {
+        await setLocale(matchedLocale);
+        return true;
+      }
+      return false;
+    },
     getLoadedLocale: () => {
       const state = getState();
       return state.activeLocale as T | null;
