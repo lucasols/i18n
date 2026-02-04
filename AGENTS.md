@@ -42,6 +42,13 @@ pnpm --filter @ls-stack/server-i18n test-cli:check
 pnpm --filter @ls-stack/server-i18n test-cli:fix
 ```
 
+## Feature implementation
+
+After implementing a feature:
+
+- Update the README.md file to reflect the new feature.
+- Add tests to cover the new feature.
+
 ## Focus on performance
 
 - Code should be optimized for performance and memory efficiency, make sure tests are testing performance qualities and implementations are optimized for performance.

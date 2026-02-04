@@ -1,6 +1,7 @@
 import type { LanguageModel } from 'ai';
 import { z } from 'zod';
 import type { PluralTranslation } from '../types';
+import { logAiGeneration } from './ai-logger';
 import type { SimilarityMatch } from './similarity';
 
 type AnyLanguageModel =
@@ -158,37 +159,81 @@ export function createAITranslator(
 
       const prompt = buildPrompt(contexts);
       const schema = buildTranslationsSchema(contexts);
+      const startTime = Date.now();
 
-      const result = await ai.generateText({
-        model: languageModel as LanguageModel,
-        output: ai.Output.object({
-          schema,
-        }),
-        prompt,
-      });
+      try {
+        const result = await ai.generateText({
+          model: languageModel as LanguageModel,
+          output: ai.Output.object({
+            schema,
+          }),
+          prompt,
+        });
 
-      const output = result.output as
-        | Record<string, string | z.infer<typeof pluralTranslationSchema>>
-        | undefined;
+        const output = result.output as
+          | Record<string, string | z.infer<typeof pluralTranslationSchema>>
+          | undefined;
 
-      if (!output) {
-        return { translations: new Map() };
+        if (!output) {
+          logAiGeneration({
+            timestamp: new Date().toISOString(),
+            provider,
+            model: result.response.modelId,
+            prompt,
+            contexts,
+            results: [],
+            usage: undefined,
+            durationMs: Date.now() - startTime,
+            error: undefined,
+          });
+          return { translations: new Map() };
+        }
+
+        const { inputTokens, outputTokens, totalTokens } = result.usage;
+
+        const usage =
+          inputTokens !== undefined &&
+          outputTokens !== undefined &&
+          totalTokens !== undefined
+            ? { inputTokens, outputTokens, totalTokens }
+            : undefined;
+
+        const translations = parseGeneratedObject(output, contexts);
+
+        logAiGeneration({
+          timestamp: new Date().toISOString(),
+          provider,
+          model: result.response.modelId,
+          prompt,
+          contexts,
+          results: contexts.map((ctx) => ({
+            sourceKey: ctx.sourceKey,
+            result: translations.get(ctx.sourceKey),
+          })),
+          usage,
+          durationMs: Date.now() - startTime,
+          error: undefined,
+        });
+
+        return {
+          translations,
+          model: result.response.modelId,
+          usage,
+        };
+      } catch (err) {
+        logAiGeneration({
+          timestamp: new Date().toISOString(),
+          provider,
+          model: undefined,
+          prompt,
+          contexts,
+          results: [],
+          usage: undefined,
+          durationMs: Date.now() - startTime,
+          error: err instanceof Error ? err.message : String(err),
+        });
+        throw err;
       }
-
-      const { inputTokens, outputTokens, totalTokens } = result.usage;
-
-      return {
-        translations: parseGeneratedObject(output, contexts),
-        model: result.response.modelId,
-        usage:
-          (
-            inputTokens !== undefined &&
-            outputTokens !== undefined &&
-            totalTokens !== undefined
-          ) ?
-            { inputTokens, outputTokens, totalTokens }
-          : undefined,
-      };
     },
   };
 }
