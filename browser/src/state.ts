@@ -143,10 +143,6 @@ export function getRegionLocale(): string {
     return state.regionLocale;
   }
 
-  if (state.activeLocale) {
-    return state.activeLocale;
-  }
-
   if (fallbackLocale) {
     return inferRegionLocale(fallbackLocale);
   }
