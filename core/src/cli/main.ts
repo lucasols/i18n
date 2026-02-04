@@ -7,6 +7,7 @@ export {
   type TranslationContext,
   type TranslationResult,
 } from './ai-translator';
+export { loadEnvFiles } from './loadEnvFiles';
 export {
   getI18nUsagesInCode,
   type I18nUsagesResult,

@@ -24,6 +24,7 @@
     "@ai-sdk/openai": "^3.0.25",
     "@ai-sdk/provider": "^3.0.7",
     "ai": "^6.0.69",
+    "dotenv": "^17.2.3",
     "readdirp": "^5.0.0",
     "runcheck": "^1.15.0",
     "zod": "^3.24.0"

@@ -1,5 +1,6 @@
 import {
   createAITranslator,
+  loadEnvFiles,
   validateTranslations,
   type AIProvider,
   type AITranslator,
@@ -8,6 +9,8 @@ import {
 } from '@ls-stack/i18n-core/cli';
 import { styleText } from 'node:util';
 import { typeFlag } from 'type-flag';
+
+loadEnvFiles();
 
 const parsed = typeFlag({
   'config-dir': {
