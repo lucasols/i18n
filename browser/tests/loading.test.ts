@@ -436,7 +436,7 @@ describe('getInitialRegionLocale', () => {
   });
 });
 
-describe('setLocaleFromLang', () => {
+describe('setNearestLocale', () => {
   test('exact match sets locale and returns true', async () => {
     const controller = createTestController({
       locales: { en: {}, pt: {} },
@@ -445,7 +445,7 @@ describe('setLocaleFromLang', () => {
 
     await controller.setLocale('en');
 
-    const result = await controller.setLocaleFromLang('pt');
+    const result = await controller.setNearestLocale('pt');
 
     expect(result).toBe(true);
     expect(controller.getLoadedLocale()).toBe('pt');
@@ -459,7 +459,7 @@ describe('setLocaleFromLang', () => {
 
     await controller.setLocale('en');
 
-    const result = await controller.setLocaleFromLang('pt-BR');
+    const result = await controller.setNearestLocale('pt-BR');
 
     expect(result).toBe(true);
     expect(controller.getLoadedLocale()).toBe('pt');
@@ -473,7 +473,7 @@ describe('setLocaleFromLang', () => {
 
     await controller.setLocale('en-US');
 
-    const result = await controller.setLocaleFromLang('pt');
+    const result = await controller.setNearestLocale('pt');
 
     expect(result).toBe(true);
     expect(controller.getLoadedLocale()).toBe('pt-BR');
@@ -487,7 +487,7 @@ describe('setLocaleFromLang', () => {
 
     await controller.setLocale('en');
 
-    const result = await controller.setLocaleFromLang('fr');
+    const result = await controller.setNearestLocale('fr');
 
     expect(result).toBe(false);
   });
@@ -500,7 +500,7 @@ describe('setLocaleFromLang', () => {
 
     await controller.setLocale('pt');
 
-    await controller.setLocaleFromLang('fr');
+    await controller.setNearestLocale('fr');
 
     expect(controller.getLoadedLocale()).toBe('pt');
   });

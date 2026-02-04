@@ -20,7 +20,7 @@ import {
 
 export type I18nController<T extends string> = {
   setLocale: (localeId: T | 'auto') => Promise<boolean>;
-  setLocaleFromLang: (lang: string) => Promise<boolean>;
+  setNearestLocale: (lang: string) => Promise<boolean>;
   getLoadedLocale: () => T | null;
   getRegionLocale: () => string;
   initialLocale: T;
@@ -155,7 +155,7 @@ export function i18nitialize<T extends string>(
 
   const controller: I18nController<T> = {
     setLocale: setLocaleWithFallback,
-    setLocaleFromLang: async (lang: string): Promise<boolean> => {
+    setNearestLocale: async (lang: string): Promise<boolean> => {
       const matchedLocale = findLocaleFromLang(lang);
       if (matchedLocale) {
         await setLocale(matchedLocale);
