@@ -20,6 +20,7 @@ export type I18nController<T extends string> = {
   setLocale: (localeId: T | 'auto') => Promise<boolean>;
   getLoadedLocale: () => T | null;
   getRegionLocale: () => string;
+  getInitialLocale: () => T;
   onLoad: (callback: (localeId: T) => void) => () => void;
   devEnvIsReady: () => void;
   useLoadedLocale: () => {
@@ -71,7 +72,7 @@ export function i18nitialize<T extends string>(
     return null;
   };
 
-  let resolvedFallback: T | null;
+  let resolvedFallback: T;
   if (Array.isArray(options.fallbackLocale)) {
     const autoLocale = findBestMatchingLocaleFromOptions();
     resolvedFallback = autoLocale ?? options.fallbackLocale[1];
@@ -89,6 +90,9 @@ export function i18nitialize<T extends string>(
   });
 
   registerClearIntlCache(clearIntlCache);
+
+  const persistedLocale = getPersistedLocale() as T | null;
+  const initialLocale: T = persistedLocale ?? resolvedFallback;
 
   const resolveLocaleId = (localeId: T | 'auto'): T => {
     if (localeId === 'auto') {
@@ -125,6 +129,7 @@ export function i18nitialize<T extends string>(
       return state.activeLocale as T | null;
     },
     getRegionLocale: () => getRegionLocale(),
+    getInitialLocale: () => initialLocale,
     onLoad: (callback: (localeId: T) => void) =>
       subscribe(callback as (localeId: string) => void),
     devEnvIsReady,
@@ -141,14 +146,9 @@ export function i18nitialize<T extends string>(
     },
   };
 
-  const persistedLocale = getPersistedLocale() as T | null;
-  const initialLocale = persistedLocale ?? resolvedFallback;
-
-  if (initialLocale) {
-    setLocaleWithFallback(initialLocale).catch((error) => {
-      console.error('Failed to load initial locale:', error);
-    });
-  }
+  setLocaleWithFallback(initialLocale).catch((error) => {
+    console.error('Failed to load initial locale:', error);
+  });
 
   return controller;
 }

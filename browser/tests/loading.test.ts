@@ -312,6 +312,67 @@ describe('onLoad', () => {
   });
 });
 
+describe('getInitialLocale', () => {
+  test('returns fallback locale when no persisted locale', () => {
+    const controller = createTestController({
+      locales: { en: {}, pt: {} },
+      fallbackLocale: 'en',
+    });
+
+    expect(controller.getInitialLocale()).toBe('en');
+  });
+
+  test('returns persisted locale when available', () => {
+    const key = 'test-initial-locale';
+    localStorage.setItem(key, 'pt');
+
+    const controller = createTestController({
+      locales: { en: {}, pt: {} },
+      fallbackLocale: 'en',
+      persistenceKey: key,
+    });
+
+    expect(controller.getInitialLocale()).toBe('pt');
+  });
+
+  test('returns same value regardless of when called', async () => {
+    const key = 'test-initial-stable';
+    localStorage.setItem(key, 'pt');
+
+    const controller = createTestController({
+      locales: { en: {}, pt: {} },
+      fallbackLocale: 'en',
+      persistenceKey: key,
+    });
+
+    expect(controller.getInitialLocale()).toBe('pt');
+
+    await controller.setLocale('en');
+
+    expect(controller.getInitialLocale()).toBe('pt');
+  });
+
+  test('returns fallback when using auto fallback and no browser match', () => {
+    const controller = createTestController({
+      locales: { en: {}, pt: {} },
+      fallbackLocale: ['auto', 'en'],
+    });
+
+    expect(controller.getInitialLocale()).toBe('en');
+  });
+
+  test('returns auto-detected browser locale when using auto fallback', () => {
+    vi.stubGlobal('navigator', { languages: ['pt-BR', 'en-US'] });
+
+    const controller = createTestController({
+      locales: { en: {}, pt: {} },
+      fallbackLocale: ['auto', 'en'],
+    });
+
+    expect(controller.getInitialLocale()).toBe('pt');
+  });
+});
+
 describe('persistenceKey', () => {
   test('persists locale to localStorage after successful load', async () => {
     const key = 'test-persistence-save';

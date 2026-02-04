@@ -6,6 +6,8 @@ import {
 import { createElement, Fragment, type ReactNode } from 'react';
 import { assertDevScope, getState } from './state';
 
+const JSX_INTERPOLATION_SPLITTER = /{(\d+)}/;
+
 export type JsxInterpolation = string | number | ReactNode;
 
 function replaceHashWithNum(fallback: string, num: number): string {
@@ -109,7 +111,7 @@ function interpolateJsx(
   }
 
   const parts: ReactNode[] = [];
-  const translationParts = translation.split(/{(\d+)}/);
+  const translationParts = translation.split(JSX_INTERPOLATION_SPLITTER);
 
   for (let i = 0; i < translationParts.length; i++) {
     const part = translationParts[i];
