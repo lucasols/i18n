@@ -7,8 +7,8 @@
   },
   "dependencies": {
     "@ls-stack/i18n": "workspace:*",
-    "i18n-published": "npm:@ls-stack/i18n@latest",
+    "i18n-published": "npm:@ls-stack/i18n@^0.11.0",
     "mitata": "^1.0.34",
-    "react": "^18.0.0"
+    "react": "^19.2.4"
   }
 }

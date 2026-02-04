@@ -3,3 +3,17 @@ packages:
   - 'server'
   - 'browser'
   - 'bench'
+
+catalog:
+  typescript: ^5.9.3
+  '@ls-stack/utils': ^3.68.0
+  '@types/node': ^25.2.0
+  '@ai-sdk/google': ^3.0.20
+  '@ai-sdk/openai': ^3.0.25
+  '@ai-sdk/provider': ^3.0.7
+  ai: ^6.0.69
+  zod: ^4.3.6
+  readdirp: ^5.0.0
+  runcheck: ^1.15.0
+  type-flag: ^4.0.3
+  '@testing-library/react': ^16.3.2

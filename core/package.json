@@ -12,7 +12,7 @@
     "./cli": "./src/cli/main.ts"
   },
   "devDependencies": {
-    "typescript": "^5.8.3"
+    "typescript": "catalog:"
   },
   "peerDependencies": {
     "@ls-stack/utils": "^3.68.0",
@@ -20,13 +20,13 @@
     "typescript": "^5.8.3"
   },
   "dependencies": {
-    "@ai-sdk/google": "^3.0.20",
-    "@ai-sdk/openai": "^3.0.25",
-    "@ai-sdk/provider": "^3.0.7",
-    "ai": "^6.0.69",
+    "@ai-sdk/google": "catalog:",
+    "@ai-sdk/openai": "catalog:",
+    "@ai-sdk/provider": "catalog:",
+    "ai": "catalog:",
     "dotenv": "^17.2.3",
-    "readdirp": "^5.0.0",
-    "runcheck": "^1.15.0",
-    "zod": "^3.24.0"
+    "readdirp": "catalog:",
+    "runcheck": "catalog:",
+    "zod": "catalog:"
   }
 }
