@@ -97,13 +97,13 @@ summary(() => {
         [0]: getName,
         bench: (n: string) => do_not_optimize(published.__`Hello ${n}`),
       };
-    }).baseline();
+    });
     bench('local', function* () {
       yield {
         [0]: getName,
         bench: (n: string) => do_not_optimize(local.__`Hello ${n}`),
       };
-    });
+    }).baseline();
   });
 
   group('__ miss', () => {
@@ -112,13 +112,13 @@ summary(() => {
         [0]: getName,
         bench: (n: string) => do_not_optimize(published.__`Missing ${n}`),
       };
-    }).baseline();
+    });
     bench('local', function* () {
       yield {
         [0]: getName,
         bench: (n: string) => do_not_optimize(local.__`Missing ${n}`),
       };
-    });
+    }).baseline();
   });
 
   group('__p hit', () => {
@@ -128,14 +128,14 @@ summary(() => {
         bench: (c: number) =>
           do_not_optimize(published.__p(c)`You have ${c} items`),
       };
-    }).baseline();
+    });
     bench('local', function* () {
       yield {
         [0]: getCount,
         bench: (c: number) =>
           do_not_optimize(local.__p(c)`You have ${c} items`),
       };
-    });
+    }).baseline();
   });
 
   group('chat menu render', () => {
@@ -165,7 +165,7 @@ summary(() => {
           do_not_optimize(published.__p(c)`You have ${c} items`);
         },
       };
-    }).baseline();
+    });
     bench('local', function* () {
       yield {
         [0]: getCount,
@@ -192,7 +192,7 @@ summary(() => {
           do_not_optimize(local.__p(c)`You have ${c} items`);
         },
       };
-    });
+    }).baseline();
   });
 
   group('__jsx hit', () => {
@@ -202,14 +202,14 @@ summary(() => {
         bench: (jsx: React.ReactElement) =>
           do_not_optimize(published.__jsx`Hello ${jsx}`),
       };
-    }).baseline();
+    });
     bench('local', function* () {
       yield {
         [0]: getJsxNode,
         bench: (jsx: React.ReactElement) =>
           do_not_optimize(local.__jsx`Hello ${jsx}`),
       };
-    });
+    }).baseline();
   });
 
   group('__pjsx hit', () => {
@@ -220,7 +220,7 @@ summary(() => {
         bench: (c: number, jsx: React.ReactElement) =>
           do_not_optimize(published.__pjsx(c)`You have ${jsx} items`),
       };
-    }).baseline();
+    });
     bench('local', function* () {
       yield {
         [0]: getCount,
@@ -228,7 +228,7 @@ summary(() => {
         bench: (c: number, jsx: React.ReactElement) =>
           do_not_optimize(local.__pjsx(c)`You have ${jsx} items`),
       };
-    });
+    }).baseline();
   });
 
   group('__date', () => {
@@ -237,13 +237,13 @@ summary(() => {
         [0]: getDate,
         bench: (d: Date) => do_not_optimize(published.__date(d)),
       };
-    }).baseline();
+    });
     bench('local', function* () {
       yield {
         [0]: getDate,
         bench: (d: Date) => do_not_optimize(local.__date(d)),
       };
-    });
+    }).baseline();
   });
 
   group('__num', () => {
@@ -252,13 +252,13 @@ summary(() => {
         [0]: getNumber,
         bench: (n: number) => do_not_optimize(published.__num(n)),
       };
-    }).baseline();
+    });
     bench('local', function* () {
       yield {
         [0]: getNumber,
         bench: (n: number) => do_not_optimize(local.__num(n)),
       };
-    });
+    }).baseline();
   });
 
   group('__relativeTime', () => {
@@ -268,14 +268,14 @@ summary(() => {
         bench: (r: { from: Date; to: Date }) =>
           do_not_optimize(published.__relativeTime(r)),
       };
-    }).baseline();
+    });
     bench('local', function* () {
       yield {
         [0]: getRelativeValue,
         bench: (r: { from: Date; to: Date }) =>
           do_not_optimize(local.__relativeTime(r)),
       };
-    });
+    }).baseline();
   });
 
   group('__list', () => {
@@ -284,13 +284,13 @@ summary(() => {
         [0]: getList,
         bench: (l: string[]) => do_not_optimize(published.__list(l)),
       };
-    }).baseline();
+    });
     bench('local', function* () {
       yield {
         [0]: getList,
         bench: (l: string[]) => do_not_optimize(local.__list(l)),
       };
-    });
+    }).baseline();
   });
 
   group('__formattedTimeDuration', () => {
@@ -300,14 +300,14 @@ summary(() => {
         bench: (d: { hours: number; minutes: number; seconds: number }) =>
           do_not_optimize(published.__formattedTimeDuration(d)),
       };
-    }).baseline();
+    });
     bench('local', function* () {
       yield {
         [0]: getDurationObj,
         bench: (d: { hours: number; minutes: number; seconds: number }) =>
           do_not_optimize(local.__formattedTimeDuration(d)),
       };
-    });
+    }).baseline();
   });
 
   group('__timeDuration', () => {
