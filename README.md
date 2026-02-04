@@ -420,13 +420,50 @@ ls-stack-i18n --config-dir ./locales --src-dir ./src --default en --fix
 
 ### Options
 
-| Option         | Description                    |
-| -------------- | ------------------------------ |
-| `--config-dir` | Path to translation JSON files |
-| `--src-dir`    | Path to source files to scan   |
-| `--default`    | Default locale ID              |
-| `--fix`        | Auto-add missing translations  |
-| `--no-color`   | Disable colored output         |
+| Option           | Alias | Description                                        |
+| ---------------- | ----- | -------------------------------------------------- |
+| `--config-dir`   | `-c`  | Path to translation JSON files (required)          |
+| `--src-dir`      | `-r`  | Path to source files to scan (required)            |
+| `--default`      | `-d`  | Default locale ID                                  |
+| `--fix`          | `-f`  | Auto-add missing translations                      |
+| `--ai`           |       | AI provider for auto-translation (`google`/`openai`) |
+| `--max-id-size`  |       | Maximum translation ID size (default: 80)          |
+| `--disable-rule` |       | Disable a validation rule (can be used multiple times) |
+| `--warn-rule`    |       | Set a validation rule to warning (can be used multiple times) |
+| `--no-color`     |       | Disable colored output                             |
+
+### Validation Rules
+
+The CLI validates translations and reports errors for common issues. Available rules:
+
+| Rule                             | Description                                    |
+| -------------------------------- | ---------------------------------------------- |
+| `constant-translation`           | Translation has no interpolation placeholders  |
+| `unnecessary-plural`             | Plural form used without plural placeholder    |
+| `jsx-without-interpolation`      | JSX translation without interpolation          |
+| `jsx-without-jsx-nodes`          | JSX function used without JSX nodes            |
+| `unnecessary-interpolated-affix` | Interpolation at start/end could be simplified |
+| `max-translation-id-size`        | Translation ID exceeds max size                |
+
+```bash
+# Disable a rule
+ls-stack-i18n -c ./locales -r ./src --disable-rule constant-translation
+
+# Set a rule to warning instead of error
+ls-stack-i18n -c ./locales -r ./src --warn-rule unnecessary-plural
+```
+
+### AI Auto-Translation
+
+The CLI can automatically translate missing translations using AI. Set the provider via `--ai` flag or `I18N_AI_AUTO_TRANSLATE` environment variable.
+
+```bash
+# Using Google AI
+GOOGLE_GENERATIVE_AI_API_KEY=your-key ls-stack-i18n -c ./locales -r ./src --fix --ai google
+
+# Using OpenAI
+OPENAI_API_KEY=your-key ls-stack-i18n -c ./locales -r ./src --fix --ai openai
+```
 
 ## License
 
