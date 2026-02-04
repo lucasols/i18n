@@ -102,6 +102,16 @@ function isMarkerKey(key: string): boolean {
   );
 }
 
+function findMarkerLine(fileContent: string): number | null {
+  const lines = fileContent.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i]!.includes(MISSING_START_MARKER)) {
+      return i + 1;
+    }
+  }
+  return null;
+}
+
 function calculateInsertPosition(
   missingKeys: string[],
   totalKeys: number,
@@ -684,8 +694,17 @@ export async function validateTranslations(
             parts.push(`extra ${countStr}`);
           }
 
+          const allExtrasAreMarkers =
+            extraHashs.size > 0 && [...extraHashs].every((k) => isMarkerKey(k));
+          let lineInfo = '';
+          if (allExtrasAreMarkers) {
+            const fileContent = fs.readFileSync(fullPath, 'utf-8');
+            const markerLine = findMarkerLine(fileContent);
+            lineInfo = markerLine ? `:${markerLine}` : '';
+          }
+
           log.error(
-            `❌ ${basename} has invalid translations: ${parts.join(', ')}`,
+            `❌ ${basename}${lineInfo} has invalid translations: ${parts.join(', ')}`,
           );
         }
       } else {
@@ -699,7 +718,10 @@ export async function validateTranslations(
           extraHashs.size > 0 &&
           [...extraHashs].every((k) => isMarkerKey(k))
         ) {
-          log.error(`❌ ${basename} has missing translations`);
+          const fileContent = fs.readFileSync(fullPath, 'utf-8');
+          const markerLine = findMarkerLine(fileContent);
+          const lineInfo = markerLine ? `:${markerLine}` : '';
+          log.error(`❌ ${basename}${lineInfo} has missing translations`);
         } else {
           const cleanedExisting: Record<string, unknown> = {};
           for (const key of Object.keys(localeTranslations)) {
