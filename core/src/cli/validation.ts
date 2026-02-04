@@ -206,6 +206,10 @@ function getInterpolationSuffix(value: string): string {
   return match ? (match[1] ?? '') : '';
 }
 
+function isIgnoredAffix(value: string): boolean {
+  return /^[\s?!]*$/.test(value);
+}
+
 function isPluralOnlyPlus2(value: Record<string, unknown>): boolean {
   return (
     value.zero === undefined &&
@@ -512,11 +516,16 @@ export async function validateTranslations(
 
       if (prefixes.length >= 2) {
         const uniquePrefixes = new Set(prefixes);
-        if (uniquePrefixes.size === 1 && prefixes[0] !== '') {
+        const prefix = prefixes[0] ?? '';
+        if (
+          uniquePrefixes.size === 1 &&
+          prefix !== '' &&
+          !isIgnoredAffix(prefix)
+        ) {
           validationIssues.push({
             rule: 'unnecessary-interpolated-affix',
             hash,
-            message: `prefix "${prefixes[0]}" before interpolation in "${hash}" is identical in all locales. Move it outside the translation: "${prefixes[0]}" + __\`...\``,
+            message: `prefix "${prefix}" before interpolation in "${hash}" is identical in all locales. Move it outside the translation: "${prefix}" + __\`...\``,
             locations,
           });
         }
@@ -524,11 +533,16 @@ export async function validateTranslations(
 
       if (suffixes.length >= 2) {
         const uniqueSuffixes = new Set(suffixes);
-        if (uniqueSuffixes.size === 1 && suffixes[0] !== '') {
+        const suffix = suffixes[0] ?? '';
+        if (
+          uniqueSuffixes.size === 1 &&
+          suffix !== '' &&
+          !isIgnoredAffix(suffix)
+        ) {
           validationIssues.push({
             rule: 'unnecessary-interpolated-affix',
             hash,
-            message: `suffix "${suffixes[0]}" after interpolation in "${hash}" is identical in all locales. Move it outside the translation: __\`...\` + "${suffixes[0]}"`,
+            message: `suffix "${suffix}" after interpolation in "${hash}" is identical in all locales. Move it outside the translation: __\`...\` + "${suffix}"`,
             locations,
           });
         }

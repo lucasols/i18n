@@ -626,6 +626,34 @@ describe('unnecessary-interpolated-affix', () => {
       expect.stringContaining('prefix'),
     );
   });
+
+  test('no error when affix is ? or !', async () => {
+    const ctx = createCliTestContext({
+      src: {
+        'main.tsx': `
+          import { __ } from '@ls-stack/i18n';
+          export const t1 = __\`\${question}?\`;
+          export const t2 = __\`\${exclaim}!\`;
+        `,
+      },
+      config: {
+        'en.json': JSON.stringify({
+          '{1}?': '{1}?',
+          '{1}!': '{1}!',
+        }),
+        'pt.json': JSON.stringify({
+          '{1}?': '{1}?',
+          '{1}!': '{1}!',
+        }),
+      },
+    });
+
+    const result = await ctx.validate();
+
+    expect(result.errors).not.toContainEqual(
+      expect.stringContaining('suffix'),
+    );
+  });
 });
 
 describe('max-translation-id-size', () => {
