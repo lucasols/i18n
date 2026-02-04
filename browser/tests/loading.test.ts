@@ -588,4 +588,33 @@ describe('persistenceKey', () => {
 
     expect(controller.getLoadedLocale()).toBe('en');
   });
+
+  test('does not persist locale when persistenceKey is false', async () => {
+    const controller = createTestController({
+      locales: { en: {}, pt: {} },
+      fallbackLocale: 'en',
+      persistenceKey: false,
+    });
+
+    await controller.setLocale('pt');
+
+    expect(localStorage.length).toBe(0);
+  });
+
+  test('does not read persisted locale when persistenceKey is false', async () => {
+    vi.useFakeTimers();
+
+    localStorage.setItem('some-key', 'pt');
+
+    const controller = createTestController({
+      locales: { en: {}, pt: {} },
+      fallbackLocale: 'en',
+      persistenceKey: false,
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(controller.getLoadedLocale()).toBe('en');
+    expect(controller.initialLocale).toBe('en');
+  });
 });

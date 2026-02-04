@@ -20,7 +20,7 @@ export function createTestController<
   locales: L;
   loadingTime?: number;
   loadingTimes?: Partial<Record<keyof L & string, number>>;
-  persistenceKey?: string;
+  persistenceKey?: string | false;
 }) {
   const invokedLoaderIds: string[] = [];
 

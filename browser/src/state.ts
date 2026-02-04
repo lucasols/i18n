@@ -52,14 +52,14 @@ const invalidScopeErrorMessage =
 
 export function configure<T extends string>(options: {
   locales: LocaleConfig<T>[];
-  persistenceKey: string;
+  persistenceKey: string | false;
   fallbackLocale: T | null;
   retryAttempts?: number;
   retryDelay?: number;
   dev?: boolean;
 }) {
   localesConfig = options.locales;
-  persistenceKey = options.persistenceKey;
+  persistenceKey = options.persistenceKey === false ? null : options.persistenceKey;
   fallbackLocale = options.fallbackLocale;
   retryAttempts = options.retryAttempts ?? 3;
   retryDelay = options.retryDelay ?? 1000;

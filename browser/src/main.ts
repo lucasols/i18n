@@ -75,8 +75,9 @@ export type I18nOptions<T extends string> = {
   locales: LocaleConfig<T>[];
   /**
    * Key used to persist the selected locale in localStorage.
+   * Set to `false` to disable persistence.
    */
-  persistenceKey: string;
+  persistenceKey: string | false;
   /**
    * The fallback locale to use when no persisted locale exists.
    * Use `['auto', localeId]` to auto-detect from browser settings with a fallback.
