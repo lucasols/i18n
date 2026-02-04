@@ -1,0 +1,14 @@
+{
+  "name": "@ls-stack/i18n-bench",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "bench": "node ./bench.mjs"
+  },
+  "dependencies": {
+    "@ls-stack/i18n": "workspace:*",
+    "i18n-published": "npm:@ls-stack/i18n@latest",
+    "mitata": "^1.0.34",
+    "react": "^18.0.0"
+  }
+}

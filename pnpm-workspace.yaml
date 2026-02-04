@@ -2,3 +2,4 @@ packages:
   - 'core'
   - 'server'
   - 'browser'
+  - 'bench'
