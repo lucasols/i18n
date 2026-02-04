@@ -89,17 +89,12 @@ function isObject(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-const LEGACY_MISSING_MARKER = '👇 missing translations 👇';
 const MISSING_START_MARKER = '👇 missing start 👇';
 const MISSING_END_MARKER = '👆 missing end 👆';
 const MISSING_MARKER_VALUE = '🛑 delete this line 🛑';
 
 function isMarkerKey(key: string): boolean {
-  return (
-    key === LEGACY_MISSING_MARKER ||
-    key === MISSING_START_MARKER ||
-    key === MISSING_END_MARKER
-  );
+  return key === MISSING_START_MARKER || key === MISSING_END_MARKER;
 }
 
 function findMarkerLine(fileContent: string): number | null {
@@ -732,9 +727,31 @@ export async function validateTranslations(
           }
 
           const missingMap = new Map<string, unknown>();
-          let useAIMarkers = true;
 
-          if (aiTranslator && missingHashs.size > 0) {
+          const missingSpecialTranslations: string[] = [];
+          for (const hash of missingHashs) {
+            const isSpecialTranslation =
+              hash.startsWith('$') || hash.includes('~~');
+            if (isSpecialTranslation) {
+              missingSpecialTranslations.push(hash);
+            }
+          }
+
+          const regularMissingHashs = new Set(
+            [...missingHashs].filter(
+              (h) => !h.startsWith('$') && !h.includes('~~'),
+            ),
+          );
+
+          if (aiTranslator && missingSpecialTranslations.length > 0) {
+            hasError = true;
+            log.error(
+              `❌ ${basename} has missing $ or ~~ translations that require manual translation:`,
+              missingSpecialTranslations,
+            );
+          }
+
+          if (aiTranslator && regularMissingHashs.size > 0) {
             const targetLocale = basename.replace('.json', '');
 
             const existingTranslationsMap = new Map<
@@ -757,7 +774,7 @@ export async function validateTranslations(
             const similarityIndex = createSimilarityIndex(
               existingTranslationsMap,
             );
-            for (const hash of missingHashs) {
+            for (const hash of regularMissingHashs) {
               const isPlural = allPluralTranslationHashs.has(hash);
               const similarTranslations = findSimilarFromIndex(
                 similarityIndex,
@@ -778,14 +795,10 @@ export async function validateTranslations(
                 usage,
               } = await aiTranslator.translateBatch(contexts);
 
-              for (const hash of missingHashs) {
+              for (const hash of regularMissingHashs) {
                 const aiResult = aiResults.get(hash);
                 if (aiResult) {
-                  if (aiResult.type === 'plural') {
-                    missingMap.set(hash, aiResult.value);
-                  } else {
-                    missingMap.set(hash, aiResult.value);
-                  }
+                  cleanedExisting[hash] = aiResult.value;
                 } else {
                   const fallbackValue =
                     allPluralTranslationHashs.has(hash) ?
@@ -811,13 +824,12 @@ export async function validateTranslations(
                 log.info(`   ${parts.join(' | ')}`);
               }
 
-              useAIMarkers = false;
             } catch (error) {
               log.error(
                 `❌ AI translation failed:`,
                 error instanceof Error ? error.message : error,
               );
-              for (const hash of missingHashs) {
+              for (const hash of regularMissingHashs) {
                 const value =
                   allPluralTranslationHashs.has(hash) ?
                     {
@@ -831,7 +843,21 @@ export async function validateTranslations(
                 missingMap.set(hash, value);
               }
             }
-          } else {
+
+            for (const hash of missingSpecialTranslations) {
+              const value =
+                allPluralTranslationHashs.has(hash) ?
+                  {
+                    zero: 'No x',
+                    one: '1 x',
+                    '+2': '# x',
+                    many: undefined,
+                    manyLimit: undefined,
+                  }
+                : null;
+              missingMap.set(hash, value);
+            }
+          } else if (missingHashs.size > 0) {
             for (const hash of missingHashs) {
               const value =
                 allPluralTranslationHashs.has(hash) ?
@@ -848,8 +874,10 @@ export async function validateTranslations(
           }
 
           const existingKeysCount = Object.keys(cleanedExisting).length;
+          const hashsForPosition =
+            missingMap.size > 0 ? [...missingMap.keys()] : [];
           const insertPosition = calculateInsertPosition(
-            [...missingHashs],
+            hashsForPosition,
             existingKeysCount,
           );
 
@@ -857,23 +885,25 @@ export async function validateTranslations(
             cleanedExisting,
             missingMap,
             insertPosition,
-            useAIMarkers,
+            missingMap.size > 0,
           );
 
+          const writtenContent = JSON.stringify(orderedTranslations, null, 2);
+
           if (missingHashs.size > 0) {
-            if (aiTranslator && !useAIMarkers) {
+            if (aiTranslator && missingMap.size === 0) {
               log.info(`✅ ${basename} translations were AI-generated`);
-            } else {
-              log.info(`🟠 ${basename} translations keys were added`);
+            } else if (missingMap.size > 0) {
+              hasError = true;
+              const markerLine = findMarkerLine(writtenContent);
+              const lineInfo = markerLine ? `:${markerLine}` : '';
+              log.info(`🟠 ${basename}${lineInfo} translations keys were added`);
             }
           } else {
             log.info(`✅ ${basename} translations fixed`);
           }
 
-          fs.writeFileSync(
-            fullPath,
-            JSON.stringify(orderedTranslations, null, 2),
-          );
+          fs.writeFileSync(fullPath, writtenContent);
         }
       }
     } else {

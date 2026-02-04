@@ -64,14 +64,14 @@ test('fix missing translations in tsx files', async () => {
   expect(result).toMatchInlineSnapshot(`
     {
       "errors": [],
-      "hasError": false,
+      "hasError": true,
       "infos": [
-        "🟠 en.json translations keys were added",
-        "🟠 pt.json translations keys were added",
+        "🟠 en.json:2 translations keys were added",
+        "🟠 pt.json:2 translations keys were added",
       ],
       "output": [
-        "🟠 en.json translations keys were added",
-        "🟠 pt.json translations keys were added",
+        "🟠 en.json:2 translations keys were added",
+        "🟠 pt.json:2 translations keys were added",
       ],
     }
   `);
@@ -191,14 +191,14 @@ test('fix invalid plural translations in tsx files', async () => {
   expect(result).toMatchInlineSnapshot(`
     {
       "errors": [],
-      "hasError": false,
+      "hasError": true,
       "infos": [
         "✅ en.json translations are up to date",
-        "🟠 pt.json translations keys were added",
+        "🟠 pt.json:3 translations keys were added",
       ],
       "output": [
         "✅ en.json translations are up to date",
-        "🟠 pt.json translations keys were added",
+        "🟠 pt.json:3 translations keys were added",
       ],
     }
   `);
@@ -239,12 +239,12 @@ test('fix mode with missing translations marker already present', async () => {
   expect(result).toMatchInlineSnapshot(`
     {
       "errors": [],
-      "hasError": false,
+      "hasError": true,
       "infos": [
-        "🟠 en.json translations keys were added",
+        "🟠 en.json:2 translations keys were added",
       ],
       "output": [
-        "🟠 en.json translations keys were added",
+        "🟠 en.json:2 translations keys were added",
       ],
     }
   `);
@@ -270,7 +270,8 @@ test('fix mode error when file has only missing marker', async () => {
     config: {
       'en.json': JSON.stringify({
         Hello: 'Hello',
-        '👇 missing translations 👇': '🛑 delete this line 🛑',
+        '👇 missing start 👇': '🛑 delete this line 🛑',
+        '👆 missing end 👆': '🛑 delete this line 🛑',
       }),
     },
   });
@@ -278,13 +279,13 @@ test('fix mode error when file has only missing marker', async () => {
   const result = await ctx.validate({ fix: true });
 
   expect(result).toMatchObject({
-    errors: ['❌ en.json has missing translations'],
+    errors: ['❌ en.json:1 has missing translations'],
     infos: [],
-    output: ['❌ en.json has missing translations'],
+    output: ['❌ en.json:1 has missing translations'],
   });
 
   expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(
-    `"{"Hello":"Hello","👇 missing translations 👇":"🛑 delete this line 🛑"}"`,
+    `"{"Hello":"Hello","👇 missing start 👇":"🛑 delete this line 🛑","👆 missing end 👆":"🛑 delete this line 🛑"}"`,
   );
 });
 
@@ -312,12 +313,12 @@ test('fix mode handles missing, extra, and invalid plural simultaneously', async
   expect(result).toMatchInlineSnapshot(`
     {
       "errors": [],
-      "hasError": false,
+      "hasError": true,
       "infos": [
-        "🟠 en.json translations keys were added",
+        "🟠 en.json:2 translations keys were added",
       ],
       "output": [
-        "🟠 en.json translations keys were added",
+        "🟠 en.json:2 translations keys were added",
       ],
     }
   `);
@@ -359,12 +360,12 @@ test('fix mode preserves existing valid translations', async () => {
   expect(result).toMatchInlineSnapshot(`
     {
       "errors": [],
-      "hasError": false,
+      "hasError": true,
       "infos": [
-        "🟠 en.json translations keys were added",
+        "🟠 en.json:2 translations keys were added",
       ],
       "output": [
-        "🟠 en.json translations keys were added",
+        "🟠 en.json:2 translations keys were added",
       ],
     }
   `);
@@ -449,12 +450,12 @@ test('fix adds null for missing variant translations', async () => {
   expect(result).toMatchInlineSnapshot(`
     {
       "errors": [],
-      "hasError": false,
+      "hasError": true,
       "infos": [
-        "🟠 en.json translations keys were added",
+        "🟠 en.json:2 translations keys were added",
       ],
       "output": [
-        "🟠 en.json translations keys were added",
+        "🟠 en.json:2 translations keys were added",
       ],
     }
   `);
@@ -488,12 +489,12 @@ test('fix adds null for missing $ prefixed translations', async () => {
   expect(result).toMatchInlineSnapshot(`
     {
       "errors": [],
-      "hasError": false,
+      "hasError": true,
       "infos": [
-        "🟠 en.json translations keys were added",
+        "🟠 en.json:2 translations keys were added",
       ],
       "output": [
-        "🟠 en.json translations keys were added",
+        "🟠 en.json:2 translations keys were added",
       ],
     }
   `);
@@ -586,7 +587,7 @@ test('fix moves existing null translations under missing marker for non-default 
   const result = await ctx.validate({ fix: true, defaultLocale: 'en' });
 
   expect(result.infos).toContainEqual(
-    expect.stringContaining('pt.json translations keys were added'),
+    expect.stringMatching(/pt\.json(:\d+)? translations keys were added/),
   );
 
   expect(ctx.getConfigFileRaw('pt.json')).toMatchInlineSnapshot(`
