@@ -1,6 +1,6 @@
 import * as local from '@ls-stack/i18n';
 import * as published from 'i18n-published';
-import { bench, group, run } from 'mitata';
+import { bench, do_not_optimize, group, run, summary } from 'mitata';
 import React from 'react';
 
 const translations = {
@@ -35,7 +35,7 @@ const translations = {
   'Nested {1} {2}': 'Nested {1} {2}',
 };
 
-async function setup(mod) {
+async function setup(mod: typeof local | typeof published) {
   if (typeof mod.resetState === 'function') {
     mod.resetState();
   }
@@ -59,64 +59,273 @@ async function setup(mod) {
 await setup(local);
 await setup(published);
 
-const name = 'Lucas';
-const count = 2;
-const jsxNode = React.createElement('span', null, 'X');
-const list = ['alpha', 'beta', 'gamma'];
-const date = new Date('2024-01-01T00:00:00Z');
-const fromDate = new Date('2024-01-01T00:00:00Z');
-const toDate = new Date('2024-01-02T00:00:00Z');
-const relativeValue = { from: fromDate, to: toDate };
-const durationObj = { hours: 1, minutes: 2, seconds: 3 };
-const durationInput = { ms: 123456, short: true };
-
-const cases: [string, (mod: typeof local | typeof published) => void][] = [
-  ['__ hit', (mod) => mod.__`Hello ${name}`],
-  ['__ miss', (mod) => mod.__`Missing ${name}`],
-  ['__p hit', (mod) => mod.__p(count)`You have ${count} items`],
-  [
-    'chat menu render',
-    (mod) => {
-      mod.__`Comments`;
-      mod.__`You have no comments chats`;
-      mod.__`Email`;
-      mod.__`You have no email chats`;
-      mod.__`Direct Messages`;
-      mod.__`You have no direct messages`;
-      mod.__`Saved`;
-      mod.__`You have no bookmarked conversations`;
-      mod.__`Channels`;
-      mod.__`You have no channels`;
-      mod.__`Bookmarked`;
-      mod.__`New`;
-      mod.__`You have no unread conversations`;
-      mod.__`Read`;
-      mod.__`You have no read chats`;
-      mod.__`No chats found`;
-      mod.__`Untitled`;
-      mod.__`Remove bookmark`;
-      mod.__`Bookmark chat`;
-      mod.__p(count)`You have ${count} items`;
-    },
-  ],
-  ['__jsx hit', (mod) => mod.__jsx`Hello ${jsxNode}`],
-  ['__pjsx hit', (mod) => mod.__pjsx(count)`You have ${jsxNode} items`],
-  ['__date', (mod) => mod.__date(date)],
-  ['__num', (mod) => mod.__num(12345.678)],
-  ['__relativeTime', (mod) => mod.__relativeTime(relativeValue)],
-  ['__list', (mod) => mod.__list(list)],
-  [
-    '__formattedTimeDuration',
-    (mod) => mod.__formattedTimeDuration(durationObj),
-  ],
-  ['__timeDuration', (mod) => mod.__timeDuration(durationInput)],
-];
-
-for (const [label, fn] of cases) {
-  group(label, () => {
-    bench('published', () => fn(published)).baseline();
-    bench('local', () => fn(local));
-  });
+function getName() {
+  return 'Lucas';
 }
+function getCount() {
+  return 2;
+}
+function getJsxNode() {
+  return React.createElement('span', null, 'X');
+}
+function getList() {
+  return ['alpha', 'beta', 'gamma'];
+}
+function getDate() {
+  return new Date('2024-01-01T00:00:00Z');
+}
+function getRelativeValue() {
+  return {
+    from: new Date('2024-01-01T00:00:00Z'),
+    to: new Date('2024-01-02T00:00:00Z'),
+  };
+}
+function getDurationObj() {
+  return { hours: 1, minutes: 2, seconds: 3 };
+}
+function getDurationInput() {
+  return { ms: 123456, short: true };
+}
+function getNumber() {
+  return 12345.678;
+}
+
+summary(() => {
+  group('__ hit', () => {
+    bench('published', function* () {
+      yield {
+        [0]: getName,
+        bench: (n: string) => do_not_optimize(published.__`Hello ${n}`),
+      };
+    }).baseline();
+    bench('local', function* () {
+      yield {
+        [0]: getName,
+        bench: (n: string) => do_not_optimize(local.__`Hello ${n}`),
+      };
+    });
+  });
+
+  group('__ miss', () => {
+    bench('published', function* () {
+      yield {
+        [0]: getName,
+        bench: (n: string) => do_not_optimize(published.__`Missing ${n}`),
+      };
+    }).baseline();
+    bench('local', function* () {
+      yield {
+        [0]: getName,
+        bench: (n: string) => do_not_optimize(local.__`Missing ${n}`),
+      };
+    });
+  });
+
+  group('__p hit', () => {
+    bench('published', function* () {
+      yield {
+        [0]: getCount,
+        bench: (c: number) =>
+          do_not_optimize(published.__p(c)`You have ${c} items`),
+      };
+    }).baseline();
+    bench('local', function* () {
+      yield {
+        [0]: getCount,
+        bench: (c: number) =>
+          do_not_optimize(local.__p(c)`You have ${c} items`),
+      };
+    });
+  });
+
+  group('chat menu render', () => {
+    bench('published', function* () {
+      yield {
+        [0]: getCount,
+        bench(c: number) {
+          do_not_optimize(published.__`Comments`);
+          do_not_optimize(published.__`You have no comments chats`);
+          do_not_optimize(published.__`Email`);
+          do_not_optimize(published.__`You have no email chats`);
+          do_not_optimize(published.__`Direct Messages`);
+          do_not_optimize(published.__`You have no direct messages`);
+          do_not_optimize(published.__`Saved`);
+          do_not_optimize(published.__`You have no bookmarked conversations`);
+          do_not_optimize(published.__`Channels`);
+          do_not_optimize(published.__`You have no channels`);
+          do_not_optimize(published.__`Bookmarked`);
+          do_not_optimize(published.__`New`);
+          do_not_optimize(published.__`You have no unread conversations`);
+          do_not_optimize(published.__`Read`);
+          do_not_optimize(published.__`You have no read chats`);
+          do_not_optimize(published.__`No chats found`);
+          do_not_optimize(published.__`Untitled`);
+          do_not_optimize(published.__`Remove bookmark`);
+          do_not_optimize(published.__`Bookmark chat`);
+          do_not_optimize(published.__p(c)`You have ${c} items`);
+        },
+      };
+    }).baseline();
+    bench('local', function* () {
+      yield {
+        [0]: getCount,
+        bench(c: number) {
+          do_not_optimize(local.__`Comments`);
+          do_not_optimize(local.__`You have no comments chats`);
+          do_not_optimize(local.__`Email`);
+          do_not_optimize(local.__`You have no email chats`);
+          do_not_optimize(local.__`Direct Messages`);
+          do_not_optimize(local.__`You have no direct messages`);
+          do_not_optimize(local.__`Saved`);
+          do_not_optimize(local.__`You have no bookmarked conversations`);
+          do_not_optimize(local.__`Channels`);
+          do_not_optimize(local.__`You have no channels`);
+          do_not_optimize(local.__`Bookmarked`);
+          do_not_optimize(local.__`New`);
+          do_not_optimize(local.__`You have no unread conversations`);
+          do_not_optimize(local.__`Read`);
+          do_not_optimize(local.__`You have no read chats`);
+          do_not_optimize(local.__`No chats found`);
+          do_not_optimize(local.__`Untitled`);
+          do_not_optimize(local.__`Remove bookmark`);
+          do_not_optimize(local.__`Bookmark chat`);
+          do_not_optimize(local.__p(c)`You have ${c} items`);
+        },
+      };
+    });
+  });
+
+  group('__jsx hit', () => {
+    bench('published', function* () {
+      yield {
+        [0]: getJsxNode,
+        bench: (jsx: React.ReactElement) =>
+          do_not_optimize(published.__jsx`Hello ${jsx}`),
+      };
+    }).baseline();
+    bench('local', function* () {
+      yield {
+        [0]: getJsxNode,
+        bench: (jsx: React.ReactElement) =>
+          do_not_optimize(local.__jsx`Hello ${jsx}`),
+      };
+    });
+  });
+
+  group('__pjsx hit', () => {
+    bench('published', function* () {
+      yield {
+        [0]: getCount,
+        [1]: getJsxNode,
+        bench: (c: number, jsx: React.ReactElement) =>
+          do_not_optimize(published.__pjsx(c)`You have ${jsx} items`),
+      };
+    }).baseline();
+    bench('local', function* () {
+      yield {
+        [0]: getCount,
+        [1]: getJsxNode,
+        bench: (c: number, jsx: React.ReactElement) =>
+          do_not_optimize(local.__pjsx(c)`You have ${jsx} items`),
+      };
+    });
+  });
+
+  group('__date', () => {
+    bench('published', function* () {
+      yield {
+        [0]: getDate,
+        bench: (d: Date) => do_not_optimize(published.__date(d)),
+      };
+    }).baseline();
+    bench('local', function* () {
+      yield {
+        [0]: getDate,
+        bench: (d: Date) => do_not_optimize(local.__date(d)),
+      };
+    });
+  });
+
+  group('__num', () => {
+    bench('published', function* () {
+      yield {
+        [0]: getNumber,
+        bench: (n: number) => do_not_optimize(published.__num(n)),
+      };
+    }).baseline();
+    bench('local', function* () {
+      yield {
+        [0]: getNumber,
+        bench: (n: number) => do_not_optimize(local.__num(n)),
+      };
+    });
+  });
+
+  group('__relativeTime', () => {
+    bench('published', function* () {
+      yield {
+        [0]: getRelativeValue,
+        bench: (r: { from: Date; to: Date }) =>
+          do_not_optimize(published.__relativeTime(r)),
+      };
+    }).baseline();
+    bench('local', function* () {
+      yield {
+        [0]: getRelativeValue,
+        bench: (r: { from: Date; to: Date }) =>
+          do_not_optimize(local.__relativeTime(r)),
+      };
+    });
+  });
+
+  group('__list', () => {
+    bench('published', function* () {
+      yield {
+        [0]: getList,
+        bench: (l: string[]) => do_not_optimize(published.__list(l)),
+      };
+    }).baseline();
+    bench('local', function* () {
+      yield {
+        [0]: getList,
+        bench: (l: string[]) => do_not_optimize(local.__list(l)),
+      };
+    });
+  });
+
+  group('__formattedTimeDuration', () => {
+    bench('published', function* () {
+      yield {
+        [0]: getDurationObj,
+        bench: (d: { hours: number; minutes: number; seconds: number }) =>
+          do_not_optimize(published.__formattedTimeDuration(d)),
+      };
+    }).baseline();
+    bench('local', function* () {
+      yield {
+        [0]: getDurationObj,
+        bench: (d: { hours: number; minutes: number; seconds: number }) =>
+          do_not_optimize(local.__formattedTimeDuration(d)),
+      };
+    });
+  });
+
+  group('__timeDuration', () => {
+    bench('published', function* () {
+      yield {
+        [0]: getDurationInput,
+        bench: (d: { ms: number; short: boolean }) =>
+          do_not_optimize(published.__timeDuration(d)),
+      };
+    });
+    bench('local', function* () {
+      yield {
+        [0]: getDurationInput,
+        bench: (d: { ms: number; short: boolean }) =>
+          do_not_optimize(local.__timeDuration(d)),
+      };
+    }).baseline();
+  });
+});
 
 await run();
