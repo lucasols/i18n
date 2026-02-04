@@ -36,6 +36,7 @@ export type I18nController<T extends string> = {
   getLoadedLocale: () => T | null;
   /**
    * Returns the regional locale (e.g., "en-US") inferred from the loaded locale and browser settings.
+   * Falls back to the fallback locale if no locale has been loaded yet.
    */
   getRegionLocale: () => string;
   /**
