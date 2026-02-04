@@ -127,6 +127,62 @@ describe('constant-translation', () => {
       expect.stringContaining('constant translation'),
     );
   });
+
+  test('no constant-translation error when fallback locale is missing key and others have same value', async () => {
+    const ctx = createCliTestContext({
+      src: {
+        'main.tsx': `
+          import { __ } from '@ls-stack/i18n';
+          export const t = __\`Hi\`;
+        `,
+      },
+      config: {
+        'en.json': JSON.stringify({}), // Hi key doesn't exist
+        'pt.json': JSON.stringify({
+          Hi: 'Ola',
+        }),
+        'es.json': JSON.stringify({
+          Hi: 'Ola',
+        }),
+      },
+    });
+
+    const result = await ctx.validate({ defaultLocale: 'en' });
+
+    // The fallback locale effectively uses "Hi" (the key) as the translation,
+    // while pt and es use "Ola", so values differ - no constant-translation error
+    expect(result.errors).not.toContainEqual(
+      expect.stringContaining('constant translation'),
+    );
+  });
+
+  test('constant-translation error when fallback is missing key but others match the key value', async () => {
+    const ctx = createCliTestContext({
+      src: {
+        'main.tsx': `
+          import { __ } from '@ls-stack/i18n';
+          export const t = __\`Hi\`;
+        `,
+      },
+      config: {
+        'en.json': JSON.stringify({}), // Hi key doesn't exist
+        'pt.json': JSON.stringify({
+          Hi: 'Hi',
+        }),
+        'es.json': JSON.stringify({
+          Hi: 'Hi',
+        }),
+      },
+    });
+
+    const result = await ctx.validate({ defaultLocale: 'en' });
+
+    // The fallback locale effectively uses "Hi" (the key),
+    // and pt/es also use "Hi", so all values are the same - constant-translation error
+    expect(result.errors).toContainEqual(
+      expect.stringContaining('constant translation'),
+    );
+  });
 });
 
 describe('unnecessary-plural', () => {
@@ -540,6 +596,34 @@ describe('unnecessary-interpolated-affix', () => {
 
     expect(result.errors).not.toContainEqual(
       expect.stringContaining('interpolation'),
+    );
+  });
+
+  test('no error when fallback locale is missing key and others have same prefix', async () => {
+    const ctx = createCliTestContext({
+      src: {
+        'main.tsx': `
+          import { __ } from '@ls-stack/i18n';
+          export const t = __\`Welcome \${name}\`;
+        `,
+      },
+      config: {
+        'en.json': JSON.stringify({}), // Welcome {1} key doesn't exist
+        'pt.json': JSON.stringify({
+          'Welcome {1}': 'Ola {1}',
+        }),
+        'es.json': JSON.stringify({
+          'Welcome {1}': 'Ola {1}',
+        }),
+      },
+    });
+
+    const result = await ctx.validate({ defaultLocale: 'en' });
+
+    // The fallback locale effectively uses "Welcome {1}" (prefix "Welcome "),
+    // while pt and es use "Ola {1}" (prefix "Ola "), so prefixes differ - no error
+    expect(result.errors).not.toContainEqual(
+      expect.stringContaining('prefix'),
     );
   });
 });

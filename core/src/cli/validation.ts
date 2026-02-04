@@ -395,11 +395,18 @@ export async function validateTranslations(
     const constantSeverity = getRuleSeverity('constant-translation');
     if (constantSeverity !== 'off') {
       const values: string[] = [];
-      for (const [, translations] of allLocaleTranslations) {
+      for (const [localeId, translations] of allLocaleTranslations) {
         const value = translations[hash];
         const strValue = getStringValue(value);
+
+        const isDefaultLocaleEntry =
+          defaultLocale !== undefined && localeId === defaultLocale;
+
         if (strValue !== null) {
           values.push(strValue);
+        } else if (isDefaultLocaleEntry) {
+          // null or undefined in fallback locale means the original key is used as the translation
+          values.push(hash);
         }
       }
 
@@ -485,12 +492,21 @@ export async function validateTranslations(
       const prefixes: string[] = [];
       const suffixes: string[] = [];
 
-      for (const [, translations] of allLocaleTranslations) {
+      for (const [localeId, translations] of allLocaleTranslations) {
         const value = translations[hash];
         const strValue = getStringValue(value);
-        if (strValue !== null) {
-          prefixes.push(getInterpolationPrefix(strValue));
-          suffixes.push(getInterpolationSuffix(strValue));
+
+        const isDefaultLocaleEntry =
+          defaultLocale !== undefined && localeId === defaultLocale;
+
+        const effectiveValue =
+          strValue !== null ? strValue
+          : isDefaultLocaleEntry ? hash
+          : null;
+
+        if (effectiveValue !== null) {
+          prefixes.push(getInterpolationPrefix(effectiveValue));
+          suffixes.push(getInterpolationSuffix(effectiveValue));
         }
       }
 
