@@ -25,7 +25,7 @@ export type AiLogEntry = {
 };
 
 function getAiLogsFolder(): string | null {
-  return process.env['AI_LOGS_FOLDER'] || null;
+  return process.env['I18N_AI_LOGS_FOLDER'] || null;
 }
 
 function cleanupOldLogs(folder: string): void {

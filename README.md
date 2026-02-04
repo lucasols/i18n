@@ -467,10 +467,10 @@ OPENAI_API_KEY=your-key ls-stack-i18n -c ./locales -r ./src --fix --ai openai
 
 #### AI Logging
 
-Set `AI_LOGS_FOLDER` to log AI generation details for debugging or auditing:
+Set `I18N_AI_LOGS_FOLDER` to log AI generation details for debugging or auditing:
 
 ```bash
-AI_LOGS_FOLDER=./ai-logs GOOGLE_GENERATIVE_AI_API_KEY=your-key ls-stack-i18n -c ./locales -r ./src --fix --ai google
+I18N_AI_LOGS_FOLDER=./ai-logs GOOGLE_GENERATIVE_AI_API_KEY=your-key ls-stack-i18n -c ./locales -r ./src --fix --ai google
 ```
 
 Log files (`ai-log-{timestamp}.json`) include the prompt, contexts, results, token usage, and duration. Only the last 10 log files are kept.

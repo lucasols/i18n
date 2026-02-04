@@ -84,7 +84,7 @@ export type I18nOptions<T extends string> = {
   fallbackLocale: T | ['auto', T];
   /**
    * Number of retry attempts when loading a locale fails.
-   * @default 0
+   * @default 3
    */
   retryAttempts?: number;
   /**
@@ -151,7 +151,11 @@ export function i18nitialize<T extends string>(
   registerClearIntlCache(clearIntlCache);
 
   const persistedLocale = getPersistedLocale() as T | null;
-  const initialLocale: T = persistedLocale ?? resolvedFallback;
+  const validatedPersistedLocale =
+    persistedLocale && availableIds.includes(persistedLocale)
+      ? persistedLocale
+      : null;
+  const initialLocale: T = validatedPersistedLocale ?? resolvedFallback;
   const cachedInitialRegionLocale = cachedGetter(() =>
     inferRegionLocale(initialLocale),
   );

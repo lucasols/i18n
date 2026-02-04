@@ -335,6 +335,22 @@ describe('initialLocale', () => {
     expect(controller.initialLocale).toBe('pt');
   });
 
+  test('ignores persisted locale when not configured', () => {
+    const key = 'test-initial-invalid';
+    localStorage.setItem(key, 'fr');
+    vi.stubGlobal('navigator', { languages: ['en-US'] });
+
+    const controller = createTestController({
+      locales: { en: {}, pt: {} },
+      fallbackLocale: 'en',
+      persistenceKey: key,
+    });
+
+    expect(controller.initialLocale).toBe('en');
+    expect(controller.getInitialRegionLocale()).toBe('en-US');
+    expect(controller.getRegionLocale()).toBe('en-US');
+  });
+
   test('returns same value regardless of when called', async () => {
     const key = 'test-initial-stable';
     localStorage.setItem(key, 'pt');

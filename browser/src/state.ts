@@ -67,7 +67,10 @@ export function configure<T extends string>(options: {
 
   preloadRegionLocale = cachedGetter(() => {
     const persistedLocale = getPersistedLocale();
-    if (persistedLocale) {
+    if (
+      persistedLocale &&
+      localesConfig.some((locale) => locale.id === persistedLocale)
+    ) {
       return inferRegionLocale(persistedLocale);
     }
     if (fallbackLocale) {
