@@ -44,9 +44,13 @@ const pluralTranslationSchema = z.object({
   manyLimit: z.number().optional(),
 });
 
-const translationValueSchema = z.union([z.string(), pluralTranslationSchema]);
-
-const translationsSchema = z.record(z.string(), translationValueSchema);
+function buildTranslationsSchema(contexts: TranslationContext[]) {
+  const shape: Record<string, z.ZodTypeAny> = {};
+  for (const ctx of contexts) {
+    shape[ctx.sourceKey] = ctx.isPlural ? pluralTranslationSchema : z.string();
+  }
+  return z.object(shape);
+}
 
 function buildPrompt(contexts: TranslationContext[]): string {
   const lines: string[] = [
@@ -97,7 +101,7 @@ function buildPrompt(contexts: TranslationContext[]): string {
 }
 
 function parseGeneratedObject(
-  obj: z.infer<typeof translationsSchema>,
+  obj: Record<string, string | z.infer<typeof pluralTranslationSchema>>,
   contexts: TranslationContext[],
 ): Map<string, TranslationResult> {
   const results = new Map<string, TranslationResult>();
@@ -153,17 +157,18 @@ export function createAITranslator(
       }
 
       const prompt = buildPrompt(contexts);
+      const schema = buildTranslationsSchema(contexts);
 
       const result = await ai.generateText({
         model: languageModel as LanguageModel,
         output: ai.Output.object({
-          schema: translationsSchema,
+          schema,
         }),
         prompt,
       });
 
       const output = result.output as
-        | z.infer<typeof translationsSchema>
+        | Record<string, string | z.infer<typeof pluralTranslationSchema>>
         | undefined;
 
       if (!output) {

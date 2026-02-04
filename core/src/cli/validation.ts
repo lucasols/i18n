@@ -812,7 +812,11 @@ export async function validateTranslations(
               }
 
               useAIMarkers = false;
-            } catch {
+            } catch (error) {
+              log.error(
+                `❌ AI translation failed:`,
+                error instanceof Error ? error.message : error,
+              );
               for (const hash of missingHashs) {
                 const value =
                   allPluralTranslationHashs.has(hash) ?
