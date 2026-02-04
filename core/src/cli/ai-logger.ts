@@ -42,9 +42,9 @@ function cleanupOldLogs(folder: string): void {
   }
 }
 
-export function logAiGeneration(data: AiLogEntry): void {
+export function logAiGeneration(data: AiLogEntry): string | null {
   const folder = getAiLogsFolder();
-  if (!folder) return;
+  if (!folder) return null;
 
   fs.mkdirSync(folder, { recursive: true });
   cleanupOldLogs(folder);
@@ -54,4 +54,8 @@ export function logAiGeneration(data: AiLogEntry): void {
   const filepath = path.join(folder, filename);
 
   fs.writeFileSync(filepath, JSON.stringify(data, null, 2));
+
+  console.info(`AI log saved to: ${filepath}`);
+
+  return filepath;
 }

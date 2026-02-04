@@ -18,6 +18,17 @@ import {
 } from './findMissingTranslations';
 import { createSimilarityIndex, findSimilarFromIndex } from './similarity';
 
+type LocaleAITranslationTask = {
+  fullPath: string;
+  basename: string;
+  cleanedExisting: Record<string, unknown>;
+  regularMissingHashs: Set<string>;
+  missingSpecialTranslations: string[];
+  contexts: TranslationContext[];
+  extraHashs: Set<string>;
+  missingHashs: Set<string>;
+};
+
 export type FileSystem = {
   readFileSync: (path: string, encoding: 'utf-8') => string;
   writeFileSync: (path: string, content: string) => void;
@@ -568,6 +579,8 @@ export async function validateTranslations(
     }
   }
 
+  const aiTranslationTasks: LocaleAITranslationTask[] = [];
+
   for (const { fullPath, basename } of localeFiles) {
     const invalidPluralTranslations: string[] = [];
     const invalidSpecialTranslations: string[] = [];
@@ -726,8 +739,6 @@ export async function validateTranslations(
             cleanedExisting[key] = localeTranslations[key];
           }
 
-          const missingMap = new Map<string, unknown>();
-
           const missingSpecialTranslations: string[] = [];
           for (const hash of missingHashs) {
             const isSpecialTranslation =
@@ -788,76 +799,19 @@ export async function validateTranslations(
               });
             }
 
-            try {
-              const {
-                translations: aiResults,
-                model,
-                usage,
-              } = await aiTranslator.translateBatch(contexts);
+            aiTranslationTasks.push({
+              fullPath,
+              basename,
+              cleanedExisting,
+              regularMissingHashs,
+              missingSpecialTranslations,
+              contexts,
+              extraHashs,
+              missingHashs,
+            });
+          } else {
+            const missingMap = new Map<string, unknown>();
 
-              for (const hash of regularMissingHashs) {
-                const aiResult = aiResults.get(hash);
-                if (aiResult) {
-                  cleanedExisting[hash] = aiResult.value;
-                } else {
-                  const fallbackValue =
-                    allPluralTranslationHashs.has(hash) ?
-                      {
-                        zero: 'No x',
-                        one: '1 x',
-                        '+2': '# x',
-                        many: undefined,
-                        manyLimit: undefined,
-                      }
-                    : null;
-                  missingMap.set(hash, fallbackValue);
-                }
-              }
-
-              if (model || usage) {
-                const parts: string[] = [];
-                if (model) parts.push(`Model: ${model}`);
-                if (usage)
-                  parts.push(
-                    `Tokens: ${usage.inputTokens} in / ${usage.outputTokens} out`,
-                  );
-                log.info(`   ${parts.join(' | ')}`);
-              }
-
-            } catch (error) {
-              log.error(
-                `❌ AI translation failed:`,
-                error instanceof Error ? error.message : error,
-              );
-              for (const hash of regularMissingHashs) {
-                const value =
-                  allPluralTranslationHashs.has(hash) ?
-                    {
-                      zero: 'No x',
-                      one: '1 x',
-                      '+2': '# x',
-                      many: undefined,
-                      manyLimit: undefined,
-                    }
-                  : null;
-                missingMap.set(hash, value);
-              }
-            }
-
-            for (const hash of missingSpecialTranslations) {
-              const value =
-                allPluralTranslationHashs.has(hash) ?
-                  {
-                    zero: 'No x',
-                    one: '1 x',
-                    '+2': '# x',
-                    many: undefined,
-                    manyLimit: undefined,
-                  }
-                : null;
-              missingMap.set(hash, value);
-            }
-          } else if (missingHashs.size > 0) {
             for (const hash of missingHashs) {
               const value =
                 allPluralTranslationHashs.has(hash) ?
@@ -871,43 +825,162 @@ export async function validateTranslations(
                 : null;
               missingMap.set(hash, value);
             }
-          }
 
-          const existingKeysCount = Object.keys(cleanedExisting).length;
-          const hashsForPosition =
-            missingMap.size > 0 ? [...missingMap.keys()] : [];
-          const insertPosition = calculateInsertPosition(
-            hashsForPosition,
-            existingKeysCount,
-          );
+            const existingKeysCount = Object.keys(cleanedExisting).length;
+            const keysForPosition =
+              missingMap.size > 0 ? [...missingMap.keys()] : [];
+            const insertPosition = calculateInsertPosition(
+              keysForPosition,
+              existingKeysCount,
+            );
 
-          const orderedTranslations = buildOrderedTranslations(
-            cleanedExisting,
-            missingMap,
-            insertPosition,
-            missingMap.size > 0,
-          );
+            const orderedTranslations = buildOrderedTranslations(
+              cleanedExisting,
+              missingMap,
+              insertPosition,
+              missingMap.size > 0,
+            );
 
-          const writtenContent = JSON.stringify(orderedTranslations, null, 2);
+            const writtenContent = JSON.stringify(orderedTranslations, null, 2);
 
-          if (missingHashs.size > 0) {
-            if (aiTranslator && missingMap.size === 0) {
-              log.info(`✅ ${basename} translations were AI-generated`);
-            } else if (missingMap.size > 0) {
+            if (missingHashs.size > 0) {
               hasError = true;
               const markerLine = findMarkerLine(writtenContent);
               const lineInfo = markerLine ? `:${markerLine}` : '';
               log.info(`🟠 ${basename}${lineInfo} translations keys were added`);
+            } else {
+              log.info(`✅ ${basename} translations fixed`);
             }
-          } else {
-            log.info(`✅ ${basename} translations fixed`);
-          }
 
-          fs.writeFileSync(fullPath, writtenContent);
+            fs.writeFileSync(fullPath, writtenContent);
+          }
         }
       }
     } else {
       log.info(`✅ ${basename} translations are up to date`);
+    }
+  }
+
+  if (aiTranslationTasks.length > 0) {
+    const aiResults = await Promise.all(
+      aiTranslationTasks.map(async (task) => {
+        try {
+          const result = await aiTranslator!.translateBatch(task.contexts);
+          return { task, result, error: null };
+        } catch (error) {
+          return { task, result: null, error };
+        }
+      }),
+    );
+
+    for (const { task, result, error } of aiResults) {
+      const {
+        fullPath,
+        basename,
+        cleanedExisting,
+        regularMissingHashs,
+        missingSpecialTranslations,
+        missingHashs,
+      } = task;
+
+      const missingMap = new Map<string, unknown>();
+
+      if (error) {
+        log.error(
+          `❌ AI translation failed for ${basename}:`,
+          error instanceof Error ? error.message : error,
+        );
+        for (const hash of regularMissingHashs) {
+          const value =
+            allPluralTranslationHashs.has(hash) ?
+              {
+                zero: 'No x',
+                one: '1 x',
+                '+2': '# x',
+                many: undefined,
+                manyLimit: undefined,
+              }
+            : null;
+          missingMap.set(hash, value);
+        }
+      } else if (result) {
+        const { translations: aiTranslations, model, usage } = result;
+
+        for (const hash of regularMissingHashs) {
+          const aiResult = aiTranslations.get(hash);
+          if (aiResult) {
+            cleanedExisting[hash] = aiResult.value;
+          } else {
+            const fallbackValue =
+              allPluralTranslationHashs.has(hash) ?
+                {
+                  zero: 'No x',
+                  one: '1 x',
+                  '+2': '# x',
+                  many: undefined,
+                  manyLimit: undefined,
+                }
+              : null;
+            missingMap.set(hash, fallbackValue);
+          }
+        }
+
+        if (model || usage) {
+          const parts: string[] = [];
+          if (model) parts.push(`Model: ${model}`);
+          if (usage)
+            parts.push(
+              `Tokens: ${usage.inputTokens} in / ${usage.outputTokens} out`,
+            );
+          log.info(`   ${basename}: ${parts.join(' | ')}`);
+        }
+      }
+
+      for (const hash of missingSpecialTranslations) {
+        const value =
+          allPluralTranslationHashs.has(hash) ?
+            {
+              zero: 'No x',
+              one: '1 x',
+              '+2': '# x',
+              many: undefined,
+              manyLimit: undefined,
+            }
+          : null;
+        missingMap.set(hash, value);
+      }
+
+      const existingKeysCount = Object.keys(cleanedExisting).length;
+      const keysForPosition =
+        missingMap.size > 0 ? [...missingMap.keys()] : [];
+      const insertPosition = calculateInsertPosition(
+        keysForPosition,
+        existingKeysCount,
+      );
+
+      const orderedTranslations = buildOrderedTranslations(
+        cleanedExisting,
+        missingMap,
+        insertPosition,
+        missingMap.size > 0,
+      );
+
+      const writtenContent = JSON.stringify(orderedTranslations, null, 2);
+
+      if (missingHashs.size > 0) {
+        if (missingMap.size === 0) {
+          log.info(`✅ ${basename} translations were AI-generated`);
+        } else {
+          hasError = true;
+          const markerLine = findMarkerLine(writtenContent);
+          const lineInfo = markerLine ? `:${markerLine}` : '';
+          log.info(`🟠 ${basename}${lineInfo} translations keys were added`);
+        }
+      } else {
+        log.info(`✅ ${basename} translations fixed`);
+      }
+
+      fs.writeFileSync(fullPath, writtenContent);
     }
   }
 
