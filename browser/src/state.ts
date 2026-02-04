@@ -1,4 +1,5 @@
 import type { Locale } from '@ls-stack/i18n-core';
+import { cachedGetter } from '@ls-stack/utils/cache';
 import { retryOnError } from '@ls-stack/utils/retryOnError';
 
 export type LocaleLoader = () => Promise<{ default: Locale }>;
@@ -44,6 +45,7 @@ let loadedLocaleId: string | null = null;
 let loadRequestId = 0;
 let clearIntlCacheFn: (() => void) | null = null;
 let fallbackLocale: string | null = null;
+let preloadRegionLocale: { value: string | null } | null = null;
 
 const invalidScopeErrorMessage =
   'I18n error: Invalid usage of translation function, check if the translate function is called inside a React component scope';
@@ -62,6 +64,17 @@ export function configure<T extends string>(options: {
   retryAttempts = options.retryAttempts ?? 3;
   retryDelay = options.retryDelay ?? 1000;
   devMode = options.dev ?? false;
+
+  preloadRegionLocale = cachedGetter(() => {
+    const persistedLocale = getPersistedLocale();
+    if (persistedLocale) {
+      return inferRegionLocale(persistedLocale);
+    }
+    if (fallbackLocale) {
+      return inferRegionLocale(fallbackLocale);
+    }
+    return null;
+  });
 }
 
 export function getState(): I18nState<string> {
@@ -138,13 +151,23 @@ export function inferRegionLocale(localeId: string): string {
   return localeId;
 }
 
+export function getPersistedLocale(): string | null {
+  if (!persistenceKey) return null;
+  try {
+    return localStorage.getItem(persistenceKey);
+  } catch {
+    return null;
+  }
+}
+
 export function getRegionLocale(): string {
   if (state.regionLocale) {
     return state.regionLocale;
   }
 
-  if (fallbackLocale) {
-    return inferRegionLocale(fallbackLocale);
+  const preloadValue = preloadRegionLocale?.value;
+  if (preloadValue) {
+    return preloadValue;
   }
 
   if (devMode) {
@@ -248,15 +271,6 @@ export async function setLocale(localeId: string): Promise<void> {
   return loadingPromise;
 }
 
-export function getPersistedLocale(): string | null {
-  if (!persistenceKey) return null;
-  try {
-    return localStorage.getItem(persistenceKey);
-  } catch {
-    return null;
-  }
-}
-
 export function getDefaultLocale(): string | null {
   return localesConfig[0]?.id ?? null;
 }
@@ -339,6 +353,7 @@ export function resetState(): void {
   cachedSnapshot = null;
   persistenceKey = null;
   fallbackLocale = null;
+  preloadRegionLocale = null;
   retryAttempts = 3;
   retryDelay = 1000;
   devMode = false;

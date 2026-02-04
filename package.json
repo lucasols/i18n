@@ -10,7 +10,8 @@
     "tsc": "pnpm -r tsc",
     "eslint": "CI=true eslint core/src/ server/src/ server/tests/ browser/src/ browser/tests/ --color --max-warnings=0",
     "build": "pnpm test && pnpm lint && pnpm build:no-test",
-    "build:no-test": "pnpm -r build:no-test"
+    "build:no-test": "pnpm -r build:no-test",
+    "bench": "node bench/bench.mjs"
   },
   "repository": "https://github.com/lucasols/i18n",
   "author": "Lucas Santos",

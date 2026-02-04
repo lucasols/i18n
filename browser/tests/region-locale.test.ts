@@ -101,18 +101,36 @@ describe('getRegionLocale fallback chain', () => {
     expect(controller.getRegionLocale()).toBe('en-US');
   });
 
-  test('returns activeLocale when no regionLocale in state', async () => {
+  test('returns inferred region locale from persisted locale before loading', () => {
     vi.stubGlobal('navigator', {
-      languages: ['fr-FR'],
+      languages: ['pt-BR', 'en-GB', 'en-US'],
     });
 
-    const controller = createTestController({
-      locales: { en: {} },
+    localStorage.setItem('test-persisted', 'en');
+
+    const controller = i18nitialize({
+      persistenceKey: 'test-persisted',
+      fallbackLocale: 'pt',
+      locales: [{ id: 'en', loader: () => Promise.resolve({ default: {} }) }],
     });
 
-    await controller.setLocale('en');
+    expect(controller.getRegionLocale()).toBe('en-GB');
+  });
 
-    expect(controller.getRegionLocale()).toBe('en');
+  test('persisted locale takes priority over fallbackLocale for region inference', () => {
+    vi.stubGlobal('navigator', {
+      languages: ['pt-BR', 'en-GB'],
+    });
+
+    localStorage.setItem('test-priority', 'pt');
+
+    const controller = i18nitialize({
+      persistenceKey: 'test-priority',
+      fallbackLocale: 'en',
+      locales: [{ id: 'pt', loader: () => Promise.resolve({ default: {} }) }],
+    });
+
+    expect(controller.getRegionLocale()).toBe('pt-BR');
   });
 
   test('returns region locale based on fallbackLocale and browser locales when no locale loaded', async () => {
