@@ -343,6 +343,38 @@ test('does not send $ and ~~ translations to AI and fails validation', async () 
   `);
 });
 
+test('includes extra translations in similarity context for renamed keys', async () => {
+  const { translator, getContexts } = trackingTranslator();
+
+  // Simulate a source key rename: "Welcome back" was renamed to "Welcome back!"
+  // The old translation ("Welcome back" → "Bem-vindo de volta") is now extra
+  // but should still appear as similar context for AI generation
+  const ctx = createCliTestContext({
+    src: {
+      'main.tsx': `
+          import { __ } from '@ls-stack/i18n';
+          export const t = __\`Welcome back!\`;
+        `,
+    },
+    config: {
+      'pt.json': JSON.stringify({ 'Welcome back': 'Bem-vindo de volta' }),
+    },
+  });
+
+  await ctx.validate({ fix: true, aiTranslator: translator });
+
+  const welcomeCtx = getContexts().find(
+    (c) => c.sourceKey === 'Welcome back!',
+  );
+
+  expect(welcomeCtx).toBeDefined();
+  expect(welcomeCtx?.similarTranslations.length).toBeGreaterThanOrEqual(1);
+  expect(welcomeCtx?.similarTranslations[0]?.key).toBe('Welcome back');
+  expect(welcomeCtx?.similarTranslations[0]?.translation).toBe(
+    'Bem-vindo de volta',
+  );
+});
+
 function mockTranslator(
   handler: (ctx: TranslationContext) => TranslationResult | undefined,
 ): AITranslator {

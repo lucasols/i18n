@@ -780,6 +780,21 @@ export async function validateTranslations(
                 );
               }
             }
+            // Include extra translations in the similarity index so that
+            // renamed/modified source keys can still benefit from their
+            // previous translations as context for AI generation
+            for (const extraKey of extraHashs) {
+              if (isMarkerKey(extraKey) || existingTranslationsMap.has(extraKey)) {
+                continue;
+              }
+              const value = localeTranslations[extraKey];
+              if (
+                typeof value === 'string' ||
+                (typeof value === 'object' && value !== null)
+              ) {
+                existingTranslationsMap.set(extraKey, value);
+              }
+            }
 
             const contexts: TranslationContext[] = [];
             const similarityIndex = createSimilarityIndex(
