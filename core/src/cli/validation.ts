@@ -118,32 +118,9 @@ function findMarkerLine(fileContent: string): number | null {
   return null;
 }
 
-function calculateInsertPosition(
-  missingKeys: string[],
-  totalKeys: number,
-): number {
+function calculateInsertPosition(totalKeys: number): number {
   if (totalKeys === 0) return 0;
-
-  const sortedKeys = [...missingKeys].sort();
-
-  let hash = sortedKeys.length | 0;
-
-  for (const key of sortedKeys) {
-    hash = ((hash << 5) - hash + key.length) | 0;
-
-    for (let i = 0; i < key.length; i++) {
-      hash = ((hash << 5) - hash + key.charCodeAt(i)) | 0;
-    }
-    hash = ((hash << 5) - hash + 0xff) | 0;
-  }
-
-  hash ^= hash >>> 16;
-  hash = Math.imul(hash, 0x85ebca6b);
-  hash ^= hash >>> 13;
-  hash = Math.imul(hash, 0xc2b2ae35);
-  hash ^= hash >>> 16;
-
-  return (hash >>> 0) % totalKeys;
+  return Math.floor(Math.random() * totalKeys);
 }
 
 function buildOrderedTranslations(
@@ -842,12 +819,8 @@ export async function validateTranslations(
             }
 
             const existingKeysCount = Object.keys(cleanedExisting).length;
-            const keysForPosition =
-              missingMap.size > 0 ? [...missingMap.keys()] : [];
-            const insertPosition = calculateInsertPosition(
-              keysForPosition,
-              existingKeysCount,
-            );
+            const insertPosition =
+              calculateInsertPosition(existingKeysCount);
 
             const orderedTranslations = buildOrderedTranslations(
               cleanedExisting,
@@ -966,12 +939,7 @@ export async function validateTranslations(
       }
 
       const existingKeysCount = Object.keys(cleanedExisting).length;
-      const keysForPosition =
-        missingMap.size > 0 ? [...missingMap.keys()] : [];
-      const insertPosition = calculateInsertPosition(
-        keysForPosition,
-        existingKeysCount,
-      );
+      const insertPosition = calculateInsertPosition(existingKeysCount);
 
       const orderedTranslations = buildOrderedTranslations(
         cleanedExisting,

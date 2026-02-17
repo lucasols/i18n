@@ -1,5 +1,5 @@
 import { createCliTestContext } from '@ls-stack/i18n-core/cli';
-import { expect, test } from 'vitest';
+import { expect, test, vi } from 'vitest';
 
 const mainTsx = `
 import { __, __p, i18nitialize } from '@ls-stack/i18n';
@@ -639,124 +639,28 @@ test('fix moves multiple existing null translations under missing marker for non
   `);
 });
 
-test('missing translations position is deterministic based on missing keys', async () => {
-  const existingTranslations = {
-    Apple: 'Apple',
-    Banana: 'Banana',
-    Cherry: 'Cherry',
-    Date: 'Date',
-    Elderberry: 'Elderberry',
-  };
+test('missing translations position is random and consistent when Math.random is mocked', async () => {
+  const randomSpy = vi.spyOn(Math, 'random').mockReturnValue(0.3);
 
-  const ctx1 = createCliTestContext({
-    src: {
-      'main.tsx': `
-        import { __ } from '@ls-stack/i18n';
-        export const t1 = __\`Apple\`;
-        export const t2 = __\`Banana\`;
-        export const t3 = __\`Cherry\`;
-        export const t4 = __\`Date\`;
-        export const t5 = __\`Elderberry\`;
-        export const t6 = __\`NewKey1\`;
-      `,
-    },
-    config: {
-      'en.json': JSON.stringify(existingTranslations),
-    },
-  });
+  try {
+    const existingTranslations = {
+      Apple: 'Apple',
+      Banana: 'Banana',
+      Cherry: 'Cherry',
+      Date: 'Date',
+      Elderberry: 'Elderberry',
+    };
 
-  await ctx1.validate({ fix: true });
-  const output1 = ctx1.getConfigFileRaw('en.json');
-
-  const ctx2 = createCliTestContext({
-    src: {
-      'main.tsx': `
-        import { __ } from '@ls-stack/i18n';
-        export const t1 = __\`Apple\`;
-        export const t2 = __\`Banana\`;
-        export const t3 = __\`Cherry\`;
-        export const t4 = __\`Date\`;
-        export const t5 = __\`Elderberry\`;
-        export const t6 = __\`NewKey1\`;
-      `,
-    },
-    config: {
-      'en.json': JSON.stringify(existingTranslations),
-    },
-  });
-
-  await ctx2.validate({ fix: true });
-  const output2 = ctx2.getConfigFileRaw('en.json');
-
-  expect(output1).toBe(output2);
-
-  const ctx3 = createCliTestContext({
-    src: {
-      'main.tsx': `
-        import { __ } from '@ls-stack/i18n';
-        export const t1 = __\`Apple\`;
-        export const t2 = __\`Banana\`;
-        export const t3 = __\`Cherry\`;
-        export const t4 = __\`Date\`;
-        export const t5 = __\`Elderberry\`;
-        export const t6 = __\`DifferentKey\`;
-      `,
-    },
-    config: {
-      'en.json': JSON.stringify(existingTranslations),
-    },
-  });
-
-  await ctx3.validate({ fix: true });
-  const output3 = ctx3.getConfigFileRaw('en.json');
-
-  expect(output1).not.toBe(output3);
-});
-
-test('different branches adding different translations get different positions', async () => {
-  const existingTranslations: Record<string, string> = {};
-  const existingKeys: string[] = [];
-  for (let i = 0; i < 1000; i++) {
-    const key = `Translation key ${i.toString().padStart(4, '0')}`;
-    existingTranslations[key] = `Translated value ${i}`;
-    existingKeys.push(key);
-  }
-
-  const branchFeatures = [
-    ['Auth login button', 'Auth logout button', 'Auth forgot password'],
-    ['Cart add item', 'Cart remove item', 'Cart checkout'],
-    ['Dashboard welcome', 'Dashboard stats', 'Dashboard settings'],
-    ['Error not found', 'Error server error', 'Error validation'],
-    ['Form submit', 'Form cancel', 'Form reset'],
-    ['Help faq', 'Help contact', 'Help docs'],
-    ['Invoice total', 'Invoice items', 'Invoice date'],
-    ['Menu home', 'Menu profile', 'Menu settings'],
-    ['Notification success', 'Notification error', 'Notification warning'],
-    ['Search placeholder', 'Search results', 'Search no results'],
-  ];
-
-  function getMissingBlockPosition(output: string): number {
-    const parsed = JSON.parse(output) as Record<string, unknown>;
-    const keys = Object.keys(parsed);
-    return keys.indexOf('👇 missing start 👇');
-  }
-
-  const positions: number[] = [];
-
-  for (const featureKeys of branchFeatures) {
-    const existingExports = existingKeys
-      .map((k, i) => `export const t${i} = __\`${k}\`;`)
-      .join('\n');
-    const newExports = featureKeys
-      .map((k, i) => `export const new${i} = __\`${k}\`;`)
-      .join('\n');
-
-    const ctx = createCliTestContext({
+    const ctx1 = createCliTestContext({
       src: {
         'main.tsx': `
           import { __ } from '@ls-stack/i18n';
-          ${existingExports}
-          ${newExports}
+          export const t1 = __\`Apple\`;
+          export const t2 = __\`Banana\`;
+          export const t3 = __\`Cherry\`;
+          export const t4 = __\`Date\`;
+          export const t5 = __\`Elderberry\`;
+          export const t6 = __\`NewKey1\`;
         `,
       },
       config: {
@@ -764,15 +668,129 @@ test('different branches adding different translations get different positions',
       },
     });
 
-    await ctx.validate({ fix: true });
-    const output = ctx.getConfigFileRaw('en.json');
-    if (output === undefined) {
-      throw new Error('Expected en.json to exist');
-    }
-    const position = getMissingBlockPosition(output);
-    positions.push(position);
-  }
+    await ctx1.validate({ fix: true });
+    const output1 = ctx1.getConfigFileRaw('en.json');
 
-  const uniquePositions = new Set(positions);
-  expect(uniquePositions.size).toBe(10);
+    const ctx2 = createCliTestContext({
+      src: {
+        'main.tsx': `
+          import { __ } from '@ls-stack/i18n';
+          export const t1 = __\`Apple\`;
+          export const t2 = __\`Banana\`;
+          export const t3 = __\`Cherry\`;
+          export const t4 = __\`Date\`;
+          export const t5 = __\`Elderberry\`;
+          export const t6 = __\`NewKey1\`;
+        `,
+      },
+      config: {
+        'en.json': JSON.stringify(existingTranslations),
+      },
+    });
+
+    await ctx2.validate({ fix: true });
+    const output2 = ctx2.getConfigFileRaw('en.json');
+
+    expect(output1).toBe(output2);
+
+    const ctx3 = createCliTestContext({
+      src: {
+        'main.tsx': `
+          import { __ } from '@ls-stack/i18n';
+          export const t1 = __\`Apple\`;
+          export const t2 = __\`Banana\`;
+          export const t3 = __\`Cherry\`;
+          export const t4 = __\`Date\`;
+          export const t5 = __\`Elderberry\`;
+          export const t6 = __\`DifferentKey\`;
+        `,
+      },
+      config: {
+        'en.json': JSON.stringify(existingTranslations),
+      },
+    });
+
+    await ctx3.validate({ fix: true });
+    const output3 = ctx3.getConfigFileRaw('en.json');
+
+    expect(output1).not.toBe(output3);
+  } finally {
+    randomSpy.mockRestore();
+  }
+});
+
+test('different branches adding different translations get different positions', async () => {
+  let callCount = 0;
+  const randomValues = [0.05, 0.15, 0.25, 0.35, 0.45, 0.55, 0.65, 0.75, 0.85, 0.95];
+  const randomSpy = vi.spyOn(Math, 'random').mockImplementation(() => {
+    const index = callCount % randomValues.length;
+    callCount++;
+    return randomValues[index] ?? 0;
+  });
+
+  try {
+    const existingTranslations: Record<string, string> = {};
+    const existingKeys: string[] = [];
+    for (let i = 0; i < 1000; i++) {
+      const key = `Translation key ${i.toString().padStart(4, '0')}`;
+      existingTranslations[key] = `Translated value ${i}`;
+      existingKeys.push(key);
+    }
+
+    const branchFeatures = [
+      ['Auth login button', 'Auth logout button', 'Auth forgot password'],
+      ['Cart add item', 'Cart remove item', 'Cart checkout'],
+      ['Dashboard welcome', 'Dashboard stats', 'Dashboard settings'],
+      ['Error not found', 'Error server error', 'Error validation'],
+      ['Form submit', 'Form cancel', 'Form reset'],
+      ['Help faq', 'Help contact', 'Help docs'],
+      ['Invoice total', 'Invoice items', 'Invoice date'],
+      ['Menu home', 'Menu profile', 'Menu settings'],
+      ['Notification success', 'Notification error', 'Notification warning'],
+      ['Search placeholder', 'Search results', 'Search no results'],
+    ];
+
+    function getMissingBlockPosition(output: string): number {
+      const parsed = JSON.parse(output) as Record<string, unknown>;
+      const keys = Object.keys(parsed);
+      return keys.indexOf('👇 missing start 👇');
+    }
+
+    const positions: number[] = [];
+
+    for (const featureKeys of branchFeatures) {
+      const existingExports = existingKeys
+        .map((k, i) => `export const t${i} = __\`${k}\`;`)
+        .join('\n');
+      const newExports = featureKeys
+        .map((k, i) => `export const new${i} = __\`${k}\`;`)
+        .join('\n');
+
+      const ctx = createCliTestContext({
+        src: {
+          'main.tsx': `
+            import { __ } from '@ls-stack/i18n';
+            ${existingExports}
+            ${newExports}
+          `,
+        },
+        config: {
+          'en.json': JSON.stringify(existingTranslations),
+        },
+      });
+
+      await ctx.validate({ fix: true });
+      const output = ctx.getConfigFileRaw('en.json');
+      if (output === undefined) {
+        throw new Error('Expected en.json to exist');
+      }
+      const position = getMissingBlockPosition(output);
+      positions.push(position);
+    }
+
+    const uniquePositions = new Set(positions);
+    expect(uniquePositions.size).toBe(10);
+  } finally {
+    randomSpy.mockRestore();
+  }
 });

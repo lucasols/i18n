@@ -4,7 +4,15 @@ import {
   type TranslationContext,
   type TranslationResult,
 } from '@ls-stack/i18n-core/cli';
-import { expect, test } from 'vitest';
+import { beforeEach, afterEach, expect, test, vi } from 'vitest';
+
+beforeEach(() => {
+  vi.spyOn(Math, 'random').mockReturnValue(0);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 test('generates string translations', async () => {
   const translator = mockTranslator((ctx) =>
