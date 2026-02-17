@@ -7,7 +7,7 @@ import {
 import { beforeEach, afterEach, expect, test, vi } from 'vitest';
 
 beforeEach(() => {
-  vi.spyOn(Math, 'random').mockReturnValue(0);
+  vi.spyOn(Math, 'random').mockReturnValue(0.5);
 });
 
 afterEach(() => {
@@ -333,11 +333,11 @@ test('does not send $ and ~~ translations to AI and fails validation', async () 
 
   expect(ctx.getConfigFileRaw('pt.json')).toMatchInlineSnapshot(`
     "{
+      "Hello World": "translated:Hello World",
       "👇 missing start 👇": "🛑 delete this line 🛑",
       "$terms_of_service": null,
       "Welcome~~formal": null,
       "👆 missing end 👆": "🛑 delete this line 🛑",
-      "Hello World": "translated:Hello World",
       "Goodbye": "translated:Goodbye",
       "": ""
     }"

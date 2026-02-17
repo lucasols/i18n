@@ -1,5 +1,13 @@
 import { createCliTestContext } from '@ls-stack/i18n-core/cli';
-import { expect, test } from 'vitest';
+import { beforeEach, afterEach, expect, test, vi } from 'vitest';
+
+beforeEach(() => {
+  vi.spyOn(Math, 'random').mockReturnValue(0.5);
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 const mainTs = `
 import { i18nitialize } from '../../server/src/main';
