@@ -1,7 +1,7 @@
 {
   "name": "@ls-stack/i18n",
   "description": "Super simple browser i18n library with React support",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "license": "MIT",
   "scripts": {
     "test": "vitest run",
