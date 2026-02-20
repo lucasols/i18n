@@ -161,10 +161,10 @@ test('falls back to null when AI fails for specific key', async () => {
 
   expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
       "{
+        "Hello": "AI Hello",
         "👇 missing start 👇": "🛑 delete this line 🛑",
         "World": null,
         "👆 missing end 👆": "🛑 delete this line 🛑",
-        "Hello": "AI Hello",
         "": ""
       }"
     `);
@@ -213,8 +213,8 @@ test('preserves existing translations', async () => {
 
   expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
       "{
-        "Hello": "Existing translation",
         "World": "AI: World",
+        "Hello": "Existing translation",
         "": ""
       }"
     `);
@@ -334,11 +334,11 @@ test('does not send $ and ~~ translations to AI and fails validation', async () 
   expect(ctx.getConfigFileRaw('pt.json')).toMatchInlineSnapshot(`
     "{
       "Hello World": "translated:Hello World",
+      "Goodbye": "translated:Goodbye",
       "👇 missing start 👇": "🛑 delete this line 🛑",
       "$terms_of_service": null,
       "Welcome~~formal": null,
       "👆 missing end 👆": "🛑 delete this line 🛑",
-      "Goodbye": "translated:Goodbye",
       "": ""
     }"
   `);
@@ -349,6 +349,69 @@ test('does not send $ and ~~ translations to AI and fails validation', async () 
       "❌ pt.json has missing $ or ~~ translations that require manual translation: $terms_of_service,Welcome~~formal",
     ]
   `);
+});
+
+test('inserts AI translations at a random position, not always at the end', async () => {
+  const translator = mockStringTranslator((key) => `AI: ${key}`);
+
+  const existingTranslations: Record<string, string> = {};
+  for (let i = 1; i <= 10; i++) {
+    existingTranslations[`Existing ${i}`] = `Translation ${i}`;
+  }
+
+  const src = {
+    'main.tsx': `
+        import { __ } from '@ls-stack/i18n';
+        export const t1 = __\`Existing 1\`;
+        export const t2 = __\`Existing 2\`;
+        export const t3 = __\`Existing 3\`;
+        export const t4 = __\`Existing 4\`;
+        export const t5 = __\`Existing 5\`;
+        export const t6 = __\`Existing 6\`;
+        export const t7 = __\`Existing 7\`;
+        export const t8 = __\`Existing 8\`;
+        export const t9 = __\`Existing 9\`;
+        export const t10 = __\`Existing 10\`;
+        export const tNew = __\`New Key\`;
+      `,
+  };
+
+  // Math.random returns 0 → AI translation should be inserted at the beginning
+  vi.spyOn(Math, 'random').mockReturnValue(0);
+
+  const ctxStart = createCliTestContext({
+    src,
+    config: { 'pt.json': JSON.stringify(existingTranslations) },
+  });
+
+  await ctxStart.validate({ fix: true, aiTranslator: translator });
+  const rawStart = ctxStart.getConfigFileRaw('pt.json') ?? '';
+  const keysStart = Object.keys(
+    JSON.parse(rawStart) as Record<string, unknown>,
+  );
+
+  // Math.random returns 0.5 → AI translation should be inserted in the middle
+  vi.spyOn(Math, 'random').mockReturnValue(0.5);
+
+  const ctxMid = createCliTestContext({
+    src,
+    config: { 'pt.json': JSON.stringify(existingTranslations) },
+  });
+
+  await ctxMid.validate({ fix: true, aiTranslator: translator });
+  const rawMid = ctxMid.getConfigFileRaw('pt.json') ?? '';
+  const keysMid = Object.keys(JSON.parse(rawMid) as Record<string, unknown>);
+
+  const newKeyIndexStart = keysStart.indexOf('New Key');
+  const newKeyIndexMid = keysMid.indexOf('New Key');
+
+  // With Math.random = 0, AI key should be inserted at the beginning
+  expect(newKeyIndexStart).toBe(0);
+  // With Math.random = 0.5, AI key should be inserted in the middle
+  // floor(0.5 * 10) = 5
+  expect(newKeyIndexMid).toBe(5);
+  // The positions should be different proving random insertion
+  expect(newKeyIndexStart).not.toBe(newKeyIndexMid);
 });
 
 test('includes extra translations in similarity context for renamed keys', async () => {

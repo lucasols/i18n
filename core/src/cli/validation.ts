@@ -128,23 +128,41 @@ function buildOrderedTranslations(
   missing: Map<string, unknown>,
   insertPosition: number,
   addMarkers = true,
+  aiTranslated?: Map<string, unknown>,
 ): Record<string, unknown> {
   const result: Record<string, unknown> = {};
   const existingKeys = Object.keys(existing).filter(
     (k) => k !== '' && !isMarkerKey(k),
   );
 
+  const allNewKeys = new Map<string, unknown>();
+  if (aiTranslated) {
+    for (const [key, value] of aiTranslated) {
+      allNewKeys.set(key, value);
+    }
+  }
+  for (const [key, value] of missing) {
+    allNewKeys.set(key, value);
+  }
+
   let inserted = false;
   for (let i = 0; i < existingKeys.length; i++) {
-    if (i === insertPosition && !inserted && missing.size > 0) {
-      if (addMarkers) {
-        result[MISSING_START_MARKER] = MISSING_MARKER_VALUE;
+    if (i === insertPosition && !inserted && allNewKeys.size > 0) {
+      if (aiTranslated) {
+        for (const [key, value] of aiTranslated) {
+          result[key] = value;
+        }
       }
-      for (const [key, value] of missing) {
-        result[key] = value;
-      }
-      if (addMarkers) {
-        result[MISSING_END_MARKER] = MISSING_MARKER_VALUE;
+      if (missing.size > 0) {
+        if (addMarkers) {
+          result[MISSING_START_MARKER] = MISSING_MARKER_VALUE;
+        }
+        for (const [key, value] of missing) {
+          result[key] = value;
+        }
+        if (addMarkers) {
+          result[MISSING_END_MARKER] = MISSING_MARKER_VALUE;
+        }
       }
       inserted = true;
     }
@@ -154,15 +172,22 @@ function buildOrderedTranslations(
     }
   }
 
-  if (!inserted && missing.size > 0) {
-    if (addMarkers) {
-      result[MISSING_START_MARKER] = MISSING_MARKER_VALUE;
+  if (!inserted && allNewKeys.size > 0) {
+    if (aiTranslated) {
+      for (const [key, value] of aiTranslated) {
+        result[key] = value;
+      }
     }
-    for (const [key, value] of missing) {
-      result[key] = value;
-    }
-    if (addMarkers) {
-      result[MISSING_END_MARKER] = MISSING_MARKER_VALUE;
+    if (missing.size > 0) {
+      if (addMarkers) {
+        result[MISSING_START_MARKER] = MISSING_MARKER_VALUE;
+      }
+      for (const [key, value] of missing) {
+        result[key] = value;
+      }
+      if (addMarkers) {
+        result[MISSING_END_MARKER] = MISSING_MARKER_VALUE;
+      }
     }
   }
 
@@ -872,6 +897,7 @@ export async function validateTranslations(
       } = task;
 
       const missingMap = new Map<string, unknown>();
+      const aiTranslatedMap = new Map<string, unknown>();
 
       if (error) {
         log.error(
@@ -897,7 +923,7 @@ export async function validateTranslations(
         for (const hash of regularMissingHashs) {
           const aiResult = aiTranslations.get(hash);
           if (aiResult) {
-            cleanedExisting[hash] = aiResult.value;
+            aiTranslatedMap.set(hash, aiResult.value);
           } else {
             const fallbackValue =
               allPluralTranslationHashs.has(hash) ?
@@ -946,6 +972,7 @@ export async function validateTranslations(
         missingMap,
         insertPosition,
         missingMap.size > 0,
+        aiTranslatedMap.size > 0 ? aiTranslatedMap : undefined,
       );
 
       const writtenContent = JSON.stringify(orderedTranslations, null, 2);
