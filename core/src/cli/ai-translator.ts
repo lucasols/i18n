@@ -37,20 +37,27 @@ export interface AITranslator {
   translateBatch(contexts: TranslationContext[]): Promise<TranslateBatchResult>;
 }
 
-const pluralTranslationSchema = z.object({
-  zero: z.string().optional(),
-  one: z.string().optional(),
-  '+2': z.string(),
-  many: z.string().optional(),
-  manyLimit: z.number().optional(),
-});
-
-function buildTranslationsSchema(contexts: TranslationContext[]) {
-  const shape: Record<string, z.ZodTypeAny> = {};
-  for (const ctx of contexts) {
-    shape[ctx.sourceKey] = ctx.isPlural ? pluralTranslationSchema : z.string();
-  }
-  return z.object(shape);
+function buildTranslationsSchema() {
+  return z.object({
+    strings: z.array(
+      z.object({
+        key: z.string(),
+        translation: z.string(),
+      }),
+    ),
+    plurals: z.array(
+      z.object({
+        key: z.string(),
+        translation: z.object({
+          zero: z.string().nullable(),
+          one: z.string().nullable(),
+          plus2: z.string(),
+          many: z.string().nullable(),
+          manyLimit: z.number().nullable(),
+        }),
+      }),
+    ),
+  });
 }
 
 function buildPrompt(contexts: TranslationContext[]): string {
@@ -62,17 +69,20 @@ function buildPrompt(contexts: TranslationContext[]): string {
     '<instructions>',
     '- Translate the provided keys to the specified target locale',
     '- Keep placeholders like {1}, {2}, # exactly as they appear',
-    '- For plural translations, provide an object with one and +2 forms',
+    '- For plural translations, provide an object with one and plus2 forms',
     '- Use similar existing translations as style/terminology reference',
+    '- Respond with a JSON object containing two arrays: "strings" and "plurals"',
+    '- Each item in "strings" has "key" (the original source key) and "translation" (the translated string)',
+    '- Each item in "plurals" has "key" (the original source key) and "translation" (an object with plural forms)',
     '</instructions>',
     '',
     '<plural-format>',
     'Plural translations must be objects with these keys:',
     '  one: text when count is 1',
-    '  +2: text when count is 2 or more (use # as the number placeholder)',
+    '  plus2: text when count is 2 or more (use # as the number placeholder)',
     '',
-    'English example: { "one": "1 item", "+2": "# items" }',
-    'Portuguese example: { "one": "1 item", "+2": "# itens" }',
+    'English example: { "one": "1 item", "plus2": "# items" }',
+    'Portuguese example: { "one": "1 item", "plus2": "# itens" }',
     '</plural-format>',
     '',
     '<keys>',
@@ -102,30 +112,32 @@ function buildPrompt(contexts: TranslationContext[]): string {
 }
 
 function parseGeneratedObject(
-  obj: Record<string, string | z.infer<typeof pluralTranslationSchema>>,
+  obj: z.infer<ReturnType<typeof buildTranslationsSchema>>,
   contexts: TranslationContext[],
 ): Map<string, TranslationResult> {
   const results = new Map<string, TranslationResult>();
+  const validKeys = new Set(contexts.map((ctx) => ctx.sourceKey));
+  const pluralKeys = new Set(
+    contexts.filter((ctx) => ctx.isPlural).map((ctx) => ctx.sourceKey),
+  );
 
-  for (const ctx of contexts) {
-    const value = obj[ctx.sourceKey];
-    if (value === undefined) continue;
+  for (const item of obj.strings) {
+    if (!validKeys.has(item.key) || pluralKeys.has(item.key)) continue;
+    results.set(item.key, { type: 'string', value: item.translation });
+  }
 
-    if (ctx.isPlural && typeof value === 'object') {
-      const pluralValue = value;
-      results.set(ctx.sourceKey, {
-        type: 'plural',
-        value: {
-          zero: pluralValue.zero,
-          one: pluralValue.one,
-          '+2': pluralValue['+2'],
-          many: pluralValue.many,
-          manyLimit: pluralValue.manyLimit,
-        },
-      });
-    } else if (typeof value === 'string') {
-      results.set(ctx.sourceKey, { type: 'string', value });
-    }
+  for (const item of obj.plurals) {
+    if (!validKeys.has(item.key) || !pluralKeys.has(item.key)) continue;
+    results.set(item.key, {
+      type: 'plural',
+      value: {
+        zero: item.translation.zero ?? undefined,
+        one: item.translation.one ?? undefined,
+        '+2': item.translation.plus2,
+        many: item.translation.many ?? undefined,
+        manyLimit: item.translation.manyLimit ?? undefined,
+      },
+    });
   }
 
   return results;
@@ -158,7 +170,7 @@ export function createAITranslator(
       }
 
       const prompt = buildPrompt(contexts);
-      const schema = buildTranslationsSchema(contexts);
+      const schema = buildTranslationsSchema();
       const startTime = Date.now();
 
       try {
@@ -171,7 +183,7 @@ export function createAITranslator(
         });
 
         const output = result.output as
-          | Record<string, string | z.infer<typeof pluralTranslationSchema>>
+          | z.infer<ReturnType<typeof buildTranslationsSchema>>
           | undefined;
 
         if (!output) {
