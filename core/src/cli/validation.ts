@@ -436,7 +436,7 @@ export async function validateTranslations(
         validationIssues.push({
           rule: 'constant-translation',
           hash,
-          message: `constant translation "${hash}" has the same value in all locales. Either translate it differently per locale, or move it to code if it doesn't need translation`,
+          message: `constant translation "${hash}" has the same value in all locales. Either translate it differently per locale, or use plain strings if it doesn't need translation`,
           locations,
         });
       }
@@ -786,7 +786,10 @@ export async function validateTranslations(
             // renamed/modified source keys can still benefit from their
             // previous translations as context for AI generation
             for (const extraKey of extraHashs) {
-              if (isMarkerKey(extraKey) || existingTranslationsMap.has(extraKey)) {
+              if (
+                isMarkerKey(extraKey) ||
+                existingTranslationsMap.has(extraKey)
+              ) {
                 continue;
               }
               const value = localeTranslations[extraKey];
@@ -844,8 +847,7 @@ export async function validateTranslations(
             }
 
             const existingKeysCount = Object.keys(cleanedExisting).length;
-            const insertPosition =
-              calculateInsertPosition(existingKeysCount);
+            const insertPosition = calculateInsertPosition(existingKeysCount);
 
             const orderedTranslations = buildOrderedTranslations(
               cleanedExisting,
@@ -860,7 +862,9 @@ export async function validateTranslations(
               hasError = true;
               const markerLine = findMarkerLine(writtenContent);
               const lineInfo = markerLine ? `:${markerLine}` : '';
-              log.info(`🟠 ${basename}${lineInfo} translations keys were added`);
+              log.info(
+                `🟠 ${basename}${lineInfo} translations keys were added`,
+              );
             } else {
               log.info(`✅ ${basename} translations fixed`);
             }
