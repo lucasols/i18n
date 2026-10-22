@@ -25,3 +25,14 @@ export function getScriptKind(fileName: string): ts.ScriptKind {
     return ts.ScriptKind.TS;
   return ts.ScriptKind.JS;
 }
+
+/** Shared by the CLI analyses, so each file is only parsed once */
+export function parseSourceFile(fileName: string, code: string): ts.SourceFile {
+  return ts.createSourceFile(
+    fileName,
+    code,
+    ts.ScriptTarget.Latest,
+    false,
+    getScriptKind(fileName),
+  );
+}

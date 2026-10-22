@@ -1,4 +1,5 @@
 import { validateTranslations } from '@ls-stack/i18n-core/cli';
+import { parseIdsFile } from '@ls-stack/i18n-core/compiler';
 import { existsSync } from 'node:fs';
 import {
   cp,
@@ -685,6 +686,48 @@ describe('vite build with an ids file', { timeout: 30_000 }, () => {
       expect(await readBuiltTranslation(copyRoot, 'getExportLabel', 'pt')).toBe(
         'Export as PDF',
       );
+    });
+  });
+
+  test('warns when two translations have the same id after a merge', async () => {
+    await withFixtureCopy(async (copyRoot) => {
+      await updateIdsFile(copyRoot);
+
+      const idsFile = path.join(copyRoot, 'i18n-ids.json');
+      const ids = parseIdsFile(await readFile(idsFile, 'utf-8'));
+      const removeBookmarkId = ids.get('s:Remove bookmark');
+      if (removeBookmarkId === undefined) throw new Error('Missing id');
+
+      // both merged branches gave their new string the same free id
+      ids.set('s:Bookmarked', removeBookmarkId);
+      await writeFile(
+        idsFile,
+        JSON.stringify({ version: 1, ids: Object.fromEntries(ids) }),
+      );
+
+      const warnings: string[] = [];
+      const buildOptions = getBuildOptions(copyRoot);
+
+      await build({
+        ...getViteConfig(copyRoot, { idsFile: 'i18n-ids.json' }),
+        build: {
+          ...buildOptions,
+          rollupOptions: {
+            ...buildOptions?.rollupOptions,
+            onwarn: (warning) => {
+              warnings.push(warning.message);
+            },
+          },
+        },
+      });
+
+      expect(
+        warnings.some(
+          (warning) =>
+            warning.includes('has ids taken by two translations') &&
+            warning.includes('lost their id'),
+        ),
+      ).toBe(true);
     });
   });
 

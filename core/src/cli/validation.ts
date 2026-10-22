@@ -1,5 +1,6 @@
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import path from 'path';
+import type ts from 'typescript';
 import { readdirp, type EntryInfo } from 'readdirp';
 import {
   rc_null,
@@ -26,7 +27,11 @@ import {
   TranslationRegistry,
   type TranslationKey,
 } from '../compiler';
-import { isTranslationSourceFile } from '../scriptKind';
+import {
+  isTranslationSourceFile,
+  parseSourceFile,
+  QUICK_CHECK_REGEX,
+} from '../scriptKind';
 
 type LocaleAITranslationTask = {
   fullPath: string;
@@ -387,11 +392,30 @@ export async function validateTranslations(
   let hasError = false;
 
   const srcDirs = Array.isArray(srcDir) ? srcDir : [srcDir];
-  const srcPaths = srcDirs.map((dir) =>
-    path.isAbsolute(dir) ? dir : path.join(process.cwd(), dir),
-  );
+  const resolveSrcDir = (dir: string) =>
+    path.isAbsolute(dir) ? dir : path.join(process.cwd(), dir);
+  const srcPaths = srcDirs.map(resolveSrcDir);
   /** Files of nested or repeated srcDirs are only read once */
   const scannedFiles = new Set<string>();
+
+  // a misspelled dir would be scanned as empty and `fix` would remove its
+  // translations from the locale and ids files
+  const missingSrcDirs = srcDirs.filter(
+    (dir) => !fs.existsSync(resolveSrcDir(dir)),
+  );
+
+  if (missingSrcDirs.length > 0) {
+    log.error(`❌ Source dir not found: ${missingSrcDirs.join(', ')}`);
+    return { hasError: true };
+  }
+
+  // shown in the issues, relative to the working directory with multiple
+  // srcDirs so the files of dirs with the same name can be told apart
+  const getIssuePath = (srcPath: string, fullPath: string) =>
+    path.relative(
+      srcPaths.length === 1 ? path.dirname(srcPath) : process.cwd(),
+      fullPath,
+    );
 
   const globalUsageMap = new Map<string, TranslationUsage>();
   const globalJsxStringTranslations = new Set<string>();
@@ -411,17 +435,19 @@ export async function validateTranslations(
 
       const fileTextContent = fs.readFileSync(fullPath, 'utf-8');
 
-      if (idsFile) {
+      let sourceFile: ts.SourceFile | undefined;
+
+      if (idsFile && QUICK_CHECK_REGEX.test(fileTextContent)) {
+        sourceFile = parseSourceFile(fullPath, fileTextContent);
         compiledKeys.push(
-          ...analyzeTranslations(fullPath, fileTextContent).calls,
+          ...analyzeTranslations(fullPath, fileTextContent, sourceFile).calls,
         );
       }
 
-      // shown in the issues, e.g. `src/main.tsx`
-      const relativePath = path.relative(path.dirname(srcPath), fullPath);
       const i18nUsages: I18nUsagesResult = getI18nUsagesInCode(
-        relativePath,
+        getIssuePath(srcPath, fullPath),
         fileTextContent,
+        sourceFile,
       );
 
       for (const hash of i18nUsages.stringTranslations) {

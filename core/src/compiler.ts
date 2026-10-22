@@ -1,6 +1,6 @@
 import MagicString, { type SourceMap } from 'magic-string';
 import ts from 'typescript';
-import { getScriptKind, QUICK_CHECK_REGEX } from './scriptKind';
+import { parseSourceFile, QUICK_CHECK_REGEX } from './scriptKind';
 
 export { IGNORED_DIRS, isTranslationSourceFile } from './scriptKind';
 import type {
@@ -333,16 +333,12 @@ function getDeclarationScope(
 export function analyzeTranslations(
   fileName: string,
   code: string,
+  /** Already parsed `code`, avoids parsing it again */
+  parsedSourceFile?: ts.SourceFile,
 ): TranslationAnalysis {
   if (!QUICK_CHECK_REGEX.test(code)) return emptyAnalysis;
 
-  const sourceFile = ts.createSourceFile(
-    fileName,
-    code,
-    ts.ScriptTarget.Latest,
-    false,
-    getScriptKind(fileName),
-  );
+  const sourceFile = parsedSourceFile ?? parseSourceFile(fileName, code);
 
   const foundCalls = new Map<ts.Node, FoundCall>();
   /** Scope nodes and the translation function names they declare */

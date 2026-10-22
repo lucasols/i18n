@@ -368,8 +368,12 @@ export function i18nVitePlugin({
           !stableIds ? 'was not found'
           : idsFileState === 'outdated' ? 'is outdated'
           : 'has ids taken by two translations';
+        const consequence =
+          idsFileState === 'duplicated-ids' ?
+            'the translations that lost their id get a free id that can change with the next string changes'
+          : 'the ids of the translations missing from it can change the hash of unrelated chunks in the next builds';
 
-        idsFileWarning = `The ids file "${idsFilePath}" ${problem}, the ids of the translations missing from it can change the hash of unrelated chunks in the next builds. Update it with \`ls-stack-i18n --fix --ids-file <file>\``;
+        idsFileWarning = `The ids file "${idsFilePath}" ${problem}, ${consequence}. Update it with \`ls-stack-i18n --fix --ids-file <file>\``;
       }
     }
 

@@ -1,4 +1,5 @@
 import { createCliTestContext } from '@ls-stack/i18n-core/cli';
+import path from 'node:path';
 import { expect, test } from 'vitest';
 
 const mainTsx = `
@@ -955,4 +956,58 @@ test('the ids file lists the translations of every src dir', async () => {
 
   expect(result.hasError).toBe(false);
   expect(result.errors).toEqual([]);
+});
+
+test('fails without changing the files when a src dir is not found', async () => {
+  const ctx = createCliTestContext({
+    src: { 'main.tsx': mainTsx },
+    config: {
+      'en.json': JSON.stringify(enCorrectTranslations),
+      'pt.json': JSON.stringify(ptCorrectTranslations),
+    },
+    idsFile: JSON.stringify(mainIds),
+  });
+
+  const result = await ctx.validate({
+    fix: true,
+    // misspelled `packages/ui/src`
+    extraSrcDirs: ['/virtual/packages/iu/src'],
+  });
+
+  expect(result.hasError).toBe(true);
+  expect(result.errors).toEqual([
+    '❌ Source dir not found: /virtual/packages/iu/src',
+  ]);
+  expect(JSON.parse(ctx.getConfigFileRaw('pt.json') ?? '')).toEqual(
+    ptCorrectTranslations,
+  );
+  expect(ctx.getIdsFile()).toBe(JSON.stringify(mainIds));
+});
+
+test('issues of multiple src dirs show the path from the working directory', async () => {
+  const ctx = createCliTestContext({
+    src: { 'main.tsx': mainTsx },
+    packageSrc: {
+      'Button.tsx': `import { __ } from '@ls-stack/i18n';
+
+export function OkButton() {
+  return <button>{__\`OK\`}</button>;
+}
+`,
+    },
+    config: {
+      'en.json': JSON.stringify({ ...enCorrectTranslations, OK: 'OK' }),
+      'pt.json': JSON.stringify({ ...ptCorrectTranslations, OK: 'OK' }),
+    },
+  });
+
+  const result = await ctx.validate();
+
+  const buttonPath = path.relative(
+    process.cwd(),
+    path.join(ctx.packageSrcDir, 'Button.tsx'),
+  );
+  expect(result.errors).toContainEqual(
+    expect.stringContaining(`❌ ${buttonPath}:4:`),
+  );
 });

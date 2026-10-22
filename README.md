@@ -497,16 +497,16 @@ ls-stack-i18n --config-dir ./src/locales --src-dir ./src --ids-file i18n-ids.jso
 {
   "version": 1,
   "ids": {
-    "p:You have # unread messages": 2,
     "s:Direct Messages": 0,
-    "s:Hello {1}": 1
+    "s:Hello {1}": 1,
+    "p:You have # unread messages": 2
   }
 }
 ```
 
 - Each translation keeps its id. New translations take the ids freed by the removed ones, the chunks that used a removed string change anyway, so the ids stay compact without renumbering.
 - The plugin only reads the file, builds never write to disk. A build with an outdated or missing file still works and warns: the translations missing from the file take free ids, so the file only affects which chunks change in the next builds.
-- The file has one translation per line, sorted, so merging branches that added different strings rarely conflicts. When both branches gave the same id to different strings, every build resolves it the same way (the first in sorted order keeps it), the check and the build warn without failing, and the next `--fix` writes the resolved ids. Until then the id of the string that lost it can change with the next string changes.
+- The file has one translation per line, sorted by source string (`s:` for `__`/`__jsx`, `p:` for plurals), so merging branches that added different strings rarely conflicts. When both branches gave the same id to different strings, every build resolves it the same way (the first in sorted order keeps it), the check and the build warn without failing, and the next `--fix` writes the resolved ids. Until then the id of the string that lost it can change with the next string changes.
 - The file must be outside `localesDir`, or it would be read as a locale. The CLI `--src-dir` directories must match the plugin `srcDir`, translations found by only one of them don't break the build but get ids that are not kept in the file and the build warns that the file is outdated.
 
 #### Rendering with the React Compiler
@@ -569,22 +569,22 @@ ls-stack-i18n --config-dir ./locales --src-dir ./src --default en
 ls-stack-i18n --config-dir ./locales --src-dir ./src --default en --fix
 ```
 
-The CLI scans the same files compiled by the vite plugin: `.ts`, `.tsx`, `.js`, `.jsx`, `.mts`, `.cts`, `.mjs` and `.cjs`, excluding `.d.ts` declaration files.
+The CLI scans the same files compiled by the vite plugin: `.ts`, `.tsx`, `.js`, `.jsx`, `.mts`, `.cts`, `.mjs` and `.cjs`, excluding `.d.ts` declaration files. With multiple `--src-dir`, the issues show the file paths relative to the working directory.
 
 ### Options
 
-| Option           | Alias | Description                                                                          |
-| ---------------- | ----- | ------------------------------------------------------------------------------------ |
-| `--config-dir`   | `-c`  | Path to translation JSON files (required)                                            |
-| `--src-dir`      | `-r`  | Path to source files to scan, can be used multiple times (required)                  |
-| `--default`      | `-d`  | Default locale ID                                                                    |
-| `--fix`          | `-f`  | Auto-add missing translations                                                        |
-| `--ids-file`     |       | Checks, or updates with `--fix`, the [vite plugin ids file](#stable-translation-ids) |
-| `--ai`           |       | AI provider for auto-translation (`google`/`openai`)                                 |
-| `--max-id-size`  |       | Maximum translation ID size (default: 80)                                            |
-| `--disable-rule` |       | Disable a validation rule (can be used multiple times)                               |
-| `--warn-rule`    |       | Set a validation rule to warning (can be used multiple times)                        |
-| `--no-color`     |       | Disable colored output                                                               |
+| Option           | Alias | Description                                                                                                  |
+| ---------------- | ----- | ------------------------------------------------------------------------------------------------------------ |
+| `--config-dir`   | `-c`  | Path to translation JSON files (required)                                                                    |
+| `--src-dir`      | `-r`  | Path to source files to scan, can be used multiple times (required), every path must exist                   |
+| `--default`      | `-d`  | Default locale ID                                                                                            |
+| `--fix`          | `-f`  | Auto-add missing translations                                                                                |
+| `--ids-file`     |       | Checks, or updates with `--fix`, the [vite plugin ids file](#stable-translation-ids) (`@ls-stack/i18n` only) |
+| `--ai`           |       | AI provider for auto-translation (`google`/`openai`)                                                         |
+| `--max-id-size`  |       | Maximum translation ID size (default: 80)                                                                    |
+| `--disable-rule` |       | Disable a validation rule (can be used multiple times)                                                       |
+| `--warn-rule`    |       | Set a validation rule to warning (can be used multiple times)                                                |
+| `--no-color`     |       | Disable colored output                                                                                       |
 
 ### Validation Rules
 
