@@ -11,7 +11,8 @@ export const RUNTIME_MODULE = '@ls-stack/i18n';
 
 const LOCAL_PREFIX = '__i18n';
 
-const QUICK_CHECK_REGEX = /\b__(?:p|jsx|pjsx)?\b/;
+/** Matches code that may contain translation calls */
+export const QUICK_CHECK_REGEX = /\b__(?:p|jsx|pjsx)?\b/;
 
 type TranslationFn = '__' | '__p' | '__jsx' | '__pjsx';
 
@@ -205,6 +206,19 @@ function findScope(
   return ancestors[0] ?? null;
 }
 
+function getComputedMethodName(node: ts.Node): ts.ComputedPropertyName | null {
+  if (
+    (ts.isMethodDeclaration(node) ||
+      ts.isGetAccessorDeclaration(node) ||
+      ts.isSetAccessorDeclaration(node)) &&
+    ts.isComputedPropertyName(node.name)
+  ) {
+    return node.name;
+  }
+
+  return null;
+}
+
 /**
  * Returns the node whose scope contains the declaration, `ancestors` is the
  * path from the source file to the declaration parent.
@@ -323,13 +337,19 @@ export function analyzeTranslations(
       if (found && !shadowed.get(found.fnName)) calls.push(found.call);
 
       const names = shadowingScopes.get(node);
+      // a computed method name is evaluated in the enclosing scope
+      const computedName = names ? getComputedMethodName(node) : null;
+
+      if (computedName) collectUnshadowed(computedName);
 
       if (names) {
         for (const name of names)
           shadowed.set(name, (shadowed.get(name) ?? 0) + 1);
       }
 
-      ts.forEachChild(node, collectUnshadowed);
+      ts.forEachChild(node, (child) => {
+        if (child !== computedName) collectUnshadowed(child);
+      });
 
       if (names) {
         for (const name of names)

@@ -39,11 +39,12 @@ function getTranslation(id: number): CompiledTranslation | undefined {
   if (!compiledTranslations) {
     if (!translations) return undefined;
 
+    // renders empty like in production, where there are no dev fallbacks
     reportErrorOnce(
       'uncompiled-locale',
       `I18n error: the locale "${activeLocale}" was not compiled by the vite plugin, the locale loader must import a JSON file from the plugin localesDir`,
     );
-    return getDevFallback(id);
+    return undefined;
   }
 
   return compiledTranslations[id] ?? getDevFallback(id);

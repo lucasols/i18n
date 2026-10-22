@@ -316,7 +316,7 @@ test('__timeDuration formats durations with a compiled locale', async () => {
 });
 
 describe('misconfigured compilation', () => {
-  test('locale loaded without the vite plugin logs an error and uses the dev fallbacks', async () => {
+  test('locale loaded without the vite plugin logs an error and renders empty like in production', async () => {
     const consoleError = vi
       .spyOn(console, 'error')
       .mockImplementation(() => {});
@@ -326,7 +326,7 @@ describe('misconfigured compilation', () => {
     __registerDevFallbacks([[id('Direct Messages'), 'Direct Messages']]);
     await controller.setLocale('pt');
 
-    expect(__t(id('Direct Messages'))).toBe('Direct Messages');
+    expect(__t(id('Direct Messages'))).toBe('');
     expect(__t(id('Export as PDF'))).toBe('');
     expect(consoleError).toHaveBeenCalledOnce();
     expect(consoleError).toHaveBeenCalledWith(

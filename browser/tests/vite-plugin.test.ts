@@ -609,6 +609,123 @@ describe('vite build of a copy of the app', { timeout: 30_000 }, () => {
     }
   });
 
+  test('scans symlinked source files and directories', async () => {
+    const { tmpDir: copyDir, root: copyRoot } = await createFixtureCopy();
+
+    try {
+      const sharedDir = path.join(copyDir, 'shared');
+      await mkdir(sharedDir, { recursive: true });
+      await cp(
+        path.join(copyRoot, 'src/legal.ts'),
+        path.join(sharedDir, 'legal.ts'),
+      );
+      await cp(path.join(copyRoot, 'src/chat'), path.join(sharedDir, 'chat'), {
+        recursive: true,
+      });
+      await rm(path.join(copyRoot, 'src/legal.ts'));
+      await rm(path.join(copyRoot, 'src/chat'), { recursive: true });
+      await symlink(
+        path.join(sharedDir, 'legal.ts'),
+        path.join(copyRoot, 'src/legal.ts'),
+      );
+      await symlink(
+        path.join(sharedDir, 'chat'),
+        path.join(copyRoot, 'src/chat'),
+        'dir',
+      );
+      // links back to srcDir and to the linked directory must not loop the scan
+      await symlink(
+        path.join(copyRoot, 'src'),
+        path.join(sharedDir, 'chat/src'),
+        'dir',
+      );
+      await symlink(
+        path.join(sharedDir, 'chat'),
+        path.join(sharedDir, 'chat/chat'),
+        'dir',
+      );
+
+      await build({
+        ...getViteConfig(copyRoot),
+        build: getBuildOptions(copyRoot),
+      });
+
+      expect(await readBuiltTranslation(copyRoot, 'getExportLabel', 'pt')).toBe(
+        'Export as PDF',
+      );
+
+      const assets = await readdir(path.join(copyRoot, 'dist/assets'));
+      const ptChunk = assets.find((file) => /^pt-[\w-]+\.js$/.test(file));
+      if (!ptChunk) throw new Error('pt locale chunk not found');
+
+      const ptLocale = await readFile(
+        path.join(copyRoot, 'dist/assets', ptChunk),
+        'utf-8',
+      );
+      expect(ptLocale).toContain('Mensagens diretas');
+    } finally {
+      await rm(copyDir, { recursive: true, force: true });
+    }
+  });
+
+  test('a wrapper package with its own copy of the runtime uses the runtime of the app', async () => {
+    const { tmpDir: copyDir, root: copyRoot } = await createFixtureCopy();
+
+    try {
+      // `packages/i18n` sets up the locales of the app, but its own
+      // `@ls-stack/i18n` dependency resolves to a different copy
+      const wrapperDir = path.join(copyDir, 'packages/i18n');
+      const runtimeCopy = path.join(wrapperDir, 'runtime-copy.ts');
+      await mkdir(wrapperDir, { recursive: true });
+      await writeFile(
+        runtimeCopy,
+        "export function i18nitialize() {\n  return 'wrapper runtime copy';\n}\n",
+      );
+      await writeFile(
+        path.join(wrapperDir, 'index.ts'),
+        (
+          await readFile(path.join(copyRoot, 'src/i18n.ts'), 'utf-8')
+        ).replaceAll("'../locales/", "'../../app/locales/"),
+      );
+      await writeFile(
+        path.join(copyRoot, 'src/i18n.ts'),
+        "export { i18n } from '../../packages/i18n/index';\n",
+      );
+
+      const wrapperDirs = [wrapperDir, await realpath(wrapperDir)];
+      const config = getViteConfig(copyRoot);
+
+      await build({
+        ...config,
+        resolve: {},
+        plugins: [
+          ...(config.plugins ?? []),
+          {
+            name: 'workspace-dependencies',
+            resolveId(source, importer) {
+              if (source !== '@ls-stack/i18n' || !importer) return null;
+
+              const isWrapper = wrapperDirs.some((dir) =>
+                importer.startsWith(`${dir}/`),
+              );
+
+              return isWrapper ? runtimeCopy : runtimeEntry;
+            },
+          },
+        ],
+        build: getBuildOptions(copyRoot),
+      });
+
+      const main = await readFile(path.join(copyRoot, 'dist/main.js'), 'utf-8');
+      expect(main).not.toContain('wrapper runtime copy');
+      expect(await readBuiltTranslation(copyRoot, 'getExportLabel', 'pt')).toBe(
+        'Export as PDF',
+      );
+    } finally {
+      await rm(copyDir, { recursive: true, force: true });
+    }
+  });
+
   test('compiles the locales when the root is a symlink', async () => {
     const linkRoot = path.join(tmpDir, 'app-link');
     await symlink(root, linkRoot, 'dir');

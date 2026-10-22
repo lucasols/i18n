@@ -263,7 +263,11 @@ export async function setLocale(localeId: string): Promise<void> {
       const loadedTranslations = await retryOnError(
         async () => (await localeConfig.loader()).default,
         retryAttempts,
-        { delayBetweenRetriesMs: retryDelay },
+        {
+          delayBetweenRetriesMs: retryDelay,
+          // a newer selection cancels this load
+          retryCondition: () => requestId === loadRequestId,
+        },
       );
 
       if (requestId !== loadRequestId) {

@@ -171,6 +171,49 @@ describe('locale switching', () => {
     expect(__`hello`).toBe('hello');
     expect(loadedLocales).toEqual(['en']);
   });
+
+  test('a selection replaced by a newer one resolves to false', async () => {
+    vi.useFakeTimers();
+
+    const controller = createTestController({
+      locales: { en: {}, pt: {}, fr: {} },
+      loadingTimes: { en: 50, pt: 200, fr: 50 },
+    });
+
+    await vi.advanceTimersByTimeAsync(50);
+
+    const ptSelection = controller.setLocale('pt');
+    const frSelection = controller.setLocale('fr');
+
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(await ptSelection).toBe(false);
+    expect(await frSelection).toBe(true);
+    expect(controller.getLoadedLocale()).toBe('fr');
+  });
+
+  test('a cancelled failing load is not retried', async () => {
+    vi.useFakeTimers();
+
+    const controller = createTestController({
+      locales: { en: {}, pt: new Error('Network error') },
+      loadingTimes: { en: 50, pt: 200 },
+      retryAttempts: 3,
+      retryDelay: 1000,
+    });
+
+    await vi.advanceTimersByTimeAsync(50);
+
+    const ptSelection = controller.setLocale('pt');
+    await vi.advanceTimersByTimeAsync(100);
+    await controller.setLocale('en');
+
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(await ptSelection).toBe(false);
+    expect(controller.invokedLoaderIds).toEqual(['en', 'pt']);
+    expect(controller.getLoadedLocale()).toBe('en');
+  });
 });
 
 describe('error handling', () => {
