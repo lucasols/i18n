@@ -188,6 +188,64 @@ describe('analyzeTranslations', () => {
     expect(calls.map((call) => call.hash)).toEqual(['Display name', 'Email']);
   });
 
+  test('method decorators are not shadowed by the method parameters', () => {
+    const { calls } = analyzeTranslations(
+      '/app/src/settingsForm.ts',
+      `
+        export class SettingsForm {
+          @label(__\`Save settings\`)
+          submit(__: SubmitEvent) {
+            return __.target;
+          }
+        }
+      `,
+    );
+
+    expect(calls.map((call) => call.hash)).toEqual(['Save settings']);
+  });
+
+  test('ambient declarations do not shadow the translation functions', () => {
+    const { calls } = analyzeTranslations(
+      '/app/src/legacyBanner.ts',
+      `
+        declare const __: (strings: TemplateStringsArray) => string;
+        declare function __p(count: number): typeof __;
+        declare namespace legacy {
+          const __jsx: typeof __;
+        }
+
+        export const title = __\`Legacy banner\`;
+        export const items = (count: number) => __p(count)\`# items\`;
+      `,
+    );
+
+    expect(calls.map((call) => call.hash)).toEqual(['Legacy banner', '# items']);
+  });
+
+  test('leaves calls with syntax errors untouched', () => {
+    const missingExpression = analyzeTranslations(
+      '/app/src/Greeting.tsx',
+      'export const greeting = __`Hello ${} again`; const ok = __`Saved`;',
+    );
+    const unterminatedTemplate = analyzeTranslations(
+      '/app/src/Greeting.tsx',
+      'export const Greeting = () => <p>{__`Hello ${user</p>; }',
+    );
+    const missingCount = analyzeTranslations(
+      '/app/src/Inbox.ts',
+      'export const unread = __p()`# unread`;',
+    );
+    const unterminatedNoSubstitution = analyzeTranslations(
+      '/app/src/Inbox.ts',
+      'export const title = __`Inbox',
+    );
+
+    expect(missingExpression.calls.map((call) => call.hash)).toEqual(['Saved']);
+    expect(unterminatedTemplate.calls).toEqual([]);
+    expect(missingCount.calls).toEqual([]);
+    expect(unterminatedNoSubstitution.calls).toEqual([]);
+  });
+
   test('var declarations in the body do not shadow parameter initializers', () => {
     const { calls } = analyzeTranslations(
       '/app/src/header.ts',

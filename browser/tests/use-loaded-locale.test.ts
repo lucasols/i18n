@@ -162,3 +162,64 @@ test('updates when locale changes', async () => {
     "
   `);
 });
+
+test('selecting the loaded locale clears the error of a failed load', async () => {
+  vi.useFakeTimers();
+
+  const controller = createTestController({
+    locales: {
+      en: { Hello: 'Hello EN' },
+      pt: new Error('Network error'),
+    },
+    retryAttempts: 1,
+    retryDelay: 0,
+    persistenceKey: false,
+  });
+
+  const logger = createLoggerStore();
+
+  renderHook(() => {
+    const state = controller.useLoadedLocale();
+    logger.add({
+      isLoading: state.isLoading?.locale ?? null,
+      loadedLocale: state.loadedLocale,
+      errorMessage: state.loadError?.message ?? null,
+    });
+    return state;
+  });
+
+  await vi.advanceTimersByTimeAsync(100);
+
+  logger.addMark('pt load fails');
+
+  act(() => {
+    controller.setLocale('pt').catch(() => {});
+  });
+
+  // First attempt (100ms) + 1 retry (100ms) = 200ms
+  await act(async () => {
+    await vi.advanceTimersByTimeAsync(200);
+  });
+
+  logger.addMark('select en');
+
+  await act(async () => {
+    await controller.setLocale('en');
+  });
+
+  expect(logger.snapshot).toMatchInlineSnapshot(`
+    "
+    -> isLoading: en ⋅ loadedLocale: null ⋅ errorMessage: null
+    -> isLoading: null ⋅ loadedLocale: en ⋅ errorMessage: null
+
+    >>> pt load fails
+
+    -> isLoading: pt ⋅ loadedLocale: en ⋅ errorMessage: null
+    -> isLoading: null ⋅ loadedLocale: en ⋅ errorMessage: Network error
+
+    >>> select en
+
+    -> isLoading: null ⋅ loadedLocale: en ⋅ errorMessage: null
+    "
+  `);
+});

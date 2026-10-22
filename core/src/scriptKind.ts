@@ -1,5 +1,12 @@
 import ts from 'typescript';
 
+const SOURCE_FILE_REGEX = /\.[cm]?[jt]sx?$/;
+
+/** Files scanned for translations by the CLI and compiled by the vite plugin */
+export function isTranslationSourceFile(fileName: string): boolean {
+  return SOURCE_FILE_REGEX.test(fileName) && !fileName.endsWith('.d.ts');
+}
+
 export function getScriptKind(fileName: string): ts.ScriptKind {
   const ext = fileName.slice(fileName.lastIndexOf('.'));
 

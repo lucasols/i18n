@@ -1,6 +1,7 @@
 import {
   analyzeTranslations,
   compileLocaleModule,
+  isTranslationSourceFile,
   QUICK_CHECK_REGEX,
   RUNTIME_MODULE,
   transformTranslations,
@@ -8,6 +9,7 @@ import {
   type TranslationAnalysis,
   type TranslationKey,
 } from '@ls-stack/i18n-core/compiler';
+import { createHash } from 'node:crypto';
 import { realpathSync, type Dirent, type Stats } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
@@ -25,7 +27,6 @@ export type I18nVitePluginOptions = {
 
 const PLUGIN_NAME = 'ls-stack-i18n';
 const VIRTUAL_LOCALE_PREFIX = '\0ls-stack-i18n-locale/';
-const SOURCE_FILE_REGEX = /\.[cm]?[jt]sx?$/;
 
 // hook filters skip the JS hooks for unrelated modules (vite >= 6.3), the
 // handlers keep their own checks for older versions
@@ -39,16 +40,35 @@ function removeQuery(id: string): string {
   return queryPos === -1 ? id : id.slice(0, queryPos);
 }
 
-function isSourceFile(file: string): boolean {
-  return SOURCE_FILE_REGEX.test(file) && !file.endsWith('.d.ts');
+function getErrorCode(error: unknown): unknown {
+  return error instanceof Error && 'code' in error ? error.code : undefined;
 }
 
 function isMissingFileError(error: unknown): boolean {
-  return (
-    error instanceof Error &&
-    'code' in error &&
-    (error.code === 'ENOENT' || error.code === 'EISDIR')
-  );
+  const code = getErrorCode(error);
+  return code === 'ENOENT' || code === 'EISDIR';
+}
+
+const UNREADABLE_ENTRY_ERRORS: ReadonlySet<unknown> = new Set([
+  'ENOENT',
+  'EISDIR',
+  'ENOTDIR',
+  'ELOOP',
+  'EACCES',
+  'EPERM',
+]);
+
+/**
+ * Entries of srcDir that can't be read (e.g. deleted files, symlink loops or
+ * directories without permission) are skipped by the scan, vite reports the
+ * error if they are imported
+ */
+function isUnreadableEntryError(error: unknown): boolean {
+  return UNREADABLE_ENTRY_ERRORS.has(getErrorCode(error));
+}
+
+function hashCode(code: string): string {
+  return createHash('sha1').update(code).digest('base64');
 }
 
 /**
@@ -80,7 +100,7 @@ async function getStats(file: string): Promise<Stats | null> {
   try {
     return await stat(file);
   } catch (error) {
-    if (isMissingFileError(error)) return null;
+    if (isUnreadableEntryError(error)) return null;
     throw error;
   }
 }
@@ -101,7 +121,7 @@ async function forEachSourceFile(
   try {
     entries = await readdir(dir, { withFileTypes: true });
   } catch (error) {
-    if (isMissingFileError(error)) return;
+    if (isUnreadableEntryError(error)) return;
     throw error;
   }
 
@@ -122,7 +142,7 @@ async function forEachSourceFile(
       }
 
       if (entry.isFile()) {
-        if (isSourceFile(entry.name)) await callback(fullPath);
+        if (isTranslationSourceFile(entry.name)) await callback(fullPath);
         return;
       }
 
@@ -148,14 +168,17 @@ async function forEachSourceFile(
           options,
           callback,
         );
-      } else if (stats.isFile() && isSourceFile(entry.name)) {
+      } else if (stats.isFile() && isTranslationSourceFile(entry.name)) {
         await callback(options.preserveSymlinks ? fullPath : target);
       }
     }),
   );
 }
 
-type CachedAnalysis = { code: string; analysis: TranslationAnalysis };
+/** The code is kept as a hash, so the cache doesn't hold every scanned file */
+type CachedAnalysis = { codeHash: string; analysis: TranslationAnalysis };
+
+type FileStats = { size: number; mtimeMs: number; ctimeMs: number };
 
 /**
  * Compiles the translations at build time and on the dev server:
@@ -187,8 +210,8 @@ export function i18nVitePlugin({
   let localeRescan: Promise<void> | null = null;
   /** Importer used to resolve the runtime from the app root */
   let rootImporter = '';
-  /** Size and modification time of the scanned files, used on watch rebuilds */
-  const scannedFiles = new Map<string, { size: number; mtimeMs: number }>();
+  /** Size and modification times of the scanned files, used on watch rebuilds */
+  const scannedFiles = new Map<string, FileStats>();
 
   const analysisCache = new Map<string, CachedAnalysis>();
   const loadedLocaleIds = new Set<string>();
@@ -237,13 +260,19 @@ export function i18nVitePlugin({
         if (!stats) return;
 
         const previous = scannedFiles.get(file);
-        scannedFiles.set(file, { size: stats.size, mtimeMs: stats.mtimeMs });
+        scannedFiles.set(file, {
+          size: stats.size,
+          mtimeMs: stats.mtimeMs,
+          ctimeMs: stats.ctimeMs,
+        });
 
-        // the registry keeps the keys of the previous builds
+        // the registry keeps the keys of the previous builds, the change time
+        // also catches edits that preserve the modification time (`cp -p`)
         if (
           isRebuild &&
           previous?.size === stats.size &&
-          previous.mtimeMs === stats.mtimeMs
+          previous.mtimeMs === stats.mtimeMs &&
+          previous.ctimeMs === stats.ctimeMs
         ) {
           return;
         }
@@ -254,7 +283,7 @@ export function i18nVitePlugin({
       try {
         code = await readFile(file, 'utf-8');
       } catch (error) {
-        if (isMissingFileError(error)) return;
+        if (isUnreadableEntryError(error)) return;
         throw error;
       }
 
@@ -262,7 +291,7 @@ export function i18nVitePlugin({
 
       if (analysis.calls.length === 0) return;
 
-      analysisCache.set(file, { code, analysis });
+      analysisCache.set(file, { codeHash: hashCode(code), analysis });
 
       for (const call of analysis.calls) {
         keys.push(call);
@@ -341,7 +370,7 @@ export function i18nVitePlugin({
 
     if (cached) {
       analysisCache.delete(file);
-      if (cached.code === code) return cached.analysis;
+      if (cached.codeHash === hashCode(code)) return cached.analysis;
     }
 
     return analyzeTranslations(file, code);
@@ -545,7 +574,7 @@ export function i18nVitePlugin({
 
         const file = removeQuery(id);
 
-        if (!isSourceFile(file)) return null;
+        if (!isTranslationSourceFile(file)) return null;
 
         const analysis = getAnalysis(file, code);
 

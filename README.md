@@ -445,7 +445,7 @@ Behavior differences from the uncompiled runtime:
 
 - The default locale strings are moved from the code into the default locale chunk, so translations return an empty string until a locale is loaded. Use `useLoadedLocale()` to render after the locale loads (see [Rendering with the React Compiler](#rendering-with-the-react-compiler)).
 - Locale files must only be imported by the locale loaders, a static `import en from './locales/en.json'` also receives the compiled array.
-- Every locale loader must import a JSON file from `localesDir` with the `.json` extension and no query, e.g. `() => import('./locales/pt.json')`. A locale loaded another way (e.g. `fetch` or an inline object) can't be read by the compiled calls, so translations render empty and an error is logged. The build fails when `localesDir` has no locale files or a locale file is imported without the extension or with a query, and warns when translations were compiled but no locale file was imported.
+- Every locale loader must import a JSON file from `localesDir` with the `.json` extension, no query and no import attributes, e.g. `() => import('./locales/pt.json')`. Loaders with import attributes, like `import('./locales/pt.json', { with: { type: 'json' } })`, are not supported. A locale loaded another way (e.g. `fetch` or an inline object) can't be read by the compiled calls, so translations render empty and an error is logged. The build fails when `localesDir` has no locale files or a locale file is imported without the extension or with a query, and warns when translations were compiled but no locale file was imported.
 - Every imported `__`, `__p`, `__jsx` and `__pjsx`, directly or re-exported from a local module, is assumed to be the `@ls-stack/i18n` one. Don't import other translators (e.g. a `@ls-stack/server-i18n` instance) under these names in code compiled by the plugin, locally declared bindings with these names are left untouched.
 - Only direct calls of `__`, `__p`, `__jsx` and `__pjsx` are compiled. Member calls like `i18n.__`, aliased imports, calls inside a scope that declares its own `__` (e.g. `const { __ } = i18n`) code in `node_modules` and translations in files compiled to JS by other plugins (e.g. `.mdx`, `.vue` or `.svelte`) are left untouched. Those calls can't be translated with a compiled locale, they render the source string and an error is logged.
 - In the build, every translation must be inside `srcDir` (`node_modules` and `.git` directories are not scanned), translations outside it fail the build. Symlinked files and directories inside `srcDir` are scanned too. On the dev server, translations added while the server is running get new ids and render the source string until the locale file is updated.
@@ -512,6 +512,8 @@ ls-stack-i18n --config-dir ./locales --src-dir ./src --default en
 # Auto-fix translation files
 ls-stack-i18n --config-dir ./locales --src-dir ./src --default en --fix
 ```
+
+The CLI scans the same files compiled by the vite plugin: `.ts`, `.tsx`, `.js`, `.jsx`, `.mts`, `.cts`, `.mjs` and `.cjs`, excluding `.d.ts` declaration files.
 
 ### Options
 

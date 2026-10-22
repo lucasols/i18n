@@ -1,6 +1,8 @@
 import MagicString, { type SourceMap } from 'magic-string';
 import ts from 'typescript';
 import { getScriptKind } from './scriptKind';
+
+export { isTranslationSourceFile } from './scriptKind';
 import type {
   CompiledLocale,
   CompiledPlural,
@@ -92,6 +94,7 @@ function getTranslationCall(
     if (!arg || ts.isSpreadElement(arg)) return null;
 
     count = { start: arg.getStart(sourceFile), end: arg.end };
+    if (count.start >= count.end) return null;
   } else {
     return null;
   }
@@ -99,7 +102,11 @@ function getTranslationCall(
   let hash: string;
   const exprs: ExprRange[] = [];
 
+  // calls with syntax errors are left untouched, so the parser that runs after
+  // the plugin reports the real error
   if (ts.isNoSubstitutionTemplateLiteral(template)) {
+    if (template.isUnterminated) return null;
+
     hash = template.text;
   } else {
     hash = template.head.text;
@@ -108,10 +115,20 @@ function getTranslationCall(
       const span = template.templateSpans[i];
       if (!span) continue;
 
-      const { expression } = span;
-      hash += `{${i + 1}}${span.literal.text}`;
+      const { expression, literal } = span;
+      const start = expression.getStart(sourceFile);
+
+      if (
+        start >= expression.end ||
+        literal.isUnterminated ||
+        literal.getStart(sourceFile) >= literal.end
+      ) {
+        return null;
+      }
+
+      hash += `{${i + 1}}${literal.text}`;
       exprs.push({
-        start: expression.getStart(sourceFile),
+        start,
         end: expression.end,
         wrap:
           ts.isBinaryExpression(expression) &&
@@ -151,6 +168,21 @@ function getLocalDeclarationName(node: ts.Node): string | null {
   }
 
   return null;
+}
+
+function hasDeclareModifier(node: ts.Node): boolean {
+  if (!ts.canHaveModifiers(node)) return false;
+
+  return (
+    ts.getModifiers(node)?.some(
+      (modifier) => modifier.kind === ts.SyntaxKind.DeclareKeyword,
+    ) ?? false
+  );
+}
+
+/** Ambient declarations (e.g. `declare const __: Fn`) don't create a runtime binding */
+function isAmbientDeclaration(node: ts.Node, ancestors: ts.Node[]): boolean {
+  return hasDeclareModifier(node) || ancestors.some(hasDeclareModifier);
 }
 
 function isFunctionScope(node: ts.Node): boolean {
@@ -206,17 +238,28 @@ function findScope(
   return ancestors[0] ?? null;
 }
 
-function getComputedMethodName(node: ts.Node): ts.ComputedPropertyName | null {
+/**
+ * Parts of a scope node that are evaluated in the enclosing scope: the
+ * decorators and the computed name of a method
+ */
+function getEnclosingScopeParts(node: ts.Node): ts.Node[] {
+  const parts: ts.Node[] = [];
+
+  if (ts.canHaveDecorators(node)) {
+    const decorators = ts.getDecorators(node);
+    if (decorators) parts.push(...decorators);
+  }
+
   if (
     (ts.isMethodDeclaration(node) ||
       ts.isGetAccessorDeclaration(node) ||
       ts.isSetAccessorDeclaration(node)) &&
     ts.isComputedPropertyName(node.name)
   ) {
-    return node.name;
+    parts.push(node.name);
   }
 
-  return null;
+  return parts;
 }
 
 /**
@@ -305,7 +348,11 @@ export function analyzeTranslations(
     } else {
       const declarationName = getLocalDeclarationName(node);
 
-      if (declarationName && TRANSLATION_FNS.has(declarationName)) {
+      if (
+        declarationName &&
+        TRANSLATION_FNS.has(declarationName) &&
+        !isAmbientDeclaration(node, ancestors)
+      ) {
         const scope = getDeclarationScope(node, ancestors);
 
         if (scope) {
@@ -337,10 +384,9 @@ export function analyzeTranslations(
       if (found && !shadowed.get(found.fnName)) calls.push(found.call);
 
       const names = shadowingScopes.get(node);
-      // a computed method name is evaluated in the enclosing scope
-      const computedName = names ? getComputedMethodName(node) : null;
+      const enclosingScopeParts = names ? getEnclosingScopeParts(node) : [];
 
-      if (computedName) collectUnshadowed(computedName);
+      for (const part of enclosingScopeParts) collectUnshadowed(part);
 
       if (names) {
         for (const name of names)
@@ -348,7 +394,7 @@ export function analyzeTranslations(
       }
 
       ts.forEachChild(node, (child) => {
-        if (child !== computedName) collectUnshadowed(child);
+        if (!enclosingScopeParts.includes(child)) collectUnshadowed(child);
       });
 
       if (names) {

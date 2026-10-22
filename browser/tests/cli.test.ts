@@ -172,6 +172,58 @@ export function Component() {
   `);
 });
 
+test('scans the same source files compiled by the vite plugin', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'legacy/banner.jsx': `
+import { __ } from '@ls-stack/i18n';
+
+export function Banner() {
+  return <p>{__\`Legacy banner\`}</p>;
+}
+`,
+      'legacy/format.js': `
+import { __ } from '@ls-stack/i18n';
+
+export const formatError = () => __\`Something went wrong\`;
+`,
+      'server/routes.mts': `
+import { __ } from '@ls-stack/i18n';
+
+export const notFound = __\`Page not found\`;
+`,
+      'types/i18n.d.ts': `
+import { __ } from '@ls-stack/i18n';
+
+export declare const typeOnly: typeof __;
+declare const example = __\`Only in a declaration file\`;
+`,
+    },
+    config: {
+      'en.json': JSON.stringify({
+        'Legacy banner': 'Legacy banner',
+        'Something went wrong': 'Something went wrong',
+        'Page not found': 'Page not found',
+      }),
+    },
+  });
+
+  const result = await ctx.validate();
+
+  expect(result).toMatchInlineSnapshot(`
+    {
+      "errors": [],
+      "hasError": false,
+      "infos": [
+        "✅ en.json translations are up to date",
+      ],
+      "output": [
+        "✅ en.json translations are up to date",
+      ],
+    }
+  `);
+});
+
 test('parses .ts files with generic arrow functions', async () => {
   const ctx = createCliTestContext({
     src: {
