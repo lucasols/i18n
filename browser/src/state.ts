@@ -226,6 +226,13 @@ export async function setLocale(localeId: string): Promise<void> {
   }
 
   if (loadedLocaleId === localeId) {
+    // cancels a pending load of another locale, so it doesn't override this selection
+    if (loadingLocaleId) {
+      loadRequestId++;
+      loadingLocaleId = null;
+      loadingPromise = null;
+      updateState({ isLoading: false });
+    }
     return;
   }
 

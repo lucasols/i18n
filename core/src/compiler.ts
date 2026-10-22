@@ -159,11 +159,90 @@ function getLocalDeclarationName(node: ts.Node): string | null {
   return null;
 }
 
+function isFunctionScope(node: ts.Node): boolean {
+  return (
+    ts.isFunctionLike(node) ||
+    ts.isSourceFile(node) ||
+    ts.isModuleBlock(node) ||
+    ts.isClassStaticBlockDeclaration(node)
+  );
+}
+
+function isBlockScope(node: ts.Node): boolean {
+  return (
+    isFunctionScope(node) ||
+    ts.isBlock(node) ||
+    ts.isCaseBlock(node) ||
+    ts.isCatchClause(node) ||
+    ts.isForStatement(node) ||
+    ts.isForInStatement(node) ||
+    ts.isForOfStatement(node)
+  );
+}
+
+function findScope(
+  ancestors: ts.Node[],
+  fromIndex: number,
+  isScope: (node: ts.Node) => boolean,
+): ts.Node | null {
+  for (let i = fromIndex; i >= 0; i--) {
+    const ancestor = ancestors[i];
+    if (ancestor && isScope(ancestor)) return ancestor;
+  }
+
+  return ancestors[0] ?? null;
+}
+
+/**
+ * Returns the node whose scope contains the declaration, `ancestors` is the
+ * path from the source file to the declaration parent.
+ */
+function getDeclarationScope(
+  node: ts.Node,
+  ancestors: ts.Node[],
+): ts.Node | null {
+  let declaration = node;
+  let parentIndex = ancestors.length - 1;
+
+  // destructured names are declared by the enclosing variable or parameter
+  while (
+    ts.isBindingElement(declaration) ||
+    ts.isObjectBindingPattern(declaration) ||
+    ts.isArrayBindingPattern(declaration)
+  ) {
+    const parent = ancestors[parentIndex];
+    if (!parent) return null;
+
+    declaration = parent;
+    parentIndex--;
+  }
+
+  const parent = ancestors[parentIndex];
+
+  if (ts.isParameter(declaration)) return parent ?? null;
+
+  if (ts.isVariableDeclaration(declaration)) {
+    if (!parent) return null;
+    if (ts.isCatchClause(parent)) return parent;
+    if (!ts.isVariableDeclarationList(parent)) return null;
+
+    const isBlockScoped = (parent.flags & ts.NodeFlags.BlockScoped) !== 0;
+
+    return findScope(
+      ancestors,
+      parentIndex - 1,
+      isBlockScoped ? isBlockScope : isFunctionScope,
+    );
+  }
+
+  return findScope(ancestors, parentIndex, isBlockScope);
+}
+
 /**
  * Finds the `__`, `__p`, `__jsx` and `__pjsx` tagged template calls in the
  * source code. Only direct identifier calls are considered, member calls like
- * `i18n.__` and files that declare their own `__` (e.g. `const { __ } = i18n`)
- * are left untouched.
+ * `i18n.__` and calls inside a scope that declares its own `__` (e.g.
+ * `const { __ } = i18n`) are left untouched.
  */
 export function analyzeTranslations(
   fileName: string,
@@ -179,29 +258,65 @@ export function analyzeTranslations(
     getScriptKind(fileName),
   );
 
-  const foundCalls: FoundCall[] = [];
-  const localDeclarations = new Set<string>();
+  const foundCalls = new Map<ts.Node, FoundCall>();
+  /** Scope nodes and the translation function names they declare */
+  const shadowingScopes = new Map<ts.Node, string[]>();
+  const ancestors: ts.Node[] = [];
 
-  function visit(node: ts.Node): void {
+  function collect(node: ts.Node): void {
     if (ts.isTaggedTemplateExpression(node)) {
       const found = getTranslationCall(node, sourceFile);
-      if (found) foundCalls.push(found);
+      if (found) foundCalls.set(node, found);
     } else {
       const declarationName = getLocalDeclarationName(node);
 
       if (declarationName && TRANSLATION_FNS.has(declarationName)) {
-        localDeclarations.add(declarationName);
+        const scope = getDeclarationScope(node, ancestors);
+
+        if (scope) {
+          const names = shadowingScopes.get(scope);
+          if (names) names.push(declarationName);
+          else shadowingScopes.set(scope, [declarationName]);
+        }
       }
     }
 
-    ts.forEachChild(node, visit);
+    ancestors.push(node);
+    ts.forEachChild(node, collect);
+    ancestors.pop();
   }
 
-  visit(sourceFile);
+  collect(sourceFile);
 
   const calls: TranslationCall[] = [];
-  for (const { fnName, call } of foundCalls) {
-    if (!localDeclarations.has(fnName)) calls.push(call);
+
+  if (shadowingScopes.size === 0) {
+    for (const { call } of foundCalls.values()) calls.push(call);
+  } else {
+    // declarations are hoisted, so a second pass skips the calls inside their scopes
+    const shadowed = new Map<string, number>();
+
+    function collectUnshadowed(node: ts.Node): void {
+      const found = foundCalls.get(node);
+
+      if (found && !shadowed.get(found.fnName)) calls.push(found.call);
+
+      const names = shadowingScopes.get(node);
+
+      if (names) {
+        for (const name of names)
+          shadowed.set(name, (shadowed.get(name) ?? 0) + 1);
+      }
+
+      ts.forEachChild(node, collectUnshadowed);
+
+      if (names) {
+        for (const name of names)
+          shadowed.set(name, (shadowed.get(name) ?? 1) - 1);
+      }
+    }
+
+    collectUnshadowed(sourceFile);
   }
 
   if (calls.length === 0) return emptyAnalysis;
@@ -354,6 +469,17 @@ export function compileLocaleModule(
 
 type RuntimeFn = '__t' | '__tp' | '__tjsx' | '__tpjsx';
 
+/** Prefix of the runtime imports that doesn't collide with the file identifiers */
+function getLocalPrefix(code: string): string {
+  let prefix = LOCAL_PREFIX;
+
+  for (let i = 1; code.includes(prefix); i++) {
+    prefix = `${LOCAL_PREFIX}${i}`;
+  }
+
+  return prefix;
+}
+
 function getRuntimeFn(call: TranslationCall): RuntimeFn {
   if (call.plural) return call.jsx ? '__tpjsx' : '__tp';
   return call.jsx ? '__tjsx' : '__t';
@@ -385,6 +511,7 @@ export function transformTranslations({
   if (analysis.calls.length === 0) return null;
 
   const s = new MagicString(code);
+  const localPrefix = getLocalPrefix(code);
   const usedFns = new Set<RuntimeFn>();
   const fallbacks = new Map<number, CompiledTranslation>();
 
@@ -398,7 +525,7 @@ export function transformTranslations({
     }
 
     let cursor = call.start;
-    let text = `${LOCAL_PREFIX}${fn}(${id}`;
+    let text = `${localPrefix}${fn}(${id}`;
 
     const preserved: ExprRange[] =
       call.count ? [{ ...call.count, wrap: false }, ...call.exprs] : call.exprs;
@@ -413,18 +540,18 @@ export function transformTranslations({
     s.overwrite(cursor, call.end, `${text})`);
   }
 
-  const specifiers = [...usedFns].map((fn) => `${fn} as ${LOCAL_PREFIX}${fn}`);
+  const specifiers = [...usedFns].map((fn) => `${fn} as ${localPrefix}${fn}`);
 
   if (devFallbacks) {
     specifiers.push(
-      `__registerDevFallbacks as ${LOCAL_PREFIX}__registerDevFallbacks`,
+      `__registerDevFallbacks as ${localPrefix}__registerDevFallbacks`,
     );
   }
 
   let header = `import { ${specifiers.join(', ')} } from '${RUNTIME_MODULE}';`;
 
   if (devFallbacks) {
-    header += `${LOCAL_PREFIX}__registerDevFallbacks(${JSON.stringify([...fallbacks])});`;
+    header += `${localPrefix}__registerDevFallbacks(${JSON.stringify([...fallbacks])});`;
   }
 
   s.prependLeft(
