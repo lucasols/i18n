@@ -17,6 +17,7 @@ import {
   type TranslationUsage,
 } from './findMissingTranslations';
 import { createSimilarityIndex, findSimilarFromIndex } from './similarity';
+import { isTranslationSourceFile } from '../scriptKind';
 
 type LocaleAITranslationTask = {
   fullPath: string;
@@ -304,8 +305,7 @@ export async function validateTranslations(
   const globalPrimitiveOnlyJsx = new Set<string>();
 
   for await (const entry of fs.scanDir(srcPath, {
-    fileFilter: (entry) =>
-      entry.path.endsWith('.ts') || entry.path.endsWith('.tsx'),
+    fileFilter: (entry) => isTranslationSourceFile(entry.path),
   })) {
     const { fullPath } = entry;
 

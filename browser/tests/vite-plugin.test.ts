@@ -668,6 +668,39 @@ describe('vite build of a copy of the app', { timeout: 30_000 }, () => {
     }
   });
 
+  test('skips broken and looping symlinks in the source directory', async () => {
+    const { tmpDir: copyDir, root: copyRoot } = await createFixtureCopy();
+
+    try {
+      // left behind by a removed workspace package
+      await symlink(
+        path.join(copyDir, 'removed-package/index.ts'),
+        path.join(copyRoot, 'src/removed.ts'),
+      );
+      await symlink(
+        path.join(copyRoot, 'src/loop-b'),
+        path.join(copyRoot, 'src/loop-a'),
+        'dir',
+      );
+      await symlink(
+        path.join(copyRoot, 'src/loop-a'),
+        path.join(copyRoot, 'src/loop-b'),
+        'dir',
+      );
+
+      await build({
+        ...getViteConfig(copyRoot),
+        build: getBuildOptions(copyRoot),
+      });
+
+      expect(await readBuiltTranslation(copyRoot, 'getExportLabel', 'pt')).toBe(
+        'Export as PDF',
+      );
+    } finally {
+      await rm(copyDir, { recursive: true, force: true });
+    }
+  });
+
   test('a wrapper package with its own copy of the runtime uses the runtime of the app', async () => {
     const { tmpDir: copyDir, root: copyRoot } = await createFixtureCopy();
 

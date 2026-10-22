@@ -234,12 +234,13 @@ export async function setLocale(localeId: string): Promise<void> {
   }
 
   if (loadedLocaleId === localeId) {
-    // cancels a pending load of another locale, so it doesn't override this selection
-    if (loadingLocaleId) {
+    // cancels a pending load of another locale, so it doesn't override this
+    // selection, and clears the error of a failed load of another locale
+    if (loadingLocaleId || state.loadError) {
       loadRequestId++;
       loadingLocaleId = null;
       loadingPromise = null;
-      updateState({ isLoading: false });
+      updateState({ isLoading: false, loadError: null });
     }
     return;
   }
@@ -261,7 +262,14 @@ export async function setLocale(localeId: string): Promise<void> {
   const doLoad = async () => {
     try {
       const loadedTranslations = await retryOnError(
-        async () => (await localeConfig.loader()).default,
+        async () => {
+          // `retryCondition` is only checked before the retry delay, a load
+          // cancelled during the delay must not call the loader again
+          if (requestId !== loadRequestId) {
+            throw new Error(`Load of locale "${localeId}" was cancelled`);
+          }
+          return (await localeConfig.loader()).default;
+        },
         retryAttempts,
         {
           delayBetweenRetriesMs: retryDelay,
@@ -422,5 +430,6 @@ export function resetState(): void {
   loadingLocaleId = null;
   loadingPromise = null;
   loadedLocaleId = null;
-  loadRequestId = 0;
+  // keeps increasing so a load started before the reset can't match a new request
+  loadRequestId++;
 }

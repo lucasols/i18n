@@ -214,6 +214,55 @@ describe('locale switching', () => {
     expect(controller.invokedLoaderIds).toEqual(['en', 'pt']);
     expect(controller.getLoadedLocale()).toBe('en');
   });
+
+  test('a load cancelled during the retry delay is not retried', async () => {
+    vi.useFakeTimers();
+
+    const controller = createTestController({
+      locales: { en: {}, pt: new Error('Network error') },
+      loadingTimes: { en: 50, pt: 200 },
+      retryAttempts: 3,
+      retryDelay: 1000,
+    });
+
+    await vi.advanceTimersByTimeAsync(50);
+
+    const ptSelection = controller.setLocale('pt');
+    // the first attempt failed and the retry delay is running
+    await vi.advanceTimersByTimeAsync(300);
+    await controller.setLocale('en');
+
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(await ptSelection).toBe(false);
+    expect(controller.invokedLoaderIds).toEqual(['en', 'pt']);
+    expect(controller.getLoadedLocale()).toBe('en');
+  });
+
+  test('a load started before resetState does not override a new controller', async () => {
+    vi.useFakeTimers();
+
+    const previousController = createTestController({
+      locales: { en: {}, pt: {} },
+      loadingTimes: { en: 300 },
+    });
+    const previousLoad = previousController.setLocale('en');
+
+    resetState();
+
+    const controller = createTestController({
+      locales: { pt: {}, en: {} },
+      loadingTimes: { pt: 50 },
+    });
+
+    await vi.advanceTimersByTimeAsync(50);
+    expect(controller.getLoadedLocale()).toBe('pt');
+
+    await vi.advanceTimersByTimeAsync(300);
+    await previousLoad;
+
+    expect(controller.getLoadedLocale()).toBe('pt');
+  });
 });
 
 describe('error handling', () => {
