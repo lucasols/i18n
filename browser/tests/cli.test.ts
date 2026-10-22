@@ -866,7 +866,11 @@ test('fix resolves an id taken by two translations after a merge', async () => {
   );
 
   // the build resolves it the same way, so it doesn't fail the check
-  expect((await ctx.validate()).hasError).toBe(false);
+  const checkResult = await ctx.validate();
+  expect(checkResult.hasError).toBe(false);
+  expect(checkResult.infos).toContain(
+    '🟠 i18n-ids.json has ids taken by two translations, run with --fix so the ids of both stay stable',
+  );
 
   await ctx.validate({ fix: true });
 
@@ -908,4 +912,47 @@ test('the ids file only lists the translations compiled by the vite plugin', asy
   await ctx.validate({ fix: true });
 
   expect(JSON.parse(ctx.getIdsFile() ?? '')).toEqual(mainIds);
+});
+
+test('the ids file lists the translations of every src dir', async () => {
+  const ctx = createCliTestContext({
+    src: { 'main.tsx': mainTsx },
+    packageSrc: {
+      'Button.tsx': `
+        import { __ } from '@ls-stack/i18n';
+
+        export function SaveButton() {
+          return <button>{__\`Save changes\`}</button>;
+        }
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({
+        ...enCorrectTranslations,
+        'Save changes': 'Save changes',
+      }),
+      'pt.json': JSON.stringify({
+        ...ptCorrectTranslations,
+        'Save changes': 'Salvar alterações',
+      }),
+    },
+    idsFile: null,
+  });
+
+  await ctx.validate({ fix: true });
+
+  expect(JSON.parse(ctx.getIdsFile() ?? '')).toEqual({
+    version: 1,
+    ids: {
+      'p:# Hello World': 0,
+      's:Hello World': 1,
+      's:Hello {1}': 2,
+      's:Save changes': 3,
+    },
+  });
+
+  const result = await ctx.validate();
+
+  expect(result.hasError).toBe(false);
+  expect(result.errors).toEqual([]);
 });

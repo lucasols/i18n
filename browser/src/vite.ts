@@ -1,7 +1,8 @@
 import {
   analyzeTranslations,
   compileLocaleModule,
-  hasSameTranslations,
+  getIdsFileState,
+  IGNORED_DIRS,
   isTranslationSourceFile,
   parseIdsFile,
   QUICK_CHECK_REGEX,
@@ -92,8 +93,6 @@ function getRealPath(filePath: string): string {
     return normalizePath(filePath);
   }
 }
-
-const IGNORED_DIRS: ReadonlySet<string> = new Set(['node_modules', '.git']);
 
 function stripBom(content: string): string {
   return content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
@@ -361,11 +360,16 @@ export function i18nVitePlugin({
     } else {
       registry = TranslationRegistry.fromKeys(keys, stableIds ?? undefined);
 
-      if (
-        idsFilePath &&
-        !(stableIds && hasSameTranslations(registry, stableIds))
-      ) {
-        idsFileWarning = `The ids file "${idsFilePath}" ${stableIds ? 'is outdated' : 'was not found'}, the ids of the new translations can change the hash of unrelated chunks in the next builds. Update it with \`ls-stack-i18n --fix --ids-file <file>\``;
+      const idsFileState =
+        stableIds ? getIdsFileState(registry, stableIds) : 'outdated';
+
+      if (idsFilePath && idsFileState !== 'up-to-date') {
+        const problem =
+          !stableIds ? 'was not found'
+          : idsFileState === 'outdated' ? 'is outdated'
+          : 'has ids taken by two translations';
+
+        idsFileWarning = `The ids file "${idsFilePath}" ${problem}, the ids of the translations missing from it can change the hash of unrelated chunks in the next builds. Update it with \`ls-stack-i18n --fix --ids-file <file>\``;
       }
     }
 

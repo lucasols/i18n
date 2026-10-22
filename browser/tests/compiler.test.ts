@@ -2,7 +2,7 @@ import {
   analyzeTranslations,
   compileLocale,
   compileLocaleModule,
-  hasSameTranslations,
+  getIdsFileState,
   parseIdsFile,
   serializeIdsFile,
   transformTranslations,
@@ -509,7 +509,7 @@ describe('stable ids', () => {
       );
     }
     expect(registry.getId('Archive conversation', false)).toBe(4);
-    expect(hasSameTranslations(registry, stableIds)).toBe(false);
+    expect(getIdsFileState(registry, stableIds)).toBe('outdated');
   });
 
   test('removing a translation leaves a free id compiled to 0', () => {
@@ -583,7 +583,8 @@ describe('stable ids', () => {
       TranslationRegistry.fromKeys([...mergedKeys].reverse(), merged).keys,
     ).toEqual(registry.keys);
     // the build resolves it the same way until the file is updated
-    expect(hasSameTranslations(registry, merged)).toBe(true);
+    expect(getIdsFileState(registry, merged)).toBe('duplicated-ids');
+    expect(getIdsFileState(registry, getIdsOf(registry))).toBe('up-to-date');
   });
 
   test('the ids file lists one translation per line sorted by hash', () => {
@@ -616,6 +617,10 @@ describe('stable ids', () => {
     expect(() =>
       parseIdsFile('{ "version": 1, "ids": { "Bookmarked": 0 } }'),
     ).toThrow('Invalid id of "Bookmarked"');
+    // would fill the locales with millions of free ids
+    expect(() =>
+      parseIdsFile('{ "version": 1, "ids": { "s:Bookmarked": 50000000 } }'),
+    ).toThrow('Invalid id of "s:Bookmarked"');
   });
 });
 

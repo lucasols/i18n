@@ -2,7 +2,7 @@ import MagicString, { type SourceMap } from 'magic-string';
 import ts from 'typescript';
 import { getScriptKind, QUICK_CHECK_REGEX } from './scriptKind';
 
-export { isTranslationSourceFile } from './scriptKind';
+export { IGNORED_DIRS, isTranslationSourceFile } from './scriptKind';
 import type {
   CompiledLocale,
   CompiledPlural,
@@ -555,6 +555,12 @@ export type StableIds = ReadonlyMap<string, number>;
 
 const IDS_FILE_VERSION = 1;
 const IDS_FILE_KEY_REGEX = /^[sp]:/;
+/**
+ * Freed ids are reused, so the ids stay below the largest number of
+ * translations the app had, a larger id is a corrupted file that would fill
+ * the locales with free ids
+ */
+const MAX_TRANSLATION_ID = 1_000_000;
 
 export function parseIdsFile(content: string): Map<string, number> {
   const data: unknown = JSON.parse(
@@ -577,8 +583,9 @@ export function parseIdsFile(content: string): Map<string, number> {
     if (
       !IDS_FILE_KEY_REGEX.test(registryKey) ||
       typeof id !== 'number' ||
-      !Number.isSafeInteger(id) ||
-      id < 0
+      !Number.isInteger(id) ||
+      id < 0 ||
+      id >= MAX_TRANSLATION_ID
     ) {
       throw new Error(`Invalid id of "${registryKey}" in the ids file`);
     }
@@ -604,22 +611,32 @@ export function serializeIdsFile(registry: TranslationRegistry): string {
 }
 
 /**
- * Whether the ids file lists exactly the translations of the registry, ids
- * taken by two translations are still resolved the same way by every build
+ * - `up-to-date`: the ids file has the ids of the registry
+ * - `outdated`: the ids file doesn't list the same translations
+ * - `duplicated-ids`: the same translations, but an id is taken by two of them
+ *   (e.g. after merging branches that added different translations). Every
+ *   build resolves it the same way, but the id of the translation that lost it
+ *   can change with the next changes until the file is updated.
  */
-export function hasSameTranslations(
+export type IdsFileState = 'up-to-date' | 'outdated' | 'duplicated-ids';
+
+export function getIdsFileState(
   registry: TranslationRegistry,
   stableIds: StableIds,
-): boolean {
+): IdsFileState {
   const ids = registry.getIds();
 
-  if (ids.size !== stableIds.size) return false;
+  if (ids.size !== stableIds.size) return 'outdated';
 
-  for (const registryKey of stableIds.keys()) {
-    if (!ids.has(registryKey)) return false;
+  let state: IdsFileState = 'up-to-date';
+
+  for (const [registryKey, id] of stableIds) {
+    const registryId = ids.get(registryKey);
+    if (registryId === undefined) return 'outdated';
+    if (registryId !== id) state = 'duplicated-ids';
   }
 
-  return true;
+  return state;
 }
 
 function getNonEmptyString(value: unknown): string | null {

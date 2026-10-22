@@ -540,6 +540,48 @@ async function updateIdsFile(root: string): Promise<void> {
   });
 }
 
+/**
+ * Builds the app with lazy loaded routes from a single entry, like a default
+ * vite app. `isolateRuntime` uses the chunk config recommended for an ids file.
+ */
+async function buildLazyRoutes(
+  root: string,
+  { isolateRuntime }: { isolateRuntime: boolean },
+): Promise<string[]> {
+  await writeFile(
+    path.join(root, 'src/main.ts'),
+    [
+      "export { i18n } from './i18n';",
+      "export const loadChatMenu = () => import('./chat/chatMenu');",
+      "export const loadLegal = () => import('./legal');",
+      '',
+    ].join('\n'),
+  );
+
+  const buildOptions = getBuildOptions(root);
+  const runtimeDir = `${path.dirname(runtimeEntry)}/`;
+
+  await build({
+    ...getViteConfig(root, { idsFile: 'i18n-ids.json' }),
+    build: {
+      ...buildOptions,
+      rollupOptions: {
+        ...buildOptions?.rollupOptions,
+        output: {
+          entryFileNames: '[name].js',
+          chunkFileNames: '[name]-[hash].js',
+          manualChunks:
+            isolateRuntime ?
+              (id) => (id.startsWith(runtimeDir) ? 'i18n-runtime' : undefined)
+            : undefined,
+        },
+      },
+    },
+  });
+
+  return readdir(path.join(root, 'dist'));
+}
+
 function findChunk(chunks: string[], name: string): string | undefined {
   return chunks.find((chunk) => chunk.startsWith(`${name}-`));
 }
@@ -643,6 +685,86 @@ describe('vite build with an ids file', { timeout: 30_000 }, () => {
       expect(await readBuiltTranslation(copyRoot, 'getExportLabel', 'pt')).toBe(
         'Export as PDF',
       );
+    });
+  });
+
+  test('lazy route chunks keep their hash with the runtime in its own chunk', async () => {
+    await withFixtureCopy(async (copyRoot) => {
+      await updateIdsFile(copyRoot);
+      const before = await buildLazyRoutes(copyRoot, { isolateRuntime: true });
+
+      const chatMenuFile = path.join(copyRoot, 'src/chat/chatMenu.tsx');
+      await writeFile(
+        chatMenuFile,
+        `${await readFile(chatMenuFile, 'utf-8')}${archiveLabel}`,
+      );
+      await updateIdsFile(copyRoot);
+      const after = await buildLazyRoutes(copyRoot, { isolateRuntime: true });
+
+      expect(findChunk(after, 'legal')).toBe(findChunk(before, 'legal'));
+      expect(findChunk(after, 'i18n-runtime')).toBe(
+        findChunk(before, 'i18n-runtime'),
+      );
+      expect(findChunk(after, 'chatMenu')).not.toBe(
+        findChunk(before, 'chatMenu'),
+      );
+    });
+  });
+
+  test('lazy route chunks importing the runtime from the entry change with the locales', async () => {
+    await withFixtureCopy(async (copyRoot) => {
+      await updateIdsFile(copyRoot);
+      const before = await buildLazyRoutes(copyRoot, { isolateRuntime: false });
+
+      const chatMenuFile = path.join(copyRoot, 'src/chat/chatMenu.tsx');
+      await writeFile(
+        chatMenuFile,
+        `${await readFile(chatMenuFile, 'utf-8')}${archiveLabel}`,
+      );
+      await updateIdsFile(copyRoot);
+      const after = await buildLazyRoutes(copyRoot, { isolateRuntime: false });
+
+      // the entry imports the locale chunks, their new hashes change it
+      expect(findChunk(after, 'legal')).not.toBe(findChunk(before, 'legal'));
+    });
+  });
+
+  test('the CLI finds the same translations as the build', async () => {
+    await withFixtureCopy(async (copyRoot) => {
+      // the build scans every directory except node_modules and .git
+      await mkdir(path.join(copyRoot, 'src/.github-widgets'));
+      await writeFile(
+        path.join(copyRoot, 'src/.github-widgets/starBanner.ts'),
+        "import { __ } from '@ls-stack/i18n';\n\nexport const starLabel = () => __`Star on GitHub`;\n",
+      );
+      await updateIdsFile(copyRoot);
+
+      const ids = await readFile(path.join(copyRoot, 'i18n-ids.json'), 'utf-8');
+      expect(ids).toContain('"s:Star on GitHub"');
+
+      const warnings: string[] = [];
+      const buildOptions = getBuildOptions(copyRoot);
+
+      await build({
+        ...getViteConfig(copyRoot, { idsFile: 'i18n-ids.json' }),
+        build: {
+          ...buildOptions,
+          rollupOptions: {
+            ...buildOptions?.rollupOptions,
+            input: [
+              path.join(copyRoot, 'src/main.ts'),
+              path.join(copyRoot, 'src/.github-widgets/starBanner.ts'),
+            ],
+            onwarn: (warning) => {
+              warnings.push(warning.message);
+            },
+          },
+        },
+      });
+
+      expect(
+        warnings.filter((warning) => warning.includes('ids file')),
+      ).toEqual([]);
     });
   });
 

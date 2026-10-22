@@ -456,15 +456,38 @@ Behavior differences from the uncompiled runtime:
 
 #### Stable translation ids
 
-With an `idsFile`, the ids of the translations are kept across builds, so adding or removing a string only changes the chunks that use it, the locale chunks and the chunk of the locale loaders. The file is committed with the code and updated by the CLI together with the locale files:
+With an `idsFile`, the ids of the translations are kept across builds, so adding or removing a string only changes the chunks that use it, the locale chunks and the chunks that import the locale loaders (the module that calls `i18nitialize`, usually the entry). The file is committed with the code and updated by the CLI together with the locale files.
+
+By default vite bundles the runtime into the entry chunk, which also imports the locale chunks, so every lazy loaded chunk that uses a translation imports the entry and changes with it. Put the runtime in its own chunk so only the entry changes:
 
 ```ts
-i18nVitePlugin({ localesDir: 'src/locales', idsFile: 'i18n-ids.json' });
+// vite.config.ts
+export default defineConfig({
+  plugins: [
+    i18nVitePlugin({ localesDir: 'src/locales', idsFile: 'i18n-ids.json' }),
+    react(),
+  ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('/node_modules/@ls-stack/i18n/'))
+            return 'i18n-runtime';
+        },
+      },
+    },
+  },
+});
 ```
+
+Chunks that import other modules of the entry chunk, like the `i18n` controller returned by `i18nitialize`, still change with every locale change.
 
 ```bash
 # creates or updates the ids file with the translations of srcDir
 ls-stack-i18n --config-dir ./src/locales --src-dir ./src --fix --ids-file i18n-ids.json
+
+# with a srcDir list, repeat --src-dir for each directory
+ls-stack-i18n --config-dir ./src/locales --src-dir ./src --src-dir ../../packages/ui/src --fix --ids-file i18n-ids.json
 
 # fails when the ids file is outdated, e.g. in CI
 ls-stack-i18n --config-dir ./src/locales --src-dir ./src --ids-file i18n-ids.json
@@ -483,8 +506,8 @@ ls-stack-i18n --config-dir ./src/locales --src-dir ./src --ids-file i18n-ids.jso
 
 - Each translation keeps its id. New translations take the ids freed by the removed ones, the chunks that used a removed string change anyway, so the ids stay compact without renumbering.
 - The plugin only reads the file, builds never write to disk. A build with an outdated or missing file still works and warns: the translations missing from the file take free ids, so the file only affects which chunks change in the next builds.
-- The file has one translation per line, sorted, so merging branches that added different strings rarely conflicts. When both branches gave the same id to different strings, every build resolves it the same way (the first in sorted order keeps it) and the next `--fix` writes the resolved ids.
-- The file must be outside `localesDir`, or it would be read as a locale. The CLI `--src-dir` should match the plugin `srcDir`, translations found by only one of them don't break the build but get ids that are not kept in the file.
+- The file has one translation per line, sorted, so merging branches that added different strings rarely conflicts. When both branches gave the same id to different strings, every build resolves it the same way (the first in sorted order keeps it), the check and the build warn without failing, and the next `--fix` writes the resolved ids. Until then the id of the string that lost it can change with the next string changes.
+- The file must be outside `localesDir`, or it would be read as a locale. The CLI `--src-dir` directories must match the plugin `srcDir`, translations found by only one of them don't break the build but get ids that are not kept in the file and the build warns that the file is outdated.
 
 #### Rendering with the React Compiler
 
@@ -553,7 +576,7 @@ The CLI scans the same files compiled by the vite plugin: `.ts`, `.tsx`, `.js`, 
 | Option           | Alias | Description                                                                          |
 | ---------------- | ----- | ------------------------------------------------------------------------------------ |
 | `--config-dir`   | `-c`  | Path to translation JSON files (required)                                            |
-| `--src-dir`      | `-r`  | Path to source files to scan (required)                                              |
+| `--src-dir`      | `-r`  | Path to source files to scan, can be used multiple times (required)                  |
 | `--default`      | `-d`  | Default locale ID                                                                    |
 | `--fix`          | `-f`  | Auto-add missing translations                                                        |
 | `--ids-file`     |       | Checks, or updates with `--fix`, the [vite plugin ids file](#stable-translation-ids) |
