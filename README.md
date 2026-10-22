@@ -258,13 +258,13 @@ const controller = i18nitialize({
 
 ### Controller Methods
 
-| Method                    | Description                                                                                                                       |
-| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| Method                    | Description                                                                                                                                                                                                    |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `setLocale(id \| 'auto')` | Load and activate a locale. Returns `Promise<boolean>`, `false` when it used the fallback locale or a newer selection replaced it (a replaced selection resolves right away, without waiting for its download) |
-| `getLoadedLocale()`       | Get the currently loaded locale ID                                                                                                |
-| `getRegionLocale()`       | Get the region-specific locale (e.g., `'en-US'`)                                                                                  |
-| `onLoad(callback)`        | Subscribe to locale load events. Returns unsubscribe function                                                                     |
-| `useLoadedLocale()`       | React hook for locale state                                                                                                       |
+| `getLoadedLocale()`       | Get the currently loaded locale ID                                                                                                                                                                             |
+| `getRegionLocale()`       | Get the region-specific locale (e.g., `'en-US'`)                                                                                                                                                               |
+| `onLoad(callback)`        | Subscribe to locale load events. Returns unsubscribe function                                                                                                                                                  |
+| `useLoadedLocale()`       | React hook for locale state                                                                                                                                                                                    |
 
 ### Global Functions
 
@@ -471,6 +471,7 @@ export default defineConfig({
 | ------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `localesDir` |         | Directory of the locale JSON files, relative to the vite root                                                                                        |
 | `srcDir`     | `src`   | Directory, or list of directories, scanned for translations at startup, relative to the root (e.g. `['src', '../../packages/ui/src']` in a monorepo) |
+| `idsFile`    |         | File with the translation ids of the previous builds, relative to the root, see [Stable translation ids](#stable-translation-ids)                    |
 
 Behavior differences from the uncompiled runtime:
 
@@ -480,7 +481,7 @@ Behavior differences from the uncompiled runtime:
 - Every imported `__`, `__p`, `__jsx` and `__pjsx`, directly or re-exported from a local module, is assumed to be the `@ls-stack/i18n` one. Don't import other translators (e.g. a `@ls-stack/server-i18n` instance) under these names in code compiled by the plugin, locally declared bindings with these names are left untouched.
 - Only direct calls of `__`, `__p`, `__jsx` and `__pjsx` are compiled. Member calls like `i18n.__`, aliased imports, calls inside a scope that declares its own `__` (e.g. `const { __ } = i18n`) code in `node_modules` and translations in files compiled to JS by other plugins (e.g. `.mdx`, `.vue` or `.svelte`) are left untouched. Those calls can't be translated with a compiled locale, they render the source string and an error is logged.
 - In the build, every translation must be inside `srcDir` (`node_modules` and `.git` directories are not scanned), translations outside it fail the build. Symlinked files and directories inside `srcDir` are scanned too. On the dev server, translations added while the server is running get new ids and render the source string until the locale file is updated.
-- Ids are assigned in the sorted order of the translations, so adding or removing a string changes the ids of the strings after it. The compiled calls change in most chunks, so a deploy that touches a string also changes the hash of most app chunks and returning users download them again. In `vite build --watch`, rebuilds keep the ids of the previous builds: new strings are appended instead of sorted, and removed strings stay in the compiled locales until the watcher restarts, so watch output can be larger and use different ids than a clean build.
+- Without an `idsFile`, ids are assigned in the sorted order of the translations, so adding or removing a string changes the ids of the strings after it. The compiled calls change in most chunks, so a deploy that touches a string also changes the hash of most app chunks and returning users download them again. Use [stable translation ids](#stable-translation-ids) to avoid it. In `vite build --watch`, rebuilds keep the ids of the previous builds: new strings are appended instead of sorted, and removed strings stay in the compiled locales until the watcher restarts, so watch output can be larger and use different ids than a clean build.
 - The plugin is for app builds only, the compiled ids only match the locales of the build that compiled them, so library builds (`build.lib`, including the `build.lib` of an environment) fail. Packages of a monorepo should be compiled by the app that uses them (add their directories to `srcDir`), every `@ls-stack/i18n` import, including the ones of wrapper packages that call `i18nitialize`, is resolved from the app root so all of them share the runtime configured by the app (imports the app root can't resolve keep the normal resolution).
 - On the dev server, editing a locale file reloads the page, so the active locale is loaded again with the new translations.
 - A translation made only of placeholders (e.g. `"Note: {1}": "{1}"`) that interpolates to an empty string returns `""`, the uncompiled runtime falls back to the source string (`Note: `).
@@ -488,6 +489,38 @@ Behavior differences from the uncompiled runtime:
 - Source files must be ES modules. CommonJS files (`.cjs`, `.cts`) are not scanned or compiled, and CommonJS modules with another extension (e.g. a `.js` file using `require` and `module.exports`) are not supported, the import added by the plugin turns them into mixed modules that vite doesn't convert.
 
 Performance: source files without `__`, `__p`, `__jsx` or `__pjsx` in their text aren't parsed, and in the files that are, only the parts that contain these names are analyzed. Source maps of the compiled files are generated on the dev server and in builds with source maps enabled (`build.sourcemap`, `build.rollupOptions.output.sourcemap` or the `build` options of an environment), builds without source maps skip them.
+
+#### Stable translation ids
+
+With an `idsFile`, the ids of the translations are kept across builds, so adding or removing a string only changes the chunks that use it, the locale chunks and the chunk of the locale loaders. The file is committed with the code and updated by the CLI together with the locale files:
+
+```ts
+i18nVitePlugin({ localesDir: 'src/locales', idsFile: 'i18n-ids.json' });
+```
+
+```bash
+# creates or updates the ids file with the translations of srcDir
+ls-stack-i18n --config-dir ./src/locales --src-dir ./src --fix --ids-file i18n-ids.json
+
+# fails when the ids file is outdated, e.g. in CI
+ls-stack-i18n --config-dir ./src/locales --src-dir ./src --ids-file i18n-ids.json
+```
+
+```json
+{
+  "version": 1,
+  "ids": {
+    "p:You have # unread messages": 2,
+    "s:Direct Messages": 0,
+    "s:Hello {1}": 1
+  }
+}
+```
+
+- Each translation keeps its id. New translations take the ids freed by the removed ones, the chunks that used a removed string change anyway, so the ids stay compact without renumbering.
+- The plugin only reads the file, builds never write to disk. A build with an outdated or missing file still works and warns: the translations missing from the file take free ids, so the file only affects which chunks change in the next builds.
+- The file has one translation per line, sorted, so merging branches that added different strings rarely conflicts. When both branches gave the same id to different strings, every build resolves it the same way (the first in sorted order keeps it) and the next `--fix` writes the resolved ids.
+- The file must be outside `localesDir`, or it would be read as a locale. The CLI `--src-dir` should match the plugin `srcDir`, translations found by only one of them don't break the build but get ids that are not kept in the file.
 
 #### Rendering with the React Compiler
 
@@ -553,17 +586,18 @@ The CLI scans the same files compiled by the vite plugin: `.ts`, `.tsx`, `.js`, 
 
 ### Options
 
-| Option           | Alias | Description                                                   |
-| ---------------- | ----- | ------------------------------------------------------------- |
-| `--config-dir`   | `-c`  | Path to translation JSON files (required)                     |
-| `--src-dir`      | `-r`  | Path to source files to scan (required)                       |
-| `--default`      | `-d`  | Default locale ID                                             |
-| `--fix`          | `-f`  | Auto-add missing translations                                 |
-| `--ai`           |       | AI provider for auto-translation (`google`/`openai`)          |
-| `--max-id-size`  |       | Maximum translation ID size (default: 80)                     |
-| `--disable-rule` |       | Disable a validation rule (can be used multiple times)        |
-| `--warn-rule`    |       | Set a validation rule to warning (can be used multiple times) |
-| `--no-color`     |       | Disable colored output                                        |
+| Option           | Alias | Description                                                                          |
+| ---------------- | ----- | ------------------------------------------------------------------------------------ |
+| `--config-dir`   | `-c`  | Path to translation JSON files (required)                                            |
+| `--src-dir`      | `-r`  | Path to source files to scan (required)                                              |
+| `--default`      | `-d`  | Default locale ID                                                                    |
+| `--fix`          | `-f`  | Auto-add missing translations                                                        |
+| `--ids-file`     |       | Checks, or updates with `--fix`, the [vite plugin ids file](#stable-translation-ids) |
+| `--ai`           |       | AI provider for auto-translation (`google`/`openai`)                                 |
+| `--max-id-size`  |       | Maximum translation ID size (default: 80)                                            |
+| `--disable-rule` |       | Disable a validation rule (can be used multiple times)                               |
+| `--warn-rule`    |       | Set a validation rule to warning (can be used multiple times)                        |
+| `--no-color`     |       | Disable colored output                                                               |
 
 ### Validation Rules
 

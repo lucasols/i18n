@@ -51,6 +51,9 @@ export function createVirtualFs(
   flattenTree(rootPath, tree, files);
 
   const fs: FileSystem = {
+    existsSync(filePath) {
+      return files.has(filePath);
+    },
     readFileSync(filePath, _encoding) {
       const content = files.get(filePath);
       if (content === undefined) {
@@ -117,9 +120,15 @@ export function createMockLog(): MockLog {
 export function createCliTestContext(fixture: {
   src: VirtualFileTree;
   config: VirtualFileTree;
+  /**
+   * Content of the ids file passed with `--ids-file`, `null` passes a file
+   * that doesn't exist yet
+   */
+  idsFile?: string | null;
 }) {
   const srcDir = '/virtual/src';
   const configDir = '/virtual/config';
+  const idsFilePath = '/virtual/i18n-ids.json';
 
   const { fs: srcFs, getFile: getSrcFile } = createVirtualFs(
     srcDir,
@@ -131,7 +140,15 @@ export function createCliTestContext(fixture: {
   );
   const log = createMockLog();
 
+  if (typeof fixture.idsFile === 'string') {
+    configFs.writeFileSync(idsFilePath, fixture.idsFile);
+  }
+
   const combinedFs: FileSystem = {
+    existsSync(filePath) {
+      if (isSubPath(srcDir, filePath)) return srcFs.existsSync(filePath);
+      return configFs.existsSync(filePath);
+    },
     readFileSync(filePath, encoding) {
       if (isSubPath(srcDir, filePath)) {
         return srcFs.readFileSync(filePath, encoding);
@@ -173,6 +190,7 @@ export function createCliTestContext(fixture: {
       log,
       rules: options?.rules,
       maxTranslationIdSize: options?.maxTranslationIdSize,
+      idsFile: fixture.idsFile === undefined ? undefined : idsFilePath,
     });
 
     return {
@@ -192,6 +210,11 @@ export function createCliTestContext(fixture: {
     getSrcFile,
     getConfigFileRaw(filename: string): string | undefined {
       return getConfigFile(filename);
+    },
+    getIdsFile(): string | undefined {
+      return configFs.existsSync(idsFilePath) ?
+          configFs.readFileSync(idsFilePath, 'utf-8')
+        : undefined;
     },
   };
 }

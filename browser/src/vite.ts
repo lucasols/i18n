@@ -1,7 +1,9 @@
 import {
   analyzeTranslations,
   compileLocaleModule,
+  hasSameTranslations,
   isTranslationSourceFile,
+  parseIdsFile,
   QUICK_CHECK_REGEX,
   RUNTIME_MODULE,
   transformTranslations,
@@ -29,6 +31,14 @@ export type I18nVitePluginOptions = {
    * @default 'src'
    */
   srcDir?: string | string[];
+  /**
+   * File with the translation ids of the previous builds, relative to the vite
+   * root. Keeps the ids of the unchanged translations, so adding or removing a
+   * translation doesn't change the hash of the chunks that don't use it.
+   * Created and updated by `ls-stack-i18n --fix --ids-file <file>`, the
+   * plugin only reads it.
+   */
+  idsFile?: string;
 };
 
 const PLUGIN_NAME = 'ls-stack-i18n';
@@ -262,6 +272,7 @@ type FileStats = { size: number; mtimeMs: number; ctimeMs: number };
 export function i18nVitePlugin({
   localesDir,
   srcDir = 'src',
+  idsFile,
 }: I18nVitePluginOptions): Plugin {
   let isBuild = false;
   /** The dev server always uses source maps, builds only when enabled */
@@ -270,6 +281,9 @@ export function i18nVitePlugin({
   /** Scanned source directories */
   let srcRoots: string[] = [];
   let localesPath = '';
+  let idsFilePath: string | null = null;
+  /** Reported by the build when the ids file doesn't match the scanned translations */
+  let idsFileWarning: string | null = null;
   /** Configured and real paths, ids may use either */
   let srcPaths: string[] = [];
   let localesPaths: string[] = [];
@@ -390,6 +404,29 @@ export function i18nVitePlugin({
     });
   }
 
+  async function readStableIds(): Promise<Map<string, number> | null> {
+    if (!idsFilePath) return null;
+
+    let content: string;
+
+    try {
+      content = await readFile(idsFilePath, 'utf-8');
+    } catch (error) {
+      if (isMissingFileError(error)) return null;
+      throw error;
+    }
+
+    try {
+      return parseIdsFile(content);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `[${PLUGIN_NAME}] Failed to read the ids file "${idsFilePath}": ${message}`,
+        { cause: error },
+      );
+    }
+  }
+
   /**
    * `isWatchBuild` keeps the size and modification time of the files, so the
    * rebuilds only read the changed files
@@ -408,7 +445,8 @@ export function i18nVitePlugin({
       limitFs: createFsLimit(),
     };
 
-    await Promise.all([
+    const [stableIds] = await Promise.all([
+      registry ? null : readStableIds(),
       scanLocaleFiles(),
       ...srcRoots.map((srcRoot) => scanSourceDir(srcRoot, keys, scanOptions)),
     ]);
@@ -417,7 +455,14 @@ export function i18nVitePlugin({
     if (registry) {
       registry.addKeys(keys);
     } else {
-      registry = TranslationRegistry.fromKeys(keys);
+      registry = TranslationRegistry.fromKeys(keys, stableIds ?? undefined);
+
+      if (
+        idsFilePath &&
+        !(stableIds && hasSameTranslations(registry, stableIds))
+      ) {
+        idsFileWarning = `The ids file "${idsFilePath}" ${stableIds ? 'is outdated' : 'was not found'}, the ids of the new translations can change the hash of unrelated chunks in the next builds. Update it with \`ls-stack-i18n --fix --ids-file <file>\``;
+      }
     }
 
     // a failed scan keeps the previous stats, so its files are read again
@@ -510,6 +555,7 @@ export function i18nVitePlugin({
         preserveSymlinks ? configuredSrcPaths : (
           configuredSrcPaths.map(getRealPath)
         );
+      idsFilePath = idsFile ? resolvePath(idsFile) : null;
       localesPath =
         preserveSymlinks ?
           configuredLocalesPath
@@ -517,6 +563,12 @@ export function i18nVitePlugin({
 
       srcPaths = [...new Set([...srcRoots, ...configuredSrcPaths])];
       localesPaths = [...new Set([localesPath, configuredLocalesPath])];
+
+      if (idsFilePath && isInLocalesDir(idsFilePath)) {
+        throw new Error(
+          `[${PLUGIN_NAME}] The idsFile "${idsFilePath}" must be outside of localesDir, it would be compiled as a locale`,
+        );
+      }
 
       const ownIndex = config.plugins.findIndex((p) => p.name === PLUGIN_NAME);
       const reactIndex = config.plugins.findIndex((p) =>
@@ -572,6 +624,12 @@ export function i18nVitePlugin({
 
         if (isBuild) this.error(message);
         else this.warn(message);
+      }
+
+      // the dev server gets new translations all the time
+      if (isBuild && idsFileWarning) {
+        this.warn(idsFileWarning);
+        idsFileWarning = null;
       }
     },
 
