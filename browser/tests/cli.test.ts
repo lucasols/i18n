@@ -1,4 +1,19 @@
-import { createCliTestContext } from '@ls-stack/i18n-core/cli';
+import {
+  createCliTestContext,
+  createMockLog,
+  validateTranslations,
+} from '@ls-stack/i18n-core/cli';
+import { existsSync } from 'node:fs';
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { expect, test } from 'vitest';
 
 const mainTsx = `
@@ -771,3 +786,368 @@ test('check mode reports existing null translations as missing for non-default l
   expect(result.hasError).toBe(true);
   expect(result.errors).toContainEqual(expect.stringContaining('missing 1'));
 });
+
+const mainIds = {
+  version: 1,
+  ids: {
+    'p:# Hello World': 0,
+    's:Hello World': 1,
+    's:Hello {1}': 2,
+  },
+};
+
+function createIdsFixture(idsFile: string | null) {
+  return createCliTestContext({
+    src: { 'main.tsx': mainTsx },
+    config: {
+      'en.json': JSON.stringify(enCorrectTranslations),
+      'pt.json': JSON.stringify(ptCorrectTranslations),
+    },
+    idsFile,
+  });
+}
+
+test('fix creates the ids file', async () => {
+  const ctx = createIdsFixture(null);
+
+  const result = await ctx.validate({ fix: true });
+
+  expect(result.hasError).toBe(false);
+  expect(result.infos).toContain('✅ i18n-ids.json translation ids created');
+  expect(ctx.getIdsFile()).toBe(`${JSON.stringify(mainIds, null, 2)}\n`);
+});
+
+test('an up to date ids file is valid', async () => {
+  const ctx = createIdsFixture(JSON.stringify(mainIds, null, 2));
+
+  const result = await ctx.validate();
+
+  expect(result.hasError).toBe(false);
+  expect(result.errors).toEqual([]);
+});
+
+test('check mode reports a missing ids file', async () => {
+  const ctx = createIdsFixture(null);
+
+  const result = await ctx.validate();
+
+  expect(result.hasError).toBe(true);
+  expect(result.errors).toContain(
+    '❌ i18n-ids.json not found, run with --fix to update the translation ids',
+  );
+  expect(ctx.getIdsFile()).toBeUndefined();
+});
+
+test('check mode reports an outdated ids file', async () => {
+  const ctx = createIdsFixture(
+    JSON.stringify({
+      version: 1,
+      ids: { 's:Hello World': 0, 's:Goodbye World': 1 },
+    }),
+  );
+
+  const result = await ctx.validate();
+
+  expect(result.hasError).toBe(true);
+  expect(result.errors).toContain(
+    '❌ i18n-ids.json is outdated, run with --fix to update the translation ids',
+  );
+});
+
+test('fix keeps the ids of the existing translations and reuses the free ones', async () => {
+  const ctx = createIdsFixture(
+    JSON.stringify({
+      version: 1,
+      ids: { 's:Goodbye World': 0, 's:Hello World': 1, 's:Hello {1}': 2 },
+    }),
+  );
+
+  const result = await ctx.validate({ fix: true });
+
+  expect(result.hasError).toBe(false);
+  expect(result.infos).toContain('✅ i18n-ids.json translation ids updated');
+  expect(JSON.parse(ctx.getIdsFile() ?? '')).toEqual({
+    version: 1,
+    ids: { 'p:# Hello World': 0, 's:Hello World': 1, 's:Hello {1}': 2 },
+  });
+});
+
+test('fix resolves an id taken by two translations after a merge', async () => {
+  const ctx = createIdsFixture(
+    JSON.stringify({
+      version: 1,
+      ids: { 'p:# Hello World': 0, 's:Hello World': 1, 's:Hello {1}': 1 },
+    }),
+  );
+
+  // the build resolves it the same way, so it doesn't fail the check
+  const checkResult = await ctx.validate();
+  expect(checkResult.hasError).toBe(false);
+  expect(checkResult.infos).toContain(
+    '🟠 i18n-ids.json has ids taken by two translations, run with --fix so the ids of both stay stable',
+  );
+
+  await ctx.validate({ fix: true });
+
+  expect(JSON.parse(ctx.getIdsFile() ?? '')).toEqual(mainIds);
+});
+
+test('reports an invalid ids file', async () => {
+  const ctx = createIdsFixture('{ "ids": {} }');
+
+  const result = await ctx.validate({ fix: true });
+
+  expect(result.hasError).toBe(true);
+  expect(result.errors).toContainEqual(
+    expect.stringContaining('❌ i18n-ids.json: Invalid ids file'),
+  );
+  expect(ctx.getIdsFile()).toBe('{ "ids": {} }');
+});
+
+test('the ids file only lists the translations compiled by the vite plugin', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.tsx': mainTsx,
+      'server.ts': `
+        import { i18nitialize } from '@ls-stack/server-i18n';
+        import en from './locales/en.json';
+
+        const i18n = i18nitialize({ locales: { en } }).with('en');
+
+        export const emailSubject = i18n.__\`Your weekly summary\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify(enCorrectTranslations),
+      'pt.json': JSON.stringify(ptCorrectTranslations),
+    },
+    idsFile: null,
+  });
+
+  await ctx.validate({ fix: true });
+
+  expect(JSON.parse(ctx.getIdsFile() ?? '')).toEqual(mainIds);
+});
+
+test('the ids file lists the translations of every src dir', async () => {
+  const ctx = createCliTestContext({
+    src: { 'main.tsx': mainTsx },
+    packageSrc: {
+      'Button.tsx': `
+        import { __ } from '@ls-stack/i18n';
+
+        export function SaveButton() {
+          return <button>{__\`Save changes\`}</button>;
+        }
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({
+        ...enCorrectTranslations,
+        'Save changes': 'Save changes',
+      }),
+      'pt.json': JSON.stringify({
+        ...ptCorrectTranslations,
+        'Save changes': 'Salvar alterações',
+      }),
+    },
+    idsFile: null,
+  });
+
+  await ctx.validate({ fix: true });
+
+  expect(JSON.parse(ctx.getIdsFile() ?? '')).toEqual({
+    version: 1,
+    ids: {
+      'p:# Hello World': 0,
+      's:Hello World': 1,
+      's:Hello {1}': 2,
+      's:Save changes': 3,
+    },
+  });
+
+  const result = await ctx.validate();
+
+  expect(result.hasError).toBe(false);
+  expect(result.errors).toEqual([]);
+});
+
+test('fails without changing the files when a src dir is not found', async () => {
+  const ctx = createCliTestContext({
+    src: { 'main.tsx': mainTsx },
+    config: {
+      'en.json': JSON.stringify(enCorrectTranslations),
+      'pt.json': JSON.stringify(ptCorrectTranslations),
+    },
+    idsFile: JSON.stringify(mainIds),
+  });
+
+  const result = await ctx.validate({
+    fix: true,
+    // misspelled `packages/ui/src`
+    extraSrcDirs: ['/virtual/packages/iu/src'],
+  });
+
+  expect(result.hasError).toBe(true);
+  expect(result.errors).toEqual([
+    '❌ Source dir not found: /virtual/packages/iu/src',
+  ]);
+  expect(JSON.parse(ctx.getConfigFileRaw('pt.json') ?? '')).toEqual(
+    ptCorrectTranslations,
+  );
+  expect(ctx.getIdsFile()).toBe(JSON.stringify(mainIds));
+});
+
+test('fails without changing the files when a --src-dir has no value', async () => {
+  const ctx = createCliTestContext({
+    src: { 'main.tsx': mainTsx },
+    config: {
+      'en.json': JSON.stringify(enCorrectTranslations),
+      'pt.json': JSON.stringify(ptCorrectTranslations),
+    },
+    idsFile: JSON.stringify(mainIds),
+  });
+
+  // e.g. `--src-dir $UNSET_VAR --fix`, which would scan the working directory
+  const result = await ctx.validate({ fix: true, extraSrcDirs: [''] });
+
+  expect(result.hasError).toBe(true);
+  expect(result.errors).toEqual(['❌ --src-dir requires a directory path']);
+  expect(JSON.parse(ctx.getConfigFileRaw('pt.json') ?? '')).toEqual(
+    ptCorrectTranslations,
+  );
+  expect(ctx.getIdsFile()).toBe(JSON.stringify(mainIds));
+});
+
+test('issues of multiple src dirs show the path from the working directory', async () => {
+  const ctx = createCliTestContext({
+    src: { 'main.tsx': mainTsx },
+    packageSrc: {
+      'Button.tsx': `import { __ } from '@ls-stack/i18n';
+
+export function OkButton() {
+  return <button>{__\`OK\`}</button>;
+}
+`,
+    },
+    config: {
+      'en.json': JSON.stringify({ ...enCorrectTranslations, OK: 'OK' }),
+      'pt.json': JSON.stringify({ ...ptCorrectTranslations, OK: 'OK' }),
+    },
+  });
+
+  const result = await ctx.validate();
+
+  const buttonPath = path.relative(
+    process.cwd(),
+    path.join(ctx.packageSrcDir, 'Button.tsx'),
+  );
+  expect(result.errors).toContainEqual(
+    expect.stringContaining(`❌ ${buttonPath}:4:`),
+  );
+});
+
+test('reports an --ids-file without a path', async () => {
+  const ctx = createCliTestContext({
+    src: { 'main.tsx': mainTsx },
+    config: {
+      'en.json': JSON.stringify(enCorrectTranslations),
+      'pt.json': JSON.stringify(ptCorrectTranslations),
+    },
+  });
+  ctx.log.clear();
+
+  const result = await validateTranslations({
+    configDir: ctx.configDir,
+    srcDir: ctx.srcDir,
+    fs: ctx.fs,
+    log: ctx.log,
+    noColor: true,
+    fix: true,
+    idsFile: '',
+  });
+
+  expect(result.hasError).toBe(true);
+  expect(ctx.log.errors).toContain('❌ --ids-file requires a file path');
+});
+
+test('reports an --ids-file that is a directory', async () => {
+  const ctx = createCliTestContext({
+    src: { 'main.tsx': mainTsx },
+    config: {
+      'en.json': JSON.stringify(enCorrectTranslations),
+      'pt.json': JSON.stringify(ptCorrectTranslations),
+    },
+  });
+  ctx.log.clear();
+
+  const result = await validateTranslations({
+    configDir: ctx.configDir,
+    srcDir: ctx.srcDir,
+    fs: ctx.fs,
+    log: ctx.log,
+    noColor: true,
+    idsFile: ctx.srcDir,
+  });
+
+  expect(result.hasError).toBe(true);
+  expect(ctx.log.errors).toContainEqual(
+    expect.stringContaining('❌ Failed to read the ids file src'),
+  );
+});
+
+const isRoot = process.getuid?.() === 0;
+
+// root can read directories without permission
+test.skipIf(isRoot || process.platform === 'win32')(
+  'fails without deleting translations when a source directory is unreadable',
+  async () => {
+    const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'ls-stack-i18n-cli-'));
+    const srcDir = path.join(tmpDir, 'src');
+    const archiveDir = path.join(srcDir, 'archive');
+    const configDir = path.join(tmpDir, 'locales');
+    const ptFile = path.join(configDir, 'pt.json');
+    const ptContent = JSON.stringify(
+      {
+        'Direct Messages': 'Mensagens diretas',
+        'Archive conversation': 'Arquivar conversa',
+      },
+      null,
+      2,
+    );
+
+    try {
+      await mkdir(archiveDir, { recursive: true });
+      await mkdir(configDir);
+      await writeFile(
+        path.join(srcDir, 'inbox.ts'),
+        "import { __ } from '@ls-stack/i18n';\nexport const title = __`Direct Messages`;\n",
+      );
+      await writeFile(
+        path.join(archiveDir, 'archive.ts'),
+        "import { __ } from '@ls-stack/i18n';\nexport const archive = __`Archive conversation`;\n",
+      );
+      await writeFile(ptFile, ptContent);
+      await chmod(archiveDir, 0o000);
+
+      const log = createMockLog();
+      const result = await validateTranslations({
+        configDir,
+        srcDir,
+        fix: true,
+        idsFile: path.join(tmpDir, 'i18n-ids.json'),
+        log,
+      });
+
+      expect(result.hasError).toBe(true);
+      expect(log.errors).toContainEqual(
+        expect.stringContaining('❌ Failed to scan the source files'),
+      );
+      expect(await readFile(ptFile, 'utf-8')).toBe(ptContent);
+      expect(existsSync(path.join(tmpDir, 'i18n-ids.json'))).toBe(false);
+    } finally {
+      await chmod(archiveDir, 0o755);
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  },
+);

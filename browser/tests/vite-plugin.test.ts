@@ -1,3 +1,5 @@
+import { validateTranslations } from '@ls-stack/i18n-core/cli';
+import { parseIdsFile } from '@ls-stack/i18n-core/compiler';
 import { existsSync } from 'node:fs';
 import {
   cp,
@@ -16,13 +18,18 @@ import { pathToFileURL } from 'node:url';
 import { Children, isValidElement, type ReactNode } from 'react';
 import {
   build,
+  createLogger,
   createServer,
   type InlineConfig,
   type Rollup,
   type ViteDevServer,
 } from 'vite';
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
-import { i18nVitePlugin, type I18nVitePluginOptions } from '../src/vite';
+import {
+  i18nRuntimeChunk,
+  i18nVitePlugin,
+  type I18nVitePluginOptions,
+} from '../src/vite';
 
 const fixtureRoot = path.join(import.meta.dirname, 'fixtures/vite-app');
 const outDir = path.join(fixtureRoot, 'dist');
@@ -500,6 +507,431 @@ async function readBuiltTranslation(
   const translation: unknown = compiled[Number(id)];
   return translation;
 }
+
+/** Builds each module as its own entry chunk, named with its content hash */
+async function buildChunks(
+  root: string,
+  pluginOptions: Partial<I18nVitePluginOptions> = {},
+): Promise<string[]> {
+  await build({
+    ...getViteConfig(root, pluginOptions),
+    build: {
+      ...getBuildOptions(root),
+      rollupOptions: {
+        input: {
+          i18n: path.join(root, 'src/i18n.ts'),
+          chatMenu: path.join(root, 'src/chat/chatMenu.tsx'),
+          legal: path.join(root, 'src/legal.ts'),
+        },
+        preserveEntrySignatures: 'exports-only',
+        external: [/^react(\/.*)?$/],
+        output: { entryFileNames: '[name]-[hash].js' },
+      },
+    },
+  });
+
+  return (await readdir(path.join(root, 'dist'))).filter((file) =>
+    file.endsWith('.js'),
+  );
+}
+
+/** Runs `ls-stack-i18n --fix --ids-file i18n-ids.json` on the app */
+async function updateIdsFile(root: string): Promise<void> {
+  await validateTranslations({
+    configDir: path.join(root, 'locales'),
+    srcDir: path.join(root, 'src'),
+    idsFile: path.join(root, 'i18n-ids.json'),
+    fix: true,
+    log: { log: () => {}, error: () => {}, info: () => {} },
+  });
+}
+
+/**
+ * Builds the app with lazy loaded routes from a single entry, like a default
+ * vite app. `isolateRuntime` uses the chunk config recommended for an ids file.
+ */
+async function buildLazyRoutes(
+  root: string,
+  { isolateRuntime }: { isolateRuntime: boolean },
+): Promise<string[]> {
+  await writeFile(
+    path.join(root, 'src/main.ts'),
+    [
+      "export { i18n } from './i18n';",
+      "export const loadChatMenu = () => import('./chat/chatMenu');",
+      "export const loadLegal = () => import('./legal');",
+      '',
+    ].join('\n'),
+  );
+
+  const buildOptions = getBuildOptions(root);
+
+  await build({
+    ...getViteConfig(root, { idsFile: 'i18n-ids.json' }),
+    build: {
+      ...buildOptions,
+      rollupOptions: {
+        ...buildOptions?.rollupOptions,
+        output: {
+          entryFileNames: '[name].js',
+          chunkFileNames: '[name]-[hash].js',
+          manualChunks: isolateRuntime ? i18nRuntimeChunk : undefined,
+        },
+      },
+    },
+  });
+
+  return readdir(path.join(root, 'dist'));
+}
+
+function findChunk(chunks: string[], name: string): string | undefined {
+  return chunks.find((chunk) => chunk.startsWith(`${name}-`));
+}
+
+test('i18nRuntimeChunk only puts the runtime modules in the runtime chunk', () => {
+  const runtimeDir = path.dirname(runtimeEntry);
+
+  expect(i18nRuntimeChunk(runtimeEntry)).toBe('i18n-runtime');
+  expect(i18nRuntimeChunk(path.join(runtimeDir, 'state.ts?v=4f2a1c'))).toBe(
+    'i18n-runtime',
+  );
+  expect(i18nRuntimeChunk(path.join(runtimeDir, 'vite.ts'))).toBeUndefined();
+  expect(
+    i18nRuntimeChunk(path.join(fixtureRoot, 'src/chat/chatMenu.tsx')),
+  ).toBeUndefined();
+  expect(i18nRuntimeChunk(`${runtimeDir}-legacy/main.ts`)).toBeUndefined();
+  expect(
+    i18nRuntimeChunk('/app/node_modules/react/cjs/react.production.js'),
+  ).toBeUndefined();
+  expect(i18nRuntimeChunk('\0ls-stack-i18n-locale/pt')).toBeUndefined();
+});
+
+test('i18nRuntimeChunk matches the symlink paths of a symlinked install', async () => {
+  const runtimeDir = await realpath(path.dirname(runtimeEntry));
+  const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'ls-stack-i18n-link-'));
+
+  try {
+    // e.g. a pnpm or workspace install built with `preserveSymlinks`
+    const packageDir = path.join(tmpDir, 'node_modules/@ls-stack/i18n');
+    await mkdir(packageDir, { recursive: true });
+    const linkedDir = path.join(packageDir, path.basename(runtimeDir));
+    await symlink(runtimeDir, linkedDir, 'dir');
+
+    expect(i18nRuntimeChunk(path.join(linkedDir, 'main.ts'))).toBe(
+      'i18n-runtime',
+    );
+    expect(i18nRuntimeChunk(path.join(linkedDir, 'vite.ts'))).toBeUndefined();
+  } finally {
+    await rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
+describe('vite build with an ids file', { timeout: 30_000 }, () => {
+  const archiveLabel = `\nexport function getArchiveLabel() {\n  return __\`Archive conversation\`;\n}\n`;
+
+  test('adding a translation only changes the chunks that use it', async () => {
+    await withFixtureCopy(async (copyRoot) => {
+      const pluginOptions = { idsFile: 'i18n-ids.json' };
+
+      await updateIdsFile(copyRoot);
+      const before = await buildChunks(copyRoot, pluginOptions);
+
+      expect(await buildChunks(copyRoot, pluginOptions)).toEqual(before);
+
+      const chatMenuFile = path.join(copyRoot, 'src/chat/chatMenu.tsx');
+      await writeFile(
+        chatMenuFile,
+        `${await readFile(chatMenuFile, 'utf-8')}${archiveLabel}`,
+      );
+      await updateIdsFile(copyRoot);
+      const after = await buildChunks(copyRoot, pluginOptions);
+
+      expect(findChunk(after, 'legal')).toBe(findChunk(before, 'legal'));
+      expect(findChunk(after, 'chatMenu')).not.toBe(
+        findChunk(before, 'chatMenu'),
+      );
+      expect(findChunk(after, 'i18n')).not.toBe(findChunk(before, 'i18n'));
+    });
+  });
+
+  test('without an ids file adding a translation changes unrelated chunks', async () => {
+    await withFixtureCopy(async (copyRoot) => {
+      const before = await buildChunks(copyRoot);
+
+      const chatMenuFile = path.join(copyRoot, 'src/chat/chatMenu.tsx');
+      await writeFile(
+        chatMenuFile,
+        `${await readFile(chatMenuFile, 'utf-8')}${archiveLabel}`,
+      );
+      const after = await buildChunks(copyRoot);
+
+      expect(findChunk(after, 'legal')).not.toBe(findChunk(before, 'legal'));
+    });
+  });
+
+  test('removing a translation keeps the ids of the others', async () => {
+    await withFixtureCopy(async (copyRoot) => {
+      const pluginOptions = { idsFile: 'i18n-ids.json' };
+
+      await updateIdsFile(copyRoot);
+      const before = await buildChunks(copyRoot, pluginOptions);
+
+      await replaceInFile(
+        path.join(copyRoot, 'src/chat/chatMenu.tsx'),
+        '__`Bookmarked`,',
+        '',
+      );
+      await updateIdsFile(copyRoot);
+      const after = await buildChunks(copyRoot, pluginOptions);
+
+      expect(findChunk(after, 'legal')).toBe(findChunk(before, 'legal'));
+
+      const ids = await readFile(path.join(copyRoot, 'i18n-ids.json'), 'utf-8');
+      expect(ids).not.toContain('Bookmarked');
+    });
+  });
+
+  test('warns when the ids file is outdated and still builds', async () => {
+    await withFixtureCopy(async (copyRoot) => {
+      await updateIdsFile(copyRoot);
+
+      const chatMenuFile = path.join(copyRoot, 'src/chat/chatMenu.tsx');
+      await writeFile(
+        chatMenuFile,
+        `${await readFile(chatMenuFile, 'utf-8')}${archiveLabel}`,
+      );
+
+      const warnings: string[] = [];
+      const buildOptions = getBuildOptions(copyRoot);
+
+      await build({
+        ...getViteConfig(copyRoot, { idsFile: 'i18n-ids.json' }),
+        build: {
+          ...buildOptions,
+          rollupOptions: {
+            ...buildOptions?.rollupOptions,
+            onwarn: (warning) => {
+              warnings.push(warning.message);
+            },
+          },
+        },
+      });
+
+      expect(
+        warnings.some((warning) =>
+          warning.includes('i18n-ids.json" is outdated'),
+        ),
+      ).toBe(true);
+      expect(await readBuiltTranslation(copyRoot, 'getExportLabel', 'pt')).toBe(
+        'Export as PDF',
+      );
+    });
+  });
+
+  test('warns when two translations have the same id after a merge', async () => {
+    await withFixtureCopy(async (copyRoot) => {
+      await updateIdsFile(copyRoot);
+
+      const idsFile = path.join(copyRoot, 'i18n-ids.json');
+      const ids = parseIdsFile(await readFile(idsFile, 'utf-8'));
+      const removeBookmarkId = ids.get('s:Remove bookmark');
+      if (removeBookmarkId === undefined) throw new Error('Missing id');
+
+      // both merged branches gave their new string the same free id
+      ids.set('s:Bookmarked', removeBookmarkId);
+      await writeFile(
+        idsFile,
+        JSON.stringify({ version: 1, ids: Object.fromEntries(ids) }),
+      );
+
+      const warnings: string[] = [];
+      const buildOptions = getBuildOptions(copyRoot);
+
+      await build({
+        ...getViteConfig(copyRoot, { idsFile: 'i18n-ids.json' }),
+        build: {
+          ...buildOptions,
+          rollupOptions: {
+            ...buildOptions?.rollupOptions,
+            onwarn: (warning) => {
+              warnings.push(warning.message);
+            },
+          },
+        },
+      });
+
+      expect(
+        warnings.some(
+          (warning) =>
+            warning.includes('has ids taken by two translations') &&
+            warning.includes('lost their id'),
+        ),
+      ).toBe(true);
+    });
+  });
+
+  test('lazy route chunks keep their hash with the runtime in its own chunk', async () => {
+    await withFixtureCopy(async (copyRoot) => {
+      await updateIdsFile(copyRoot);
+      const before = await buildLazyRoutes(copyRoot, { isolateRuntime: true });
+
+      const chatMenuFile = path.join(copyRoot, 'src/chat/chatMenu.tsx');
+      await writeFile(
+        chatMenuFile,
+        `${await readFile(chatMenuFile, 'utf-8')}${archiveLabel}`,
+      );
+      await updateIdsFile(copyRoot);
+      const after = await buildLazyRoutes(copyRoot, { isolateRuntime: true });
+
+      expect(findChunk(after, 'legal')).toBe(findChunk(before, 'legal'));
+      expect(findChunk(after, 'i18n-runtime')).toBe(
+        findChunk(before, 'i18n-runtime'),
+      );
+      expect(findChunk(after, 'chatMenu')).not.toBe(
+        findChunk(before, 'chatMenu'),
+      );
+    });
+  });
+
+  test('lazy route chunks importing the runtime from the entry change with the locales', async () => {
+    await withFixtureCopy(async (copyRoot) => {
+      await updateIdsFile(copyRoot);
+      const before = await buildLazyRoutes(copyRoot, { isolateRuntime: false });
+
+      const chatMenuFile = path.join(copyRoot, 'src/chat/chatMenu.tsx');
+      await writeFile(
+        chatMenuFile,
+        `${await readFile(chatMenuFile, 'utf-8')}${archiveLabel}`,
+      );
+      await updateIdsFile(copyRoot);
+      const after = await buildLazyRoutes(copyRoot, { isolateRuntime: false });
+
+      // the entry imports the locale chunks, their new hashes change it
+      expect(findChunk(after, 'legal')).not.toBe(findChunk(before, 'legal'));
+    });
+  });
+
+  test('the CLI finds the same translations as the build', async () => {
+    await withFixtureCopy(async (copyRoot) => {
+      // the build scans every directory except node_modules and .git
+      await mkdir(path.join(copyRoot, 'src/.github-widgets'));
+      await writeFile(
+        path.join(copyRoot, 'src/.github-widgets/starBanner.ts'),
+        "import { __ } from '@ls-stack/i18n';\n\nexport const starLabel = () => __`Star on GitHub`;\n",
+      );
+      await updateIdsFile(copyRoot);
+
+      const ids = await readFile(path.join(copyRoot, 'i18n-ids.json'), 'utf-8');
+      expect(ids).toContain('"s:Star on GitHub"');
+
+      const warnings: string[] = [];
+      const buildOptions = getBuildOptions(copyRoot);
+
+      await build({
+        ...getViteConfig(copyRoot, { idsFile: 'i18n-ids.json' }),
+        build: {
+          ...buildOptions,
+          rollupOptions: {
+            ...buildOptions?.rollupOptions,
+            input: [
+              path.join(copyRoot, 'src/main.ts'),
+              path.join(copyRoot, 'src/.github-widgets/starBanner.ts'),
+            ],
+            onwarn: (warning) => {
+              warnings.push(warning.message);
+            },
+          },
+        },
+      });
+
+      expect(
+        warnings.filter((warning) => warning.includes('ids file')),
+      ).toEqual([]);
+    });
+  });
+
+  const conflictedIdsFile = [
+    '{',
+    '  "version": 1,',
+    '  "ids": {',
+    '    "s:Direct Messages": 3,',
+    '<<<<<<< HEAD',
+    '    "s:Archive conversation": 9,',
+    '=======',
+    '    "s:Mute channel": 9,',
+    '>>>>>>> feature/mute-channel',
+    '    "s:Export as PDF": 4',
+    '  }',
+    '}',
+    '',
+  ].join('\n');
+
+  test('fails the build when the ids file has merge conflicts', async () => {
+    await withFixtureCopy(async (copyRoot) => {
+      await writeFile(path.join(copyRoot, 'i18n-ids.json'), conflictedIdsFile);
+
+      await expect(
+        build({
+          ...getViteConfig(copyRoot, { idsFile: 'i18n-ids.json' }),
+          build: getBuildOptions(copyRoot),
+        }),
+      ).rejects.toThrow('Failed to read the ids file');
+    });
+  });
+
+  test('the dev server ignores an ids file with merge conflicts', async () => {
+    await withFixtureCopy(async (copyRoot) => {
+      await writeFile(path.join(copyRoot, 'i18n-ids.json'), conflictedIdsFile);
+
+      const warnings: string[] = [];
+      const logger = createLogger('silent');
+      logger.warn = (message) => {
+        warnings.push(message);
+      };
+
+      const server = await createServer({
+        ...getViteConfig(copyRoot, { idsFile: 'i18n-ids.json' }),
+        customLogger: logger,
+        appType: 'custom',
+        server: { middlewareMode: true, ws: false, watch: null },
+        optimizeDeps: { noDiscovery: true },
+      });
+
+      try {
+        const app = await server.ssrLoadModule('/src/main.ts');
+        if (!isFixtureApp(app)) throw new Error('Invalid dev app');
+        await app.i18n.setLocale('pt');
+
+        expect(app.getExportLabel()).toBe('Export as PDF');
+        expect(
+          warnings.some((warning) =>
+            warning.includes('Failed to read the ids file'),
+          ),
+        ).toBe(true);
+      } finally {
+        await server.close();
+      }
+    });
+  });
+
+  test('fails when the ids file is in localesDir', async () => {
+    await expect(
+      build({
+        ...getViteConfig(fixtureRoot, { idsFile: 'locales/ids.json' }),
+        build: { ...getBuildOptions(fixtureRoot), write: false },
+      }),
+    ).rejects.toThrow('must be outside of localesDir');
+  });
+
+  test('fails when the ids file is in a subdirectory of localesDir', async () => {
+    await expect(
+      build({
+        ...getViteConfig(fixtureRoot, { idsFile: 'locales/meta/ids.json' }),
+        build: { ...getBuildOptions(fixtureRoot), write: false },
+      }),
+    ).rejects.toThrow('must be outside of localesDir');
+  });
+});
 
 describe('vite build of a copy of the app', { timeout: 30_000 }, () => {
   let tmpDir = '';

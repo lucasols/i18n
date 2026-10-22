@@ -18,7 +18,7 @@ const parsed = typeFlag({
     alias: 'c',
   },
   'src-dir': {
-    type: String,
+    type: [String],
     alias: 'r',
   },
   default: {
@@ -52,8 +52,14 @@ const parsed = typeFlag({
 });
 
 const srcDir = parsed.flags['src-dir'];
-if (!srcDir) {
+if (srcDir.length === 0) {
   console.error('--src-dir is required');
+  process.exit(1);
+}
+
+// the ids file is only used by the vite plugin of @ls-stack/i18n
+if ('ids-file' in parsed.unknownFlags) {
+  console.error('--ids-file is only supported by the @ls-stack/i18n CLI');
   process.exit(1);
 }
 
@@ -79,9 +85,7 @@ if (aiProviderInput) {
   const provider: AIProvider = aiProviderInput;
 
   const apiKeyEnvVar =
-    provider === 'google' ?
-      'GOOGLE_GENERATIVE_AI_API_KEY'
-    : 'OPENAI_API_KEY';
+    provider === 'google' ? 'GOOGLE_GENERATIVE_AI_API_KEY' : 'OPENAI_API_KEY';
   const hasApiKey = Boolean(process.env[apiKeyEnvVar]);
 
   if (!hasApiKey) {

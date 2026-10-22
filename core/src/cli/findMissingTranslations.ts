@@ -1,5 +1,5 @@
 import ts from 'typescript';
-import { getScriptKind, QUICK_CHECK_REGEX } from '../scriptKind';
+import { parseSourceFile, QUICK_CHECK_REGEX } from '../scriptKind';
 
 export type TranslationLocation = {
   file: string;
@@ -110,6 +110,8 @@ function hasOnlyPrimitiveInterpolations(template: ts.TemplateLiteral): boolean {
 export function getI18nUsagesInCode(
   fileName: string,
   code: string,
+  /** Already parsed `code`, avoids parsing it again */
+  parsedSourceFile?: ts.SourceFile,
 ): I18nUsagesResult {
   const checkFile = code.includes('i18n') || QUICK_CHECK_REGEX.test(code);
 
@@ -124,13 +126,7 @@ export function getI18nUsagesInCode(
     };
   }
 
-  const sourceFile = ts.createSourceFile(
-    fileName,
-    code,
-    ts.ScriptTarget.Latest,
-    undefined,
-    getScriptKind(fileName),
-  );
+  const sourceFile = parsedSourceFile ?? parseSourceFile(fileName, code);
 
   const pluralTranslations = new Set<string>();
   const stringTranslations = new Set<string>();

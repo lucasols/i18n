@@ -1,7 +1,10 @@
 import {
   analyzeTranslations,
   compileLocaleModule,
+  getIdsFileState,
+  IGNORED_DIRS,
   isTranslationSourceFile,
+  parseIdsFile,
   QUICK_CHECK_REGEX,
   RUNTIME_MODULE,
   transformTranslations,
@@ -13,7 +16,13 @@ import { createHash } from 'node:crypto';
 import { realpathSync, type Dirent, type Stats } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { normalizePath, type Plugin, type ViteDevServer } from 'vite';
+import { fileURLToPath } from 'node:url';
+import {
+  normalizePath,
+  type Logger,
+  type Plugin,
+  type ViteDevServer,
+} from 'vite';
 
 export type I18nVitePluginOptions = {
   /** Directory with the locale JSON files, relative to the vite root */
@@ -23,6 +32,14 @@ export type I18nVitePluginOptions = {
    * @default 'src'
    */
   srcDir?: string | string[];
+  /**
+   * File with the translation ids of the previous builds, relative to the vite
+   * root. Keeps the ids of the unchanged translations, so adding or removing a
+   * translation doesn't change the hash of the chunks that don't use it.
+   * Created and updated by `ls-stack-i18n --fix --ids-file <file>`, the
+   * plugin only reads it.
+   */
+  idsFile?: string;
 };
 
 const PLUGIN_NAME = 'ls-stack-i18n';
@@ -83,7 +100,59 @@ function getRealPath(filePath: string): string {
   }
 }
 
-const IGNORED_DIRS: ReadonlySet<string> = new Set(['node_modules', '.git']);
+const RUNTIME_CHUNK_NAME = 'i18n-runtime';
+
+/** This file, the other modules of its directory are the runtime */
+const pluginFile = normalizePath(fileURLToPath(import.meta.url));
+/** Configured and real paths, ids use the configured one with `preserveSymlinks` */
+const runtimeFiles = new Set([pluginFile, getRealPath(pluginFile)]);
+const runtimeDirs = [...runtimeFiles].map(
+  (file) => `${path.posix.dirname(file)}/`,
+);
+/** Name of the runtime directory, e.g. `dist`, only these ids are resolved */
+const runtimeDirNames: ReadonlySet<string> = new Set(
+  runtimeDirs.map((dir) => path.posix.basename(dir)),
+);
+const runtimeRealPaths = new Map<string, string>();
+
+function isRuntimeFile(file: string): boolean {
+  return (
+    !runtimeFiles.has(file) && runtimeDirs.some((dir) => file.startsWith(dir))
+  );
+}
+
+/**
+ * Returns `'i18n-runtime'` for the modules of the `@ls-stack/i18n` runtime, to
+ * use in `build.rollupOptions.output.manualChunks`. The runtime gets its own
+ * chunk, so the chunks that use translations don't import the entry chunk,
+ * which changes with every locale change. Rollup also moves the runtime
+ * dependencies that no other manual chunk claims (e.g. React) into it.
+ */
+export function i18nRuntimeChunk(id: string): string | undefined {
+  const file = removeQuery(id);
+
+  if (isRuntimeFile(file)) return RUNTIME_CHUNK_NAME;
+
+  // with `preserveSymlinks` the ids of a symlinked install (e.g. pnpm or a
+  // workspace link) use the symlink path, while this file has the real path
+  if (
+    file.startsWith('\0') ||
+    !runtimeDirNames.has(path.posix.basename(path.posix.dirname(file)))
+  ) {
+    return undefined;
+  }
+
+  let realPath = runtimeRealPaths.get(file);
+
+  if (realPath === undefined) {
+    realPath = getRealPath(file);
+    runtimeRealPaths.set(file, realPath);
+  }
+
+  return realPath !== file && isRuntimeFile(realPath) ?
+      RUNTIME_CHUNK_NAME
+    : undefined;
+}
 
 function stripBom(content: string): string {
   return content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
@@ -192,12 +261,17 @@ type FileStats = { size: number; mtimeMs: number; ctimeMs: number };
 export function i18nVitePlugin({
   localesDir,
   srcDir = 'src',
+  idsFile,
 }: I18nVitePluginOptions): Plugin {
   let isBuild = false;
   let preserveSymlinks = false;
   /** Scanned source directories */
   let srcRoots: string[] = [];
   let localesPath = '';
+  let idsFilePath: string | null = null;
+  let logger: Logger | null = null;
+  /** Reported by the build when the ids file doesn't match the scanned translations */
+  let idsFileWarning: string | null = null;
   /** Configured and real paths, ids may use either */
   let srcPaths: string[] = [];
   let localesPaths: string[] = [];
@@ -299,6 +373,35 @@ export function i18nVitePlugin({
     });
   }
 
+  async function readStableIds(): Promise<Map<string, number> | null> {
+    if (!idsFilePath) return null;
+
+    let content: string;
+
+    try {
+      content = await readFile(idsFilePath, 'utf-8');
+    } catch (error) {
+      // a directory is reported like the CLI does
+      if (getErrorCode(error) === 'ENOENT') return null;
+      throw error;
+    }
+
+    try {
+      return parseIdsFile(content);
+    } catch (error) {
+      const message = `Failed to read the ids file "${idsFilePath}": ${error instanceof Error ? error.message : String(error)}`;
+
+      // ids don't need to be stable on the dev server, e.g. while a merge
+      // conflict of the file is being resolved
+      if (!isBuild && logger) {
+        logger.warn(`[${PLUGIN_NAME}] ${message}`);
+        return null;
+      }
+
+      throw new Error(`[${PLUGIN_NAME}] ${message}`, { cause: error });
+    }
+  }
+
   /**
    * `isWatchBuild` keeps the size and modification time of the files, so the
    * rebuilds only read the changed files
@@ -312,7 +415,8 @@ export function i18nVitePlugin({
 
     const scanOptions = { isWatchBuild, isRebuild: registry !== null };
 
-    await Promise.all([
+    const [stableIds] = await Promise.all([
+      registry ? null : readStableIds(),
       scanLocaleFiles(),
       ...srcRoots.map((srcRoot) => scanSourceDir(srcRoot, keys, scanOptions)),
     ]);
@@ -321,7 +425,23 @@ export function i18nVitePlugin({
     if (registry) {
       registry.addKeys(keys);
     } else {
-      registry = TranslationRegistry.fromKeys(keys);
+      registry = TranslationRegistry.fromKeys(keys, stableIds ?? undefined);
+
+      const idsFileState =
+        stableIds ? getIdsFileState(registry, stableIds) : 'outdated';
+
+      if (idsFilePath && idsFileState !== 'up-to-date') {
+        const problem =
+          !stableIds ? 'was not found'
+          : idsFileState === 'outdated' ? 'is outdated'
+          : 'has ids taken by two translations';
+        const consequence =
+          idsFileState === 'duplicated-ids' ?
+            'the translations that lost their id get a free id that can change with the next string changes'
+          : 'the ids of the translations missing from it can change the hash of unrelated chunks in the next builds';
+
+        idsFileWarning = `The ids file "${idsFilePath}" ${problem}, ${consequence}. Update it with \`ls-stack-i18n --fix --ids-file <file>\``;
+      }
     }
 
     return registry;
@@ -391,6 +511,7 @@ export function i18nVitePlugin({
 
     configResolved(config) {
       isBuild = config.command === 'build';
+      logger = config.logger;
 
       if (isBuild && config.build.lib) {
         throw new Error(
@@ -412,6 +533,7 @@ export function i18nVitePlugin({
         preserveSymlinks ? configuredSrcPaths : (
           configuredSrcPaths.map(getRealPath)
         );
+      idsFilePath = idsFile ? resolvePath(idsFile) : null;
       localesPath =
         preserveSymlinks ?
           configuredLocalesPath
@@ -419,6 +541,18 @@ export function i18nVitePlugin({
 
       srcPaths = [...new Set([...srcRoots, ...configuredSrcPaths])];
       localesPaths = [...new Set([localesPath, configuredLocalesPath])];
+
+      const idsFileInLocalesDir = idsFilePath;
+
+      // the CLI also reads the locales in the subdirectories of localesDir
+      if (
+        idsFileInLocalesDir &&
+        localesPaths.some((dir) => idsFileInLocalesDir.startsWith(`${dir}/`))
+      ) {
+        throw new Error(
+          `[${PLUGIN_NAME}] The idsFile "${idsFileInLocalesDir}" must be outside of localesDir, it would be read as a locale`,
+        );
+      }
 
       const ownIndex = config.plugins.findIndex((p) => p.name === PLUGIN_NAME);
       const reactIndex = config.plugins.findIndex((p) =>
@@ -465,6 +599,12 @@ export function i18nVitePlugin({
 
         if (isBuild) this.error(message);
         else this.warn(message);
+      }
+
+      // the dev server gets new translations all the time
+      if (isBuild && idsFileWarning) {
+        this.warn(idsFileWarning);
+        idsFileWarning = null;
       }
     },
 

@@ -440,6 +440,7 @@ export default defineConfig({
 | ------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `localesDir` |         | Directory of the locale JSON files, relative to the vite root                                                                                        |
 | `srcDir`     | `src`   | Directory, or list of directories, scanned for translations at startup, relative to the root (e.g. `['src', '../../packages/ui/src']` in a monorepo) |
+| `idsFile`    |         | File with the translation ids of the previous builds, relative to the root, see [Stable translation ids](#stable-translation-ids)                    |
 
 Behavior differences from the uncompiled runtime:
 
@@ -449,9 +450,81 @@ Behavior differences from the uncompiled runtime:
 - Every imported `__`, `__p`, `__jsx` and `__pjsx`, directly or re-exported from a local module, is assumed to be the `@ls-stack/i18n` one. Don't import other translators (e.g. a `@ls-stack/server-i18n` instance) under these names in code compiled by the plugin, locally declared bindings with these names are left untouched.
 - Only direct calls of `__`, `__p`, `__jsx` and `__pjsx` are compiled. Member calls like `i18n.__`, aliased imports, calls inside a scope that declares its own `__` (e.g. `const { __ } = i18n`) code in `node_modules` and translations in files compiled to JS by other plugins (e.g. `.mdx`, `.vue` or `.svelte`) are left untouched. Those calls can't be translated with a compiled locale, they render the source string and an error is logged.
 - In the build, every translation must be inside `srcDir` (`node_modules` and `.git` directories are not scanned), translations outside it fail the build. Symlinked files and directories inside `srcDir` are scanned too. On the dev server, translations added while the server is running get new ids and render the source string until the locale file is updated.
-- Ids are assigned in the sorted order of the translations, so adding or removing a string changes the ids of the strings after it. The compiled calls change in most chunks, so a deploy that touches a string also changes the hash of most app chunks and returning users download them again.
+- Without an `idsFile`, ids are assigned in the sorted order of the translations, so adding or removing a string changes the ids of the strings after it. The compiled calls change in most chunks, so a deploy that touches a string also changes the hash of most app chunks and returning users download them again. Use [stable translation ids](#stable-translation-ids) to avoid it.
 - The plugin is for app builds only, the compiled ids only match the locales of the build that compiled them, so library builds (`build.lib`) fail. Packages of a monorepo should be compiled by the app that uses them (add their directories to `srcDir`), every `@ls-stack/i18n` import, including the ones of wrapper packages that call `i18nitialize`, is resolved from the app root so all of them share the runtime configured by the app (imports the app root can't resolve keep the normal resolution).
 - On the dev server, editing a locale file reloads the page, so the active locale is loaded again with the new translations.
+
+#### Stable translation ids
+
+With an `idsFile`, the ids of the translations are kept across builds, so adding or removing a string only changes the chunks that use it, the locale chunks and the chunks that import the locale loaders (the module that calls `i18nitialize`, usually the entry). The file is committed with the code and updated by the CLI together with the locale files.
+
+By default vite bundles the runtime into the entry chunk, which also imports the locale chunks, so every lazy loaded chunk that uses a translation imports the entry and changes with it. Put the runtime in its own chunk with `i18nRuntimeChunk`, so only the entry changes:
+
+```ts
+// vite.config.ts
+import { i18nRuntimeChunk, i18nVitePlugin } from '@ls-stack/i18n/vite';
+
+export default defineConfig({
+  plugins: [
+    i18nVitePlugin({ localesDir: 'src/locales', idsFile: 'i18n-ids.json' }),
+    react(),
+  ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          // returns 'i18n-runtime' for the runtime modules, undefined otherwise
+          return i18nRuntimeChunk(id);
+        },
+      },
+    },
+  },
+});
+```
+
+Call it first from an existing `manualChunks` and fall back to your own chunks when it returns `undefined`. Chunking only changes when `i18nRuntimeChunk` is used.
+
+Rollup also moves the dependencies of the runtime (e.g. React and `@ls-stack/utils`) into the `i18n-runtime` chunk, unless your `manualChunks` puts them in another chunk:
+
+```ts
+manualChunks(id) {
+  return (
+    i18nRuntimeChunk(id) ??
+    (id.includes('/node_modules/') ? 'vendor' : undefined)
+  );
+},
+```
+
+Chunks that import other modules of the entry chunk, like the `i18n` controller returned by `i18nitialize`, still change with every locale change.
+
+```bash
+# creates or updates the ids file with the translations of srcDir
+ls-stack-i18n --config-dir ./src/locales --src-dir ./src --fix --ids-file i18n-ids.json
+
+# with a srcDir list, repeat --src-dir for each directory
+ls-stack-i18n --config-dir ./src/locales --src-dir ./src --src-dir ../../packages/ui/src --fix --ids-file i18n-ids.json
+
+# fails when the ids file is outdated, e.g. in CI
+ls-stack-i18n --config-dir ./src/locales --src-dir ./src --ids-file i18n-ids.json
+```
+
+```json
+{
+  "version": 1,
+  "ids": {
+    "s:Direct Messages": 0,
+    "s:Hello {1}": 1,
+    "p:You have # unread messages": 2
+  }
+}
+```
+
+- Each translation keeps its id. New translations take the ids freed by the removed ones, the chunks that used a removed string change anyway, so the ids stay compact without renumbering.
+- The plugin only reads the file, builds never write to disk. A build with an outdated or missing file still works and warns: the translations missing from the file take free ids, so the file only affects which chunks change in the next builds.
+- The file has one translation per line, sorted by source string (`s:` for `__`/`__jsx`, `p:` for plurals), so merging branches that added different strings rarely conflicts. When both branches gave the same id to different strings, every build resolves it the same way (the first in the order of the file keeps it), the check and the build warn without failing, and the next `--fix` writes the resolved ids. Until then the id of the string that lost it can change with the next string changes.
+- When a merge conflicts in the ids file, keep the entries of both sides (adding the missing commas), then run `ls-stack-i18n --fix --ids-file <file>`, which resolves the ids taken by two strings. Don't delete the file to resolve the conflict, `--fix` would give new ids to every string and every chunk would change once. While the file is invalid, builds fail and the dev server warns and ignores it.
+- In `vite build --watch` and on the dev server the file is only read at startup, rebuilds keep the ids of the running session and add the new translations after them, so their output can differ from a clean build. Deploy clean builds to keep the chunk hashes stable.
+- The file must be outside `localesDir` and its subdirectories, or it would be read as a locale. The CLI `--src-dir` directories must match the plugin `srcDir`, translations found by only one of them don't break the build but get ids that are not kept in the file and the build warns that the file is outdated.
 
 #### Rendering with the React Compiler
 
@@ -513,21 +586,22 @@ ls-stack-i18n --config-dir ./locales --src-dir ./src --default en
 ls-stack-i18n --config-dir ./locales --src-dir ./src --default en --fix
 ```
 
-The CLI scans the same files compiled by the vite plugin: `.ts`, `.tsx`, `.js`, `.jsx`, `.mts`, `.cts`, `.mjs` and `.cjs`, excluding `.d.ts` declaration files.
+The CLI scans the same files compiled by the vite plugin: `.ts`, `.tsx`, `.js`, `.jsx`, `.mts`, `.cts`, `.mjs` and `.cjs`, excluding `.d.ts` declaration files. With multiple `--src-dir`, the issues show the file paths relative to the working directory.
 
 ### Options
 
-| Option           | Alias | Description                                                   |
-| ---------------- | ----- | ------------------------------------------------------------- |
-| `--config-dir`   | `-c`  | Path to translation JSON files (required)                     |
-| `--src-dir`      | `-r`  | Path to source files to scan (required)                       |
-| `--default`      | `-d`  | Default locale ID                                             |
-| `--fix`          | `-f`  | Auto-add missing translations                                 |
-| `--ai`           |       | AI provider for auto-translation (`google`/`openai`)          |
-| `--max-id-size`  |       | Maximum translation ID size (default: 80)                     |
-| `--disable-rule` |       | Disable a validation rule (can be used multiple times)        |
-| `--warn-rule`    |       | Set a validation rule to warning (can be used multiple times) |
-| `--no-color`     |       | Disable colored output                                        |
+| Option           | Alias | Description                                                                                                  |
+| ---------------- | ----- | ------------------------------------------------------------------------------------------------------------ |
+| `--config-dir`   | `-c`  | Path to translation JSON files (required)                                                                    |
+| `--src-dir`      | `-r`  | Path to source files to scan, can be used multiple times (required), every path must exist                   |
+| `--default`      | `-d`  | Default locale ID                                                                                            |
+| `--fix`          | `-f`  | Auto-add missing translations                                                                                |
+| `--ids-file`     |       | Checks, or updates with `--fix`, the [vite plugin ids file](#stable-translation-ids) (`@ls-stack/i18n` only) |
+| `--ai`           |       | AI provider for auto-translation (`google`/`openai`)                                                         |
+| `--max-id-size`  |       | Maximum translation ID size (default: 80)                                                                    |
+| `--disable-rule` |       | Disable a validation rule (can be used multiple times)                                                       |
+| `--warn-rule`    |       | Set a validation rule to warning (can be used multiple times)                                                |
+| `--no-color`     |       | Disable colored output                                                                                       |
 
 ### Validation Rules
 
