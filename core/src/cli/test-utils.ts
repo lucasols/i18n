@@ -52,7 +52,12 @@ export function createVirtualFs(
 
   const fs: FileSystem = {
     existsSync(filePath) {
-      return files.has(filePath);
+      if (files.has(filePath)) return true;
+      // directories exist when they contain files
+      for (const file of files.keys()) {
+        if (isSubPath(filePath, file)) return true;
+      }
+      return false;
     },
     readFileSync(filePath, _encoding) {
       const content = files.get(filePath);
@@ -189,11 +194,18 @@ export function createCliTestContext(fixture: {
     aiTranslator?: AITranslator;
     rules?: ValidationRuleConfig;
     maxTranslationIdSize?: number;
+    /** Scanned after the src dirs of the fixture, e.g. a misspelled dir */
+    extraSrcDirs?: string[];
   }) {
     log.clear();
+    const srcDirs = fixture.packageSrc ? [srcDir, packageSrcDir] : [srcDir];
+    const extraSrcDirs = options?.extraSrcDirs ?? [];
     const result = await validateTranslations({
       configDir,
-      srcDir: fixture.packageSrc ? [srcDir, packageSrcDir] : srcDir,
+      srcDir:
+        srcDirs.length === 1 && extraSrcDirs.length === 0 ?
+          srcDir
+        : [...srcDirs, ...extraSrcDirs],
       fix: options?.fix,
       defaultLocale: options?.defaultLocale,
       aiTranslator: options?.aiTranslator,
@@ -215,6 +227,7 @@ export function createCliTestContext(fixture: {
 
   return {
     srcDir,
+    packageSrcDir,
     configDir,
     fs: combinedFs,
     log,

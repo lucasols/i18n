@@ -1,6 +1,6 @@
 import MagicString, { type SourceMap } from 'magic-string';
 import ts from '@typescript/typescript6';
-import { getScriptKind, QUICK_CHECK_REGEX } from './scriptKind';
+import { parseSourceFile, QUICK_CHECK_REGEX } from './scriptKind';
 
 export { IGNORED_DIRS, isTranslationSourceFile } from './scriptKind';
 import type {
@@ -412,6 +412,8 @@ function hasOccurrenceIn(occurrences: number[], node: ts.Node): boolean {
 export function analyzeTranslations(
   fileName: string,
   code: string,
+  /** Already parsed `code`, avoids parsing it again */
+  parsedSourceFile?: ts.SourceFile,
 ): TranslationAnalysis {
   const foundOccurrences = findNameOccurrences(code);
 
@@ -419,17 +421,7 @@ export function analyzeTranslations(
 
   const occurrences: number[] | 'all' = foundOccurrences;
 
-  const sourceFile = ts.createSourceFile(
-    fileName,
-    code,
-    {
-      languageVersion: ts.ScriptTarget.Latest,
-      // the analysis never reads JSDoc, skipping it makes the parse faster
-      jsDocParsingMode: ts.JSDocParsingMode.ParseNone,
-    },
-    false,
-    getScriptKind(fileName),
-  );
+  const sourceFile = parsedSourceFile ?? parseSourceFile(fileName, code);
 
   const foundCalls = new Map<ts.Node, FoundCall>();
   /** Scope nodes and the translation function names they declare */

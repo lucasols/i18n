@@ -28,3 +28,18 @@ export function getScriptKind(fileName: string): ts.ScriptKind {
   if (ext === '.ts' || ext === '.mts') return ts.ScriptKind.TS;
   return ts.ScriptKind.JS;
 }
+
+/** Shared by the CLI analyses, so each file is only parsed once */
+export function parseSourceFile(fileName: string, code: string): ts.SourceFile {
+  return ts.createSourceFile(
+    fileName,
+    code,
+    {
+      languageVersion: ts.ScriptTarget.Latest,
+      // translations never read JSDoc, skipping it makes the parse faster
+      jsDocParsingMode: ts.JSDocParsingMode.ParseNone,
+    },
+    false,
+    getScriptKind(fileName),
+  );
+}
