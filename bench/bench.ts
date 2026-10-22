@@ -59,6 +59,63 @@ async function setup(mod: typeof local | typeof published) {
 await setup(local);
 await setup(published);
 
+// separate instance of the local build with the translations compiled by the vite plugin
+const compiled: typeof local =
+  await import('../browser/dist/main.mjs?compiled');
+
+const translationIds = new Map(
+  Object.keys(translations).map((hash, id) => [hash, id]),
+);
+
+function getId(hash: string): number {
+  const id = translationIds.get(hash);
+  if (id === undefined) throw new Error(`Missing translation ${hash}`);
+  return id;
+}
+
+const compiledTranslations = Object.values(translations).map((value) =>
+  typeof value === 'string' ? value : (
+    ([0, value.one, value['+2'], value.many, value.manyLimit] as const)
+  ),
+);
+
+const compiledController = compiled.i18nitialize({
+  locales: [
+    {
+      id: 'en',
+      loader: async () => ({ default: compiledTranslations }),
+    },
+  ],
+  persistenceKey: 'bench-compiled',
+  fallbackLocale: 'en',
+  dev: false,
+});
+await compiledController.setLocale('en');
+
+const helloId = getId('Hello {1}');
+const itemsId = getId('You have {1} items');
+const chatMenuIds = [
+  'Comments',
+  'You have no comments chats',
+  'Email',
+  'You have no email chats',
+  'Direct Messages',
+  'You have no direct messages',
+  'Saved',
+  'You have no bookmarked conversations',
+  'Channels',
+  'You have no channels',
+  'Bookmarked',
+  'New',
+  'You have no unread conversations',
+  'Read',
+  'You have no read chats',
+  'No chats found',
+  'Untitled',
+  'Remove bookmark',
+  'Bookmark chat',
+].map(getId);
+
 function getName() {
   return 'Lucas';
 }
@@ -323,6 +380,97 @@ summary(() => {
         [0]: getDurationInput,
         bench: (d: { ms: number; short: boolean }) =>
           do_not_optimize(local.__timeDuration(d)),
+      };
+    }).baseline();
+  });
+});
+
+summary(() => {
+  group('compiled __ hit', () => {
+    bench('local', function* () {
+      yield {
+        [0]: getName,
+        bench: (n: string) => do_not_optimize(local.__`Hello ${n}`),
+      };
+    });
+    bench('compiled', function* () {
+      yield {
+        [0]: getName,
+        bench: (n: string) => do_not_optimize(compiled.__t(helloId, n)),
+      };
+    }).baseline();
+  });
+
+  group('compiled __p hit', () => {
+    bench('local', function* () {
+      yield {
+        [0]: getCount,
+        bench: (c: number) =>
+          do_not_optimize(local.__p(c)`You have ${c} items`),
+      };
+    });
+    bench('compiled', function* () {
+      yield {
+        [0]: getCount,
+        bench: (c: number) => do_not_optimize(compiled.__tp(itemsId, c, c)),
+      };
+    }).baseline();
+  });
+
+  group('compiled chat menu render', () => {
+    bench('local', function* () {
+      yield {
+        [0]: getCount,
+        bench(c: number) {
+          do_not_optimize(local.__`Comments`);
+          do_not_optimize(local.__`You have no comments chats`);
+          do_not_optimize(local.__`Email`);
+          do_not_optimize(local.__`You have no email chats`);
+          do_not_optimize(local.__`Direct Messages`);
+          do_not_optimize(local.__`You have no direct messages`);
+          do_not_optimize(local.__`Saved`);
+          do_not_optimize(local.__`You have no bookmarked conversations`);
+          do_not_optimize(local.__`Channels`);
+          do_not_optimize(local.__`You have no channels`);
+          do_not_optimize(local.__`Bookmarked`);
+          do_not_optimize(local.__`New`);
+          do_not_optimize(local.__`You have no unread conversations`);
+          do_not_optimize(local.__`Read`);
+          do_not_optimize(local.__`You have no read chats`);
+          do_not_optimize(local.__`No chats found`);
+          do_not_optimize(local.__`Untitled`);
+          do_not_optimize(local.__`Remove bookmark`);
+          do_not_optimize(local.__`Bookmark chat`);
+          do_not_optimize(local.__p(c)`You have ${c} items`);
+        },
+      };
+    });
+    bench('compiled', function* () {
+      yield {
+        [0]: getCount,
+        bench(c: number) {
+          for (const id of chatMenuIds) {
+            do_not_optimize(compiled.__t(id));
+          }
+          do_not_optimize(compiled.__tp(itemsId, c, c));
+        },
+      };
+    }).baseline();
+  });
+
+  group('compiled __jsx hit', () => {
+    bench('local', function* () {
+      yield {
+        [0]: getJsxNode,
+        bench: (jsx: React.ReactElement) =>
+          do_not_optimize(local.__jsx`Hello ${jsx}`),
+      };
+    });
+    bench('compiled', function* () {
+      yield {
+        [0]: getJsxNode,
+        bench: (jsx: React.ReactElement) =>
+          do_not_optimize(compiled.__tjsx(helloId, jsx)),
       };
     }).baseline();
   });

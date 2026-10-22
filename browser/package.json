@@ -28,6 +28,10 @@
     ".": {
       "import": "./dist/main.mjs",
       "types": "./dist/main.d.mts"
+    },
+    "./vite": {
+      "import": "./dist/vite.mjs",
+      "types": "./dist/vite.d.mts"
     }
   },
   "sideEffects": false,
@@ -41,6 +45,7 @@
     "@ls-stack/utils": "catalog:",
     "@typescript/typescript6": "^6.0.2",
     "ai": "catalog:",
+    "magic-string": "catalog:",
     "readdirp": "catalog:",
     "runcheck": "catalog:",
     "type-flag": "catalog:",
@@ -49,17 +54,22 @@
   "devDependencies": {
     "@ls-stack/i18n-core": "workspace:*",
     "@testing-library/react": "catalog:",
-    "typescript": "catalog:"
+    "typescript": "catalog:",
+    "vite": "^7.3.1"
   },
   "peerDependencies": {
     "@types/react": "^18.0.0",
-    "react": "^18.0.0 || ^19.0.0"
+    "react": "^18.0.0 || ^19.0.0",
+    "vite": ">=5.0.0"
   },
   "peerDependenciesMeta": {
     "react": {
       "optional": true
     },
     "@types/react": {
+      "optional": true
+    },
+    "vite": {
       "optional": true
     }
   }

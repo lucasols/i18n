@@ -1,0 +1,310 @@
+import {
+  analyzeTranslations,
+  compileLocale,
+  compileLocaleModule,
+  transformTranslations,
+  TranslationRegistry,
+} from '@ls-stack/i18n-core/compiler';
+import { describe, expect, test } from 'vitest';
+
+function compileSource(
+  code: string,
+  { fileName = '/app/src/Inbox.tsx', devFallbacks = false } = {},
+) {
+  const analysis = analyzeTranslations(fileName, code);
+  const registry = TranslationRegistry.fromKeys(analysis.calls);
+  const result = transformTranslations({
+    fileName,
+    code,
+    analysis,
+    devFallbacks,
+    getId: (call) => {
+      const id = registry.getId(call.hash, call.plural);
+      if (id === undefined) throw new Error(`Missing id for ${call.hash}`);
+      return id;
+    },
+  });
+
+  return { registry, code: result?.code ?? null, map: result?.map ?? null };
+}
+
+describe('analyzeTranslations', () => {
+  test('finds all translation kinds with the same hashes used by the runtime', () => {
+    const { calls } = analyzeTranslations(
+      '/app/src/Inbox.tsx',
+      `
+        import { __, __jsx, __p, __pjsx } from '@ls-stack/i18n';
+
+        export function Inbox({ user, count }: Props) {
+          return (
+            <div title={__\`Inbox\`}>
+              {__\`Hello \${user.name}, welcome back!~~formal\`}
+              {__p(count)\`You have # unread messages\`}
+              {__jsx\`Message \${<strong>{user.name}</strong>} directly\`}
+              {__pjsx(count)\`# files in \${<em>{folder}</em>}\`}
+            </div>
+          );
+        }
+      `,
+    );
+
+    expect(
+      calls.map(({ hash, plural, jsx }) => ({ hash, plural, jsx })),
+    ).toEqual([
+      { hash: 'Inbox', plural: false, jsx: false },
+      { hash: 'Hello {1}, welcome back!~~formal', plural: false, jsx: false },
+      { hash: 'You have # unread messages', plural: true, jsx: false },
+      { hash: 'Message {1} directly', plural: false, jsx: true },
+      { hash: '# files in {1}', plural: true, jsx: true },
+    ]);
+  });
+
+  test('ignores member calls and calls that are not translations', () => {
+    const { calls } = analyzeTranslations(
+      '/app/src/server.ts',
+      `
+        const label = i18n.__\`Server side label\`;
+        const css = styled.div\`color: red;\`;
+        const multi = __p(count, other)\`# items\`;
+        const value = foo__\`not a translation\`;
+      `,
+    );
+
+    expect(calls).toEqual([]);
+  });
+
+  test('parses .ts files with generic arrow functions', () => {
+    const { calls } = analyzeTranslations(
+      '/app/src/utils.ts',
+      `
+        const identity = <T>(value: T) => value;
+        export const label = identity(__\`Saved\`);
+      `,
+    );
+
+    expect(calls.map((call) => call.hash)).toEqual(['Saved']);
+  });
+
+  test('skips parsing files without translations', () => {
+    expect(
+      analyzeTranslations(
+        '/app/src/math.ts',
+        'export const sum = (a, b) => a + b;',
+      ),
+    ).toEqual({ calls: [], insertPos: 0 });
+  });
+});
+
+describe('transformTranslations', () => {
+  test('replaces tagged templates with id based calls', () => {
+    const { code } = compileSource(
+      [
+        `import { __, __jsx, __p, __pjsx } from '@ls-stack/i18n';`,
+        `export const title = __\`Inbox\`;`,
+        `export const welcome = (name: string) => __\`Hello \${name}, welcome back!\`;`,
+        `export const unread = (count: number) => __p(count)\`You have # unread messages\`;`,
+        `export const link = (name: string) => __jsx\`Message \${<strong>{name}</strong>} directly\`;`,
+        `export const files = (count: number, folder: string) => __pjsx(count)\`# files in \${<em>{folder}</em>}\`;`,
+      ].join('\n'),
+    );
+
+    expect(code).toBe(
+      [
+        `import { __t as __i18n__t, __tp as __i18n__tp, __tjsx as __i18n__tjsx, __tpjsx as __i18n__tpjsx } from '@ls-stack/i18n';`,
+        `import { __, __jsx, __p, __pjsx } from '@ls-stack/i18n';`,
+        `export const title = __i18n__t(2);`,
+        `export const welcome = (name: string) => __i18n__t(1, name);`,
+        `export const unread = (count: number) => __i18n__tp(4, count);`,
+        `export const link = (name: string) => __i18n__tjsx(3, <strong>{name}</strong>);`,
+        `export const files = (count: number, folder: string) => __i18n__tpjsx(0, count, <em>{folder}</em>);`,
+      ].join('\n'),
+    );
+  });
+
+  test('transforms nested translations', () => {
+    const { code, registry } = compileSource(
+      'const summary = __`${channel} has ${__p(members)`# members`}`;',
+    );
+
+    expect(registry.keys).toEqual([
+      { hash: '# members', plural: true },
+      { hash: '{1} has {2}', plural: false },
+    ]);
+    expect(code).toContain(
+      'const summary = __i18n__t(1, channel, __i18n__tp(0, members));',
+    );
+  });
+
+  test('keeps comma expressions as a single argument', () => {
+    const { code } = compileSource(
+      'const label = __`Step ${track(), step} of ${total}`;',
+    );
+
+    expect(code).toContain('__i18n__t(0, (track(), step), total)');
+  });
+
+  test('inserts the runtime import after directives', () => {
+    const { code } = compileSource(
+      `'use client';\nexport const label = __\`Saved\`;`,
+    );
+
+    expect(code).toBe(
+      `'use client';\nimport { __t as __i18n__t } from '@ls-stack/i18n';\nexport const label = __i18n__t(0);`,
+    );
+  });
+
+  test('registers the source strings as fallbacks on the dev server', () => {
+    const { code } = compileSource(
+      [
+        'const welcome = __`Hello ${name}, welcome back!~~formal`;',
+        'const terms = __`$terms_of_service`;',
+        'const sameWelcome = __`Hello ${name}, welcome back!~~formal`;',
+      ].join('\n'),
+      { devFallbacks: true },
+    );
+
+    expect(code?.split('\n')[0]).toBe(
+      `import { __t as __i18n__t, __registerDevFallbacks as __i18n__registerDevFallbacks } from '@ls-stack/i18n';__i18n__registerDevFallbacks([[1,"Hello {1}, welcome back!"],[0,0]]);`,
+    );
+  });
+
+  test('generates source maps pointing to the original code', () => {
+    const { map } = compileSource('export const label = __`Saved`;');
+
+    expect(map?.sources).toEqual(['/app/src/Inbox.tsx']);
+    expect(map?.sourcesContent).toEqual(['export const label = __`Saved`;']);
+  });
+});
+
+describe('TranslationRegistry', () => {
+  test('ids are deterministic regardless of the scan order', () => {
+    const keys = [
+      { hash: 'Remove bookmark', plural: false },
+      { hash: 'Bookmarked', plural: false },
+      { hash: '# members', plural: true },
+      { hash: 'Bookmarked', plural: false },
+    ];
+
+    const registry = TranslationRegistry.fromKeys(keys);
+    const reversedRegistry = TranslationRegistry.fromKeys([...keys].reverse());
+
+    expect(registry.keys).toEqual([
+      { hash: '# members', plural: true },
+      { hash: 'Bookmarked', plural: false },
+      { hash: 'Remove bookmark', plural: false },
+    ]);
+    expect(reversedRegistry.keys).toEqual(registry.keys);
+  });
+
+  test('the same hash used as plural and string gets different ids', () => {
+    const registry = TranslationRegistry.fromKeys([
+      { hash: '# members', plural: true },
+      { hash: '# members', plural: false },
+    ]);
+
+    expect(registry.getId('# members', false)).toBe(0);
+    expect(registry.getId('# members', true)).toBe(1);
+  });
+
+  test('new translations are appended without changing existing ids', () => {
+    const registry = TranslationRegistry.fromKeys([
+      { hash: 'Bookmarked', plural: false },
+      { hash: 'Remove bookmark', plural: false },
+    ]);
+
+    expect(registry.add('Archive conversation', false)).toBe(2);
+    expect(registry.getId('Bookmarked', false)).toBe(0);
+    expect(registry.add('Bookmarked', false)).toBe(0);
+    expect(registry.size).toBe(3);
+  });
+});
+
+describe('compileLocale', () => {
+  const registry = TranslationRegistry.fromKeys([
+    { hash: 'Direct Messages', plural: false },
+    { hash: 'Hello {1}, welcome back!~~formal', plural: false },
+    { hash: 'Export as PDF', plural: false },
+    { hash: '$terms_of_service', plural: false },
+    { hash: 'You have # unread messages', plural: true },
+    { hash: '# files in {1}', plural: true },
+    { hash: '# members', plural: true },
+  ]);
+
+  test('compiles translations to an array indexed by id', () => {
+    const compiled = compileLocale(registry, {
+      'Direct Messages': 'Mensagens diretas',
+      'Hello {1}, welcome back!~~formal': 'Seja bem-vindo novamente, {1}!',
+      $terms_of_service: 'Ao usar este app você concorda com os termos.',
+      'You have # unread messages': {
+        zero: 'Você não tem mensagens não lidas',
+        one: 'Você tem uma mensagem não lida',
+        '+2': 'Você tem # mensagens não lidas',
+        many: 'Você tem muitas mensagens não lidas',
+        manyLimit: 99,
+      },
+      '# files in {1}': { one: '1 arquivo em {1}', '+2': '# arquivos em {1}' },
+      'Archived conversations': 'Conversas arquivadas',
+    });
+
+    expect(compiled).toEqual([
+      [0, '1 arquivo em {1}', '# arquivos em {1}'],
+      '# members',
+      'Ao usar este app você concorda com os termos.',
+      'Mensagens diretas',
+      'Export as PDF',
+      'Seja bem-vindo novamente, {1}!',
+      [
+        'Você não tem mensagens não lidas',
+        'Você tem uma mensagem não lida',
+        'Você tem # mensagens não lidas',
+        'Você tem muitas mensagens não lidas',
+        99,
+      ],
+    ]);
+  });
+
+  test('applies the same fallbacks as the uncompiled runtime', () => {
+    const compiled = compileLocale(registry, {
+      'Direct Messages': '',
+      'Hello {1}, welcome back!~~formal': null,
+      'Export as PDF': { '+2': 'invalid plural' },
+      'You have # unread messages': 'not a plural',
+      '# files in {1}': { '+2': null, many: 'muitos', manyLimit: 0 },
+    });
+
+    expect(compiled).toEqual([
+      [0, 0, '# files in {1}'],
+      '# members',
+      0,
+      'Direct Messages',
+      'Export as PDF',
+      'Hello {1}, welcome back!',
+      'You have # unread messages',
+    ]);
+  });
+
+  test('the compiled locale module is smaller than the source locale', () => {
+    const locale = {
+      'Direct Messages': 'Mensagens diretas',
+      'You have # unread messages': {
+        zero: 'Você não tem mensagens não lidas',
+        one: 'Você tem uma mensagem não lida',
+        '+2': 'Você tem # mensagens não lidas',
+      },
+      'Archived conversations': 'Conversas arquivadas',
+    };
+
+    const moduleCode = compileLocaleModule(registry, locale);
+
+    expect(moduleCode.startsWith('export default JSON.parse(')).toBe(true);
+    expect(moduleCode).not.toContain('Archived conversations');
+    expect(moduleCode).not.toContain('Conversas arquivadas');
+    expect(moduleCode).not.toContain('"Direct Messages"');
+  });
+
+  test('throws on invalid locale files', () => {
+    expect(() => compileLocale(registry, ['not', 'a', 'locale'])).toThrow(
+      'Invalid locale file, expected a JSON object',
+    );
+  });
+});

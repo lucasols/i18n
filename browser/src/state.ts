@@ -1,8 +1,16 @@
-import type { Locale } from '@ls-stack/i18n-core';
+import type {
+  CompiledLocale,
+  CompiledTranslation,
+  Locale,
+} from '@ls-stack/i18n-core';
 import { cachedGetter } from '@ls-stack/utils/cache';
 import { retryOnError } from '@ls-stack/utils/retryOnError';
 
-export type LocaleLoader = () => Promise<{ default: Locale }>;
+/**
+ * Loads the locale file, locale files imported through the vite plugin are
+ * compiled to a `CompiledLocale` array.
+ */
+export type LocaleLoader = () => Promise<{ default: Locale | CompiledLocale }>;
 
 export type LocaleConfig<T extends string = string> = {
   id: T;
@@ -15,6 +23,8 @@ export type I18nState<T extends string = string> = {
   isLoaded: boolean;
   loadError: Error | null;
   translations: Locale | null;
+  /** Translations compiled by the vite plugin, indexed by translation id */
+  compiledTranslations: CompiledLocale | null;
   regionLocale: string | null;
 };
 
@@ -25,6 +35,7 @@ let state: I18nState<string> = {
   isLoaded: false,
   loadError: null,
   translations: null,
+  compiledTranslations: null,
   regionLocale: null,
 };
 
@@ -46,6 +57,7 @@ let loadRequestId = 0;
 let clearIntlCacheFn: (() => void) | null = null;
 let fallbackLocale: string | null = null;
 let preloadRegionLocale: { value: string | null } | null = null;
+const devFallbacks = new Map<number, CompiledTranslation>();
 
 const invalidScopeErrorMessage =
   'I18n error: Invalid usage of translation function, check if the translate function is called inside a React component scope';
@@ -59,7 +71,8 @@ export function configure<T extends string>(options: {
   dev?: boolean;
 }) {
   localesConfig = options.locales;
-  persistenceKey = options.persistenceKey === false ? null : options.persistenceKey;
+  persistenceKey =
+    options.persistenceKey === false ? null : options.persistenceKey;
   fallbackLocale = options.fallbackLocale;
   retryAttempts = options.retryAttempts ?? 3;
   retryDelay = options.retryDelay ?? 1000;
@@ -96,6 +109,18 @@ export function assertDevScope(): void {
   if (devMode && !devEnvReady) {
     throw new Error(invalidScopeErrorMessage);
   }
+}
+
+export function registerDevFallbacks(
+  entries: [id: number, fallback: CompiledTranslation][],
+): void {
+  for (const [id, fallback] of entries) {
+    devFallbacks.set(id, fallback);
+  }
+}
+
+export function getDevFallback(id: number): CompiledTranslation | undefined {
+  return devFallbacks.get(id);
 }
 
 export function getLocalesConfig(): LocaleConfig<string>[] {
@@ -211,7 +236,7 @@ export async function setLocale(localeId: string): Promise<void> {
 
   const doLoad = async () => {
     try {
-      const translations = await retryOnError(
+      const loadedTranslations = await retryOnError(
         async () => (await localeConfig.loader()).default,
         retryAttempts,
         { delayBetweenRetriesMs: retryDelay },
@@ -231,7 +256,10 @@ export async function setLocale(localeId: string): Promise<void> {
 
       updateState({
         activeLocale: localeId,
-        translations,
+        translations:
+          Array.isArray(loadedTranslations) ? null : loadedTranslations,
+        compiledTranslations:
+          Array.isArray(loadedTranslations) ? loadedTranslations : null,
         isLoading: false,
         isLoaded: true,
         regionLocale,
@@ -349,10 +377,12 @@ export function resetState(): void {
     isLoaded: false,
     loadError: null,
     translations: null,
+    compiledTranslations: null,
     regionLocale: null,
   };
   listeners.clear();
   stateListeners.clear();
+  devFallbacks.clear();
   cachedSnapshot = null;
   persistenceKey = null;
   fallbackLocale = null;

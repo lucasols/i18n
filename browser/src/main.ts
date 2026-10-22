@@ -153,9 +153,9 @@ export function i18nitialize<T extends string>(
 
   const persistedLocale = getPersistedLocale() as T | null;
   const validatedPersistedLocale =
-    persistedLocale && availableIds.includes(persistedLocale)
-      ? persistedLocale
-      : null;
+    persistedLocale && availableIds.includes(persistedLocale) ?
+      persistedLocale
+    : null;
   const initialLocale: T = validatedPersistedLocale ?? resolvedFallback;
   const cachedInitialRegionLocale = cachedGetter(() =>
     inferRegionLocale(initialLocale),
@@ -266,6 +266,7 @@ export {
   type RelativeTimeFormat,
   type RelativeTimeUnits,
 } from './formatters';
+export { __registerDevFallbacks, __t, __tjsx, __tp, __tpjsx } from './compiled';
 export {
   resetState,
   type I18nState,
@@ -275,6 +276,9 @@ export {
 export { __, __jsx, __p, __pjsx, type JsxInterpolation } from './translate';
 
 export type {
+  CompiledLocale,
+  CompiledPlural,
+  CompiledTranslation,
   Locale,
   PluralTranslation,
   TranslationValue,
