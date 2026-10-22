@@ -1,5 +1,6 @@
 import MagicString, { type SourceMap } from 'magic-string';
 import ts from 'typescript';
+import { getScriptKind } from './scriptKind';
 import type {
   CompiledLocale,
   CompiledPlural,
@@ -43,16 +44,6 @@ export type TranslationAnalysis = {
 };
 
 const emptyAnalysis: TranslationAnalysis = { calls: [], insertPos: 0 };
-
-function getScriptKind(fileName: string): ts.ScriptKind {
-  const ext = fileName.slice(fileName.lastIndexOf('.'));
-
-  if (ext === '.tsx') return ts.ScriptKind.TSX;
-  if (ext === '.jsx') return ts.ScriptKind.JSX;
-  if (ext === '.ts' || ext === '.mts' || ext === '.cts')
-    return ts.ScriptKind.TS;
-  return ts.ScriptKind.JS;
-}
 
 type FoundCall = { fnName: string; call: TranslationCall };
 
@@ -149,7 +140,9 @@ function getLocalDeclarationName(node: ts.Node): string | null {
       ts.isParameter(node) ||
       ts.isBindingElement(node) ||
       ts.isFunctionDeclaration(node) ||
-      ts.isClassDeclaration(node)) &&
+      ts.isClassDeclaration(node) ||
+      ts.isFunctionExpression(node) ||
+      ts.isClassExpression(node)) &&
     node.name &&
     ts.isIdentifier(node.name)
   ) {
@@ -180,6 +173,25 @@ function isBlockScope(node: ts.Node): boolean {
   );
 }
 
+/** Body of a function, `var` declarations are scoped to it, not to the parameters */
+function getFunctionBody(node: ts.Node): ts.Block | null {
+  if (
+    (ts.isFunctionDeclaration(node) ||
+      ts.isFunctionExpression(node) ||
+      ts.isArrowFunction(node) ||
+      ts.isMethodDeclaration(node) ||
+      ts.isConstructorDeclaration(node) ||
+      ts.isGetAccessorDeclaration(node) ||
+      ts.isSetAccessorDeclaration(node)) &&
+    node.body &&
+    ts.isBlock(node.body)
+  ) {
+    return node.body;
+  }
+
+  return null;
+}
+
 function findScope(
   ancestors: ts.Node[],
   fromIndex: number,
@@ -201,6 +213,9 @@ function getDeclarationScope(
   node: ts.Node,
   ancestors: ts.Node[],
 ): ts.Node | null {
+  // the name of a named function or class expression is only visible inside it
+  if (ts.isFunctionExpression(node) || ts.isClassExpression(node)) return node;
+
   let declaration = node;
   let parentIndex = ancestors.length - 1;
 
@@ -228,11 +243,17 @@ function getDeclarationScope(
 
     const isBlockScoped = (parent.flags & ts.NodeFlags.BlockScoped) !== 0;
 
-    return findScope(
+    if (isBlockScoped) {
+      return findScope(ancestors, parentIndex - 1, isBlockScope);
+    }
+
+    const functionScope = findScope(
       ancestors,
       parentIndex - 1,
-      isBlockScoped ? isBlockScope : isFunctionScope,
+      isFunctionScope,
     );
+
+    return functionScope && (getFunctionBody(functionScope) ?? functionScope);
   }
 
   return findScope(ancestors, parentIndex, isBlockScope);

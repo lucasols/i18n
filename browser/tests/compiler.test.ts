@@ -155,6 +155,35 @@ describe('analyzeTranslations', () => {
     expect(calls.map((call) => call.hash)).toEqual(['Subtitle']);
   });
 
+  test('the name of a named function expression only shadows inside it', () => {
+    const { calls } = analyzeTranslations(
+      '/app/src/legacy.ts',
+      `
+        export const upper = function __(strings: TemplateStringsArray) {
+          return strings.join('').toUpperCase() + __\`Suffix\`;
+        };
+
+        export const title = __\`Title\`;
+      `,
+    );
+
+    expect(calls.map((call) => call.hash)).toEqual(['Title']);
+  });
+
+  test('var declarations in the body do not shadow parameter initializers', () => {
+    const { calls } = analyzeTranslations(
+      '/app/src/header.ts',
+      `
+        export function getHeader(title = __\`Untitled\`) {
+          var __ = (strings: TemplateStringsArray) => strings.join('');
+          return title + __\`Custom\`;
+        }
+      `,
+    );
+
+    expect(calls.map((call) => call.hash)).toEqual(['Untitled']);
+  });
+
   test('finds translations with comments before the template', () => {
     const { calls } = analyzeTranslations(
       '/app/src/Toolbar.tsx',

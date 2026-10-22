@@ -1,4 +1,5 @@
 import ts from 'typescript';
+import { getScriptKind } from '../scriptKind';
 
 export type TranslationLocation = {
   file: string;
@@ -133,7 +134,7 @@ export function getI18nUsagesInCode(
     code,
     ts.ScriptTarget.Latest,
     undefined,
-    ts.ScriptKind.TSX,
+    getScriptKind(fileName),
   );
 
   const pluralTranslations = new Set<string>();

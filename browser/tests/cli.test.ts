@@ -172,6 +172,43 @@ export function Component() {
   `);
 });
 
+test('parses .ts files with generic arrow functions', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'utils/list.ts': `
+        import { __ } from '@ls-stack/i18n';
+
+        const identity = <T>(value: T) => value;
+
+        export const emptyListLabel = identity(__\`No items found\`);
+        export const loadMoreLabel = __\`Load more\`;
+      `,
+      'components/Header.tsx': `
+        import { __ } from '@ls-stack/i18n';
+        export const title = __\`Inbox\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({}),
+      'pt.json': JSON.stringify({
+        Inbox: 'Caixa de entrada',
+        'No items found': 'Nenhum item encontrado',
+        'Load more': 'Carregar mais',
+      }),
+    },
+  });
+
+  await ctx.validate({ fix: true, defaultLocale: 'en' });
+
+  const ptLocale: unknown = JSON.parse(ctx.getConfigFileRaw('pt.json') ?? '');
+
+  expect(ptLocale).toEqual({
+    Inbox: 'Caixa de entrada',
+    'No items found': 'Nenhum item encontrado',
+    'Load more': 'Carregar mais',
+  });
+});
+
 test('handles nested source directories', async () => {
   const ctx = createCliTestContext({
     src: {
@@ -336,9 +373,7 @@ test('detects missing __jsx translations', async () => {
   const result = await ctx.validate();
 
   expect(result.hasError).toBe(true);
-  expect(result.errors).toContainEqual(
-    expect.stringContaining('missing 1'),
-  );
+  expect(result.errors).toContainEqual(expect.stringContaining('missing 1'));
 });
 
 test('detects missing __pjsx translations', async () => {
@@ -359,9 +394,7 @@ test('detects missing __pjsx translations', async () => {
   const result = await ctx.validate();
 
   expect(result.hasError).toBe(true);
-  expect(result.errors).toContainEqual(
-    expect.stringContaining('missing 1'),
-  );
+  expect(result.errors).toContainEqual(expect.stringContaining('missing 1'));
 });
 
 test('handles mixed __, __p, __jsx, and __pjsx in same file', async () => {

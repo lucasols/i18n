@@ -445,9 +445,9 @@ Behavior differences from the uncompiled runtime:
 
 - The default locale strings are moved from the code into the default locale chunk, so translations return an empty string until a locale is loaded. Use `useLoadedLocale()` to render after the locale loads.
 - Locale files must only be imported by the locale loaders, a static `import en from './locales/en.json'` also receives the compiled array.
-- Every locale loader must import a JSON file from `localesDir`. A locale loaded another way (e.g. `fetch` or an inline object) can't be read by the compiled calls, so translations render empty and an error is logged.
-- Only direct calls of `__`, `__p`, `__jsx` and `__pjsx` are compiled. Member calls like `i18n.__`, aliased imports, calls inside a scope that declares its own `__` (e.g. `const { __ } = i18n`) and code in `node_modules` are left untouched. Those calls can't be translated with a compiled locale, they render the source string and an error is logged.
-- In the build, every translation must be inside `srcDir`, translations outside it fail the build. On the dev server, translations added while the server is running get new ids and render the source string until the locale file is updated.
+- Every locale loader must import a JSON file from `localesDir` with the `.json` extension and no query, e.g. `() => import('./locales/pt.json')`. A locale loaded another way (e.g. `fetch` or an inline object) can't be read by the compiled calls, so translations render empty and an error is logged. The build fails when `localesDir` has no locale files or a locale file is imported without the extension or with a query, and warns when translations were compiled but no locale file was imported.
+- Only direct calls of `__`, `__p`, `__jsx` and `__pjsx` are compiled. Member calls like `i18n.__`, aliased imports, calls inside a scope that declares its own `__` (e.g. `const { __ } = i18n`) code in `node_modules` and translations in files compiled to JS by other plugins (e.g. `.mdx`, `.vue` or `.svelte`) are left untouched. Those calls can't be translated with a compiled locale, they render the source string and an error is logged.
+- In the build, every translation must be inside `srcDir` (`node_modules` and `.git` directories are not scanned), translations outside it fail the build. On the dev server, translations added while the server is running get new ids and render the source string until the locale file is updated.
 
 ## CLI Tool
 
