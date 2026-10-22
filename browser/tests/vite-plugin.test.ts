@@ -25,7 +25,11 @@ import {
   type ViteDevServer,
 } from 'vite';
 import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
-import { i18nVitePlugin, type I18nVitePluginOptions } from '../src/vite';
+import {
+  i18nRuntimeChunk,
+  i18nVitePlugin,
+  type I18nVitePluginOptions,
+} from '../src/vite';
 
 const fixtureRoot = path.join(import.meta.dirname, 'fixtures/vite-app');
 const outDir = path.join(fixtureRoot, 'dist');
@@ -561,7 +565,6 @@ async function buildLazyRoutes(
   );
 
   const buildOptions = getBuildOptions(root);
-  const runtimeDir = `${path.dirname(runtimeEntry)}/`;
 
   await build({
     ...getViteConfig(root, { idsFile: 'i18n-ids.json' }),
@@ -572,10 +575,7 @@ async function buildLazyRoutes(
         output: {
           entryFileNames: '[name].js',
           chunkFileNames: '[name]-[hash].js',
-          manualChunks:
-            isolateRuntime ?
-              (id) => (id.startsWith(runtimeDir) ? 'i18n-runtime' : undefined)
-            : undefined,
+          manualChunks: isolateRuntime ? i18nRuntimeChunk : undefined,
         },
       },
     },
@@ -587,6 +587,24 @@ async function buildLazyRoutes(
 function findChunk(chunks: string[], name: string): string | undefined {
   return chunks.find((chunk) => chunk.startsWith(`${name}-`));
 }
+
+test('i18nRuntimeChunk only puts the runtime modules in the runtime chunk', () => {
+  const runtimeDir = path.dirname(runtimeEntry);
+
+  expect(i18nRuntimeChunk(runtimeEntry)).toBe('i18n-runtime');
+  expect(i18nRuntimeChunk(path.join(runtimeDir, 'state.ts?v=4f2a1c'))).toBe(
+    'i18n-runtime',
+  );
+  expect(i18nRuntimeChunk(path.join(runtimeDir, 'vite.ts'))).toBeUndefined();
+  expect(
+    i18nRuntimeChunk(path.join(fixtureRoot, 'src/chat/chatMenu.tsx')),
+  ).toBeUndefined();
+  expect(i18nRuntimeChunk(`${runtimeDir}-legacy/main.ts`)).toBeUndefined();
+  expect(
+    i18nRuntimeChunk('/app/node_modules/react/cjs/react.production.js'),
+  ).toBeUndefined();
+  expect(i18nRuntimeChunk('\0ls-stack-i18n-locale/pt')).toBeUndefined();
+});
 
 describe('vite build with an ids file', { timeout: 30_000 }, () => {
   const archiveLabel = `\nexport function getArchiveLabel() {\n  return __\`Archive conversation\`;\n}\n`;

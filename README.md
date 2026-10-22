@@ -458,10 +458,12 @@ Behavior differences from the uncompiled runtime:
 
 With an `idsFile`, the ids of the translations are kept across builds, so adding or removing a string only changes the chunks that use it, the locale chunks and the chunks that import the locale loaders (the module that calls `i18nitialize`, usually the entry). The file is committed with the code and updated by the CLI together with the locale files.
 
-By default vite bundles the runtime into the entry chunk, which also imports the locale chunks, so every lazy loaded chunk that uses a translation imports the entry and changes with it. Put the runtime in its own chunk so only the entry changes:
+By default vite bundles the runtime into the entry chunk, which also imports the locale chunks, so every lazy loaded chunk that uses a translation imports the entry and changes with it. Put the runtime in its own chunk with `i18nRuntimeChunk`, so only the entry changes:
 
 ```ts
 // vite.config.ts
+import { i18nRuntimeChunk, i18nVitePlugin } from '@ls-stack/i18n/vite';
+
 export default defineConfig({
   plugins: [
     i18nVitePlugin({ localesDir: 'src/locales', idsFile: 'i18n-ids.json' }),
@@ -471,14 +473,16 @@ export default defineConfig({
     rollupOptions: {
       output: {
         manualChunks(id) {
-          if (id.includes('/node_modules/@ls-stack/i18n/'))
-            return 'i18n-runtime';
+          // returns 'i18n-runtime' for the runtime modules, undefined otherwise
+          return i18nRuntimeChunk(id);
         },
       },
     },
   },
 });
 ```
+
+Call it first from an existing `manualChunks` and fall back to your own chunks when it returns `undefined`. Chunking only changes when `i18nRuntimeChunk` is used.
 
 Chunks that import other modules of the entry chunk, like the `i18n` controller returned by `i18nitialize`, still change with every locale change.
 

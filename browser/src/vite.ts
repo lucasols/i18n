@@ -16,6 +16,7 @@ import { createHash } from 'node:crypto';
 import { realpathSync, type Dirent, type Stats } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import {
   normalizePath,
   type Logger,
@@ -97,6 +98,31 @@ function getRealPath(filePath: string): string {
   } catch {
     return normalizePath(filePath);
   }
+}
+
+const RUNTIME_CHUNK_NAME = 'i18n-runtime';
+
+/** This file, the other modules of its directory are the runtime */
+const pluginFile = normalizePath(fileURLToPath(import.meta.url));
+/** Configured and real paths, ids use the configured one with `preserveSymlinks` */
+const runtimeFiles = new Set([pluginFile, getRealPath(pluginFile)]);
+const runtimeDirs = [...runtimeFiles].map(
+  (file) => `${path.posix.dirname(file)}/`,
+);
+
+/**
+ * Returns `'i18n-runtime'` for the modules of the `@ls-stack/i18n` runtime, to
+ * use in `build.rollupOptions.output.manualChunks`. The runtime gets its own
+ * chunk, so the chunks that use translations don't import the entry chunk,
+ * which changes with every locale change.
+ */
+export function i18nRuntimeChunk(id: string): string | undefined {
+  const file = removeQuery(id);
+
+  if (runtimeFiles.has(file)) return undefined;
+
+  return runtimeDirs.some((dir) => file.startsWith(dir)) ? RUNTIME_CHUNK_NAME
+    : undefined;
 }
 
 function stripBom(content: string): string {
