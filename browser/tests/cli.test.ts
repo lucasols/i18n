@@ -261,6 +261,32 @@ test('parses .ts files with generic arrow functions', async () => {
   });
 });
 
+test('finds calls with a comment between the tag and the template', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'components/Toast.tsx': `
+        import { __ } from '../translate';
+
+        export const savedLabel = __ /* toast title */ \`Saved\`;
+      `,
+      'components/Header.tsx': `
+        import { __ } from '@ls-stack/i18n';
+        export const title = __\`Inbox\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({}),
+      'pt.json': JSON.stringify({ Inbox: 'Caixa de entrada', Saved: 'Salvo' }),
+    },
+  });
+
+  await ctx.validate({ fix: true, defaultLocale: 'en' });
+
+  const ptLocale: unknown = JSON.parse(ctx.getConfigFileRaw('pt.json') ?? '');
+
+  expect(ptLocale).toEqual({ Inbox: 'Caixa de entrada', Saved: 'Salvo' });
+});
+
 test('handles nested source directories', async () => {
   const ctx = createCliTestContext({
     src: {

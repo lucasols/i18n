@@ -516,7 +516,11 @@ describe('vite build of a copy of the app', { timeout: 30_000 }, () => {
   test('translation ids stay stable on watch rebuilds', async () => {
     const watcher = await build({
       ...getViteConfig(root),
-      build: { ...getBuildOptions(root), watch: {} },
+      build: {
+        ...getBuildOptions(root),
+        // native fs events are not available in every environment (sandboxes, containers)
+        watch: { chokidar: { usePolling: true, interval: 50 } },
+      },
     });
 
     if (Array.isArray(watcher) || 'output' in watcher) {
