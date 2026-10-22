@@ -1,5 +1,6 @@
 import {
   cp,
+  mkdir,
   mkdtemp,
   readdir,
   readFile,
@@ -371,6 +372,28 @@ async function createFixtureCopy(): Promise<{ tmpDir: string; root: string }> {
   return { tmpDir, root };
 }
 
+async function withFixtureCopy(
+  run: (root: string) => Promise<void>,
+): Promise<void> {
+  const { tmpDir: copyDir, root: copyRoot } = await createFixtureCopy();
+
+  try {
+    await run(copyRoot);
+  } finally {
+    await rm(copyDir, { recursive: true, force: true });
+  }
+}
+
+async function replaceInFile(
+  file: string,
+  search: string,
+  replacement: string,
+): Promise<void> {
+  const content = await readFile(file, 'utf-8');
+  if (!content.includes(search)) throw new Error(`"${search}" not in ${file}`);
+  await writeFile(file, content.replaceAll(search, replacement));
+}
+
 function getBuildOptions(root: string): InlineConfig['build'] {
   return {
     outDir: path.join(root, 'dist'),
@@ -565,5 +588,109 @@ describe('vite build of a copy of the app', { timeout: 30_000 }, () => {
     expect(await readBuiltTranslation(root, 'getTermsOfService', 'en')).toBe(
       'By using this app you agree to our terms of service.',
     );
+  });
+
+  test('fails the build when localesDir has no locale files', async () => {
+    await expect(
+      build({
+        ...getViteConfig(root, { localesDir: 'src/locales' }),
+        build: getBuildOptions(root),
+      }),
+    ).rejects.toThrow('No locale JSON files found');
+  });
+
+  test('fails the build when a locale is imported without the .json extension', async () => {
+    await withFixtureCopy(async (copyRoot) => {
+      await replaceInFile(
+        path.join(copyRoot, 'src/i18n.ts'),
+        "import('../locales/pt.json')",
+        "import('../locales/pt')",
+      );
+
+      await expect(
+        build({ ...getViteConfig(copyRoot), build: getBuildOptions(copyRoot) }),
+      ).rejects.toThrow('was imported without being compiled');
+    });
+  });
+
+  test('warns when translations are compiled but no locale file is imported', async () => {
+    await withFixtureCopy(async (copyRoot) => {
+      const i18nFile = path.join(copyRoot, 'src/i18n.ts');
+      await replaceInFile(
+        i18nFile,
+        "() => import('../locales/en.json')",
+        'async () => ({ default: {} })',
+      );
+      await replaceInFile(
+        i18nFile,
+        "() => import('../locales/pt.json')",
+        'async () => ({ default: {} })',
+      );
+
+      const warnings: string[] = [];
+      const buildOptions = getBuildOptions(copyRoot);
+
+      await build({
+        ...getViteConfig(copyRoot),
+        build: {
+          ...buildOptions,
+          rollupOptions: {
+            ...buildOptions?.rollupOptions,
+            onwarn: (warning) => {
+              warnings.push(warning.message);
+            },
+          },
+        },
+      });
+
+      expect(
+        warnings.some((warning) => warning.includes('no locale file from')),
+      ).toBe(true);
+    });
+  });
+
+  test('compiles locale files with a UTF-8 BOM', async () => {
+    await withFixtureCopy(async (copyRoot) => {
+      const ptFile = path.join(copyRoot, 'locales/pt.json');
+
+      await replaceInFile(
+        ptFile,
+        '"Direct Messages": "Mensagens diretas",',
+        '"Direct Messages": "Mensagens diretas",\n  "Export as PDF": "Exportar como PDF",',
+      );
+      await writeFile(ptFile, `\uFEFF${await readFile(ptFile, 'utf-8')}`);
+
+      await build({
+        ...getViteConfig(copyRoot),
+        build: getBuildOptions(copyRoot),
+      });
+
+      expect(await readBuiltTranslation(copyRoot, 'getExportLabel', 'pt')).toBe(
+        'Exportar como PDF',
+      );
+    });
+  });
+
+  test('scans files inside dot directories of srcDir', async () => {
+    await withFixtureCopy(async (copyRoot) => {
+      await mkdir(path.join(copyRoot, 'src/.generated'));
+      await writeFile(
+        path.join(copyRoot, 'src/.generated/labels.ts'),
+        "import { __ } from '@ls-stack/i18n';\n\nexport function getGeneratedLabel() {\n  return __`Generated label`;\n}\n",
+      );
+      await writeFile(
+        path.join(copyRoot, 'src/main.ts'),
+        `${await readFile(path.join(copyRoot, 'src/main.ts'), 'utf-8')}export * from './.generated/labels';\n`,
+      );
+
+      await build({
+        ...getViteConfig(copyRoot),
+        build: getBuildOptions(copyRoot),
+      });
+
+      expect(
+        await readBuiltTranslation(copyRoot, 'getGeneratedLabel', 'pt'),
+      ).toBe('Generated label');
+    });
   });
 });

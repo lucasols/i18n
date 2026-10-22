@@ -6,7 +6,7 @@ import {
   type TranslationAnalysis,
   type TranslationKey,
 } from '@ls-stack/i18n-core/compiler';
-import { realpathSync } from 'node:fs';
+import { realpathSync, type Dirent } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { normalizePath, type Plugin, type ViteDevServer } from 'vite';
@@ -51,10 +51,39 @@ function getRealPath(filePath: string): string {
   }
 }
 
-function isIgnoredDir(relativePath: string): boolean {
-  return relativePath
-    .split(path.sep)
-    .some((segment) => segment === 'node_modules' || segment.startsWith('.'));
+const IGNORED_DIRS: ReadonlySet<string> = new Set(['node_modules', '.git']);
+
+function stripBom(content: string): string {
+  return content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
+}
+
+/** Walks the directory without descending into ignored directories */
+async function forEachSourceFile(
+  dir: string,
+  callback: (file: string) => Promise<void>,
+): Promise<void> {
+  let entries: Dirent[];
+
+  try {
+    entries = await readdir(dir, { withFileTypes: true });
+  } catch (error) {
+    if (isMissingFileError(error)) return;
+    throw error;
+  }
+
+  await Promise.all(
+    entries.map(async (entry) => {
+      const fullPath = `${dir}/${entry.name}`;
+
+      if (entry.isDirectory()) {
+        if (!IGNORED_DIRS.has(entry.name)) {
+          await forEachSourceFile(fullPath, callback);
+        }
+      } else if (entry.isFile() && isSourceFile(entry.name)) {
+        await callback(fullPath);
+      }
+    }),
+  );
 }
 
 type CachedAnalysis = { code: string; analysis: TranslationAnalysis };
@@ -87,9 +116,12 @@ export function i18nVitePlugin({
 
   const analysisCache = new Map<string, CachedAnalysis>();
   const loadedLocaleIds = new Set<string>();
+  let localeFilesCount = 0;
+  let hasCompiledCalls = false;
 
   async function scanLocaleFiles(): Promise<void> {
     localeRealPaths.clear();
+    localeFilesCount = 0;
 
     let entries: string[];
     try {
@@ -101,6 +133,8 @@ export function i18nVitePlugin({
 
     for (const entry of entries) {
       if (!entry.endsWith('.json')) continue;
+
+      localeFilesCount++;
 
       const file = `${localesPath}/${entry}`;
       const realPath = getRealPath(file);
@@ -115,40 +149,26 @@ export function i18nVitePlugin({
     srcRoot: string,
     keys: TranslationKey[],
   ): Promise<void> {
-    const entries = await readdir(srcRoot, {
-      recursive: true,
-      withFileTypes: true,
+    await forEachSourceFile(srcRoot, async (file) => {
+      let code: string;
+
+      try {
+        code = await readFile(file, 'utf-8');
+      } catch (error) {
+        if (isMissingFileError(error)) return;
+        throw error;
+      }
+
+      const analysis = analyzeTranslations(file, code);
+
+      if (analysis.calls.length === 0) return;
+
+      analysisCache.set(file, { code, analysis });
+
+      for (const call of analysis.calls) {
+        keys.push(call);
+      }
     });
-
-    await Promise.all(
-      entries.map(async (entry) => {
-        if (!entry.isFile() || !isSourceFile(entry.name)) return;
-
-        const fullPath = path.join(entry.parentPath, entry.name);
-
-        if (isIgnoredDir(path.relative(srcRoot, fullPath))) return;
-
-        const file = normalizePath(fullPath);
-        let code: string;
-
-        try {
-          code = await readFile(file, 'utf-8');
-        } catch (error) {
-          if (isMissingFileError(error)) return;
-          throw error;
-        }
-
-        const analysis = analyzeTranslations(file, code);
-
-        if (analysis.calls.length === 0) return;
-
-        analysisCache.set(file, { code, analysis });
-
-        for (const call of analysis.calls) {
-          keys.push(call);
-        }
-      }),
-    );
   }
 
   async function scanTranslations(): Promise<TranslationRegistry> {
@@ -260,10 +280,25 @@ export function i18nVitePlugin({
 
     async buildStart() {
       await startScan();
+
+      if (localeFilesCount === 0) {
+        const message = `No locale JSON files found in "${localesPath}", check the localesDir option`;
+
+        if (isBuild) this.error(message);
+        else this.warn(message);
+      }
     },
 
     buildEnd() {
       analysisCache.clear();
+    },
+
+    generateBundle() {
+      if (hasCompiledCalls && loadedLocaleIds.size === 0) {
+        this.warn(
+          `Translations were compiled but no locale file from "${localesPath}" was imported, the locale loaders must import the JSON files from localesDir (e.g. \`() => import('./locales/pt.json')\`) or every translation renders empty`,
+        );
+      }
     },
 
     async resolveId(source, importer, options) {
@@ -288,7 +323,23 @@ export function i18nVitePlugin({
     },
 
     async load(id) {
-      if (!id.startsWith(VIRTUAL_LOCALE_PREFIX)) return null;
+      if (!id.startsWith(VIRTUAL_LOCALE_PREFIX)) {
+        if (id.startsWith('\0') || !removeQuery(id).endsWith('.json')) {
+          return null;
+        }
+
+        // the scan also finds the symlinked locale files
+        await getRegistry();
+
+        if (getLocaleName(removeQuery(id)) !== null) {
+          const message = `Locale file "${id}" was imported without being compiled, the compiled translations render empty with it. Import it with the ".json" extension and no query, e.g. \`import('./locales/pt.json')\``;
+
+          if (isBuild) return this.error(message);
+          this.warn(message);
+        }
+
+        return null;
+      }
 
       const file = `${localesPath}/${id.slice(VIRTUAL_LOCALE_PREFIX.length)}.json`;
 
@@ -303,7 +354,8 @@ export function i18nVitePlugin({
       ]);
 
       try {
-        const locale: unknown = JSON.parse(content);
+        // vite's JSON loader also accepts files with a BOM
+        const locale: unknown = JSON.parse(stripBom(content));
         return compileLocaleModule(currentRegistry, locale);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
@@ -322,6 +374,7 @@ export function i18nVitePlugin({
 
       if (analysis.calls.length === 0) return null;
 
+      hasCompiledCalls = true;
       const currentRegistry = await getRegistry();
       const sizeBefore = currentRegistry.size;
       const isInSrcDir = srcPaths.some((dir) => file.startsWith(`${dir}/`));
