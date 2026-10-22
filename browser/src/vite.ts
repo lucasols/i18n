@@ -1,6 +1,7 @@
 import {
   analyzeTranslations,
   compileLocaleModule,
+  RUNTIME_MODULE,
   transformTranslations,
   TranslationRegistry,
   type TranslationAnalysis,
@@ -42,10 +43,13 @@ function isMissingFileError(error: unknown): boolean {
   );
 }
 
-/** Vite resolves imports to the real path unless `preserveSymlinks` is set */
+/**
+ * Vite resolves imports to the real path unless `preserveSymlinks` is set, the
+ * native version also returns the real casing on case insensitive file systems
+ */
 function getRealPath(filePath: string): string {
   try {
-    return normalizePath(realpathSync(filePath));
+    return normalizePath(realpathSync.native(filePath));
   } catch {
     return normalizePath(filePath);
   }
@@ -113,6 +117,12 @@ export function i18nVitePlugin({
   let devServer: ViteDevServer | null = null;
   let registry: TranslationRegistry | null = null;
   let registryPromise: Promise<TranslationRegistry> | null = null;
+  /** Rescan of the locale files after files are added or removed in localesDir */
+  let localeRescan: Promise<void> | null = null;
+  /** Importer used to resolve the runtime from the app root */
+  let rootImporter = '';
+  /** Files with compiled calls, their runtime import is resolved from the app root */
+  const compiledFiles = new Set<string>();
 
   const analysisCache = new Map<string, CachedAnalysis>();
   const loadedLocaleIds = new Set<string>();
@@ -206,6 +216,19 @@ export function i18nVitePlugin({
     return registryPromise ?? startScan();
   }
 
+  /** Waits for the scans that find the locale files, including symlinked ones */
+  async function waitForLocaleScan(): Promise<void> {
+    await getRegistry();
+    if (localeRescan) await localeRescan;
+  }
+
+  function isInLocalesDir(file: string): boolean {
+    return (
+      file.endsWith('.json') &&
+      localesPaths.includes(path.posix.dirname(normalizePath(file)))
+    );
+  }
+
   function getLocaleName(file: string): string | null {
     if (!file.endsWith('.json')) return null;
 
@@ -242,6 +265,15 @@ export function i18nVitePlugin({
 
     configResolved(config) {
       isBuild = config.command === 'build';
+
+      if (isBuild && config.build.lib) {
+        throw new Error(
+          `[${PLUGIN_NAME}] i18nVitePlugin() can't be used in library builds, the compiled translation ids only match the locales of the app build that compiled them. Use it in the app that consumes the library`,
+        );
+      }
+
+      rootImporter = `${normalizePath(config.root)}/index.html`;
+
       const { preserveSymlinks } = config.resolve;
       const resolvePath = (dir: string): string =>
         normalizePath(path.resolve(config.root, dir));
@@ -276,6 +308,16 @@ export function i18nVitePlugin({
 
     configureServer(server) {
       devServer = server;
+
+      // symlinked locale files added while the server runs need their real path
+      const onLocaleFilesChange = (file: string) => {
+        if (!isInLocalesDir(file)) return;
+
+        localeRescan = scanLocaleFiles();
+      };
+
+      server.watcher.on('add', onLocaleFilesChange);
+      server.watcher.on('unlink', onLocaleFilesChange);
     },
 
     async buildStart() {
@@ -304,6 +346,19 @@ export function i18nVitePlugin({
     async resolveId(source, importer, options) {
       if (source.startsWith(VIRTUAL_LOCALE_PREFIX)) return source;
 
+      // the runtime of compiled files outside the app (e.g. monorepo packages)
+      // must be the same instance configured by the app
+      if (
+        source === RUNTIME_MODULE &&
+        importer &&
+        compiledFiles.has(removeQuery(importer))
+      ) {
+        return this.resolve(source, rootImporter, {
+          ...options,
+          skipSelf: true,
+        });
+      }
+
       if (!importer || !source.endsWith('.json')) return null;
 
       const resolved = await this.resolve(source, importer, {
@@ -313,8 +368,7 @@ export function i18nVitePlugin({
 
       if (!resolved || resolved.external) return null;
 
-      // the scan also finds the symlinked locale files
-      await getRegistry();
+      await waitForLocaleScan();
       const localeName = getLocaleName(removeQuery(resolved.id));
 
       if (localeName === null) return null;
@@ -328,8 +382,7 @@ export function i18nVitePlugin({
           return null;
         }
 
-        // the scan also finds the symlinked locale files
-        await getRegistry();
+        await waitForLocaleScan();
 
         if (getLocaleName(removeQuery(id)) !== null) {
           const message = `Locale file "${id}" was imported without being compiled, the compiled translations render empty with it. Import it with the ".json" extension and no query, e.g. \`import('./locales/pt.json')\``;
@@ -408,10 +461,11 @@ export function i18nVitePlugin({
 
       if (currentRegistry.size !== sizeBefore) invalidateLocaleModules();
 
+      compiledFiles.add(file);
       return result;
     },
 
-    handleHotUpdate({ file, modules, server }) {
+    handleHotUpdate({ file, server }) {
       const localeName = getLocaleName(file);
 
       if (localeName === null) return;
@@ -422,8 +476,11 @@ export function i18nVitePlugin({
 
       if (!mod) return;
 
+      // a hot update would keep the loaded translations of the active locale,
+      // `setLocale` doesn't reload the locale that is already loaded
       server.moduleGraph.invalidateModule(mod);
-      return [...modules, mod];
+      server.ws.send({ type: 'full-reload' });
+      return [];
     },
   };
 }

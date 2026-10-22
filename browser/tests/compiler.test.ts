@@ -279,6 +279,26 @@ describe('transformTranslations', () => {
     );
   });
 
+  test('inserts the runtime import after the hashbang', () => {
+    const { code } = compileSource(
+      `#!/usr/bin/env node\n'use strict';\nconsole.info(__\`Saved\`);`,
+      { fileName: '/app/src/cli.ts' },
+    );
+
+    expect(code).toBe(
+      `#!/usr/bin/env node\n'use strict';\nimport { __t as __i18n__t } from '@ls-stack/i18n';\nconsole.info(__i18n__t(0));`,
+    );
+
+    const { code: withoutDirectives } = compileSource(
+      `#!/usr/bin/env node\nconsole.info(__\`Saved\`);`,
+      { fileName: '/app/src/cli.ts' },
+    );
+
+    expect(withoutDirectives).toBe(
+      `#!/usr/bin/env node\nimport { __t as __i18n__t } from '@ls-stack/i18n';\nconsole.info(__i18n__t(0));`,
+    );
+  });
+
   test('runtime imports do not collide with identifiers of the file', () => {
     const { code } = compileSource(
       'const __i18n__t = 1;\nexport const label = __`Saved`;',
