@@ -1,4 +1,13 @@
-import { readFile, rm } from 'node:fs/promises';
+import {
+  cp,
+  mkdtemp,
+  readdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { Children, isValidElement, type ReactNode } from 'react';
@@ -37,9 +46,9 @@ function isFixtureApp(value: unknown): value is FixtureApp {
   );
 }
 
-function getViteConfig(): InlineConfig {
+function getViteConfig(root = fixtureRoot): InlineConfig {
   return {
-    root: fixtureRoot,
+    root,
     configFile: false,
     logLevel: 'silent',
     resolve: {
@@ -327,5 +336,175 @@ describe('vite dev server', { timeout: 30_000 }, () => {
       /__i18n__registerDevFallbacks\(\[\[14,\s*"Archive conversation"\]\]\)/,
     );
     expect(ptLocaleModule?.ssrTransformResult).toBeNull();
+  });
+});
+
+/** Copy of the fixture app outside the repo, importing the runtime by its package name */
+async function createFixtureCopy(): Promise<{ tmpDir: string; root: string }> {
+  const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'ls-stack-i18n-vite-'));
+  const root = path.join(tmpDir, 'app');
+
+  await cp(fixtureRoot, root, {
+    recursive: true,
+    filter: (src) => path.basename(src) !== 'dist',
+  });
+
+  const entries = await readdir(path.join(root, 'src'), {
+    recursive: true,
+    withFileTypes: true,
+  });
+
+  for (const entry of entries) {
+    if (!entry.isFile() || !/\.tsx?$/.test(entry.name)) continue;
+
+    const file = path.join(entry.parentPath, entry.name);
+    const code = await readFile(file, 'utf-8');
+    await writeFile(
+      file,
+      code.replace(/'(?:\.\.\/)+src\/main'/g, "'@ls-stack/i18n'"),
+    );
+  }
+
+  return { tmpDir, root };
+}
+
+function getBuildOptions(root: string): InlineConfig['build'] {
+  return {
+    outDir: path.join(root, 'dist'),
+    emptyOutDir: true,
+    minify: false,
+    rollupOptions: {
+      input: path.join(root, 'src/main.ts'),
+      preserveEntrySignatures: 'exports-only',
+      external: [/^react(\/.*)?$/],
+      output: { entryFileNames: '[name].js' },
+    },
+  };
+}
+
+function waitForBuildEnd(watcher: Rollup.RollupWatcher): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onEvent = (event: Rollup.RollupWatcherEvent) => {
+      if (event.code === 'BUNDLE_END') {
+        void event.result.close();
+      } else if (event.code === 'ERROR') {
+        watcher.off('event', onEvent);
+        reject(new Error(event.error.message, { cause: event.error }));
+      } else if (event.code === 'END') {
+        watcher.off('event', onEvent);
+        resolve();
+      }
+    };
+
+    watcher.on('event', onEvent);
+  });
+}
+
+/** Reads the compiled translation used by an exported `() => __\`...\`` function */
+async function readBuiltTranslation(
+  root: string,
+  exportName: string,
+  locale: string,
+): Promise<unknown> {
+  const buildDir = path.join(root, 'dist');
+  const main = await readFile(path.join(buildDir, 'main.js'), 'utf-8');
+
+  const id = new RegExp(
+    `function ${exportName}\\(\\) \\{\\s*return \\w+\\((\\d+)\\)`,
+  ).exec(main)?.[1];
+  const localeFile = new RegExp(
+    `import\\("\\./(assets/${locale}-[\\w-]+\\.js)"\\)`,
+  ).exec(main)?.[1];
+
+  if (id === undefined || localeFile === undefined) {
+    throw new Error(`Translation of ${exportName} not found in the build`);
+  }
+
+  const localeModule: unknown = await import(
+    pathToFileURL(path.join(buildDir, localeFile)).href
+  );
+
+  if (
+    typeof localeModule !== 'object' ||
+    localeModule === null ||
+    !('default' in localeModule) ||
+    !Array.isArray(localeModule.default)
+  ) {
+    throw new Error(`Invalid ${locale} locale chunk`);
+  }
+
+  const compiled: unknown[] = localeModule.default;
+  const translation: unknown = compiled[Number(id)];
+  return translation;
+}
+
+describe('vite build of a copy of the app', { timeout: 30_000 }, () => {
+  let tmpDir = '';
+  let root = '';
+
+  beforeAll(async () => {
+    ({ tmpDir, root } = await createFixtureCopy());
+  });
+
+  afterAll(async () => {
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  test('translation ids stay stable on watch rebuilds', async () => {
+    const watcher = await build({
+      ...getViteConfig(root),
+      build: { ...getBuildOptions(root), watch: {} },
+    });
+
+    if (Array.isArray(watcher) || 'output' in watcher) {
+      throw new Error('Expected a watch build');
+    }
+
+    try {
+      await waitForBuildEnd(watcher);
+
+      expect(await readBuiltTranslation(root, 'getExportLabel', 'pt')).toBe(
+        'Export as PDF',
+      );
+
+      const chatMenuFile = path.join(root, 'src/chat/chatMenu.tsx');
+      const chatMenu = await readFile(chatMenuFile, 'utf-8');
+      const rebuild = waitForBuildEnd(watcher);
+
+      await writeFile(
+        chatMenuFile,
+        `${chatMenu}\nexport function getArchiveLabel() {\n  return __\`Archive conversation\`;\n}\n`,
+      );
+      await rebuild;
+
+      expect(await readBuiltTranslation(root, 'getExportLabel', 'pt')).toBe(
+        'Export as PDF',
+      );
+      expect(await readBuiltTranslation(root, 'getTermsOfService', 'en')).toBe(
+        'By using this app you agree to our terms of service.',
+      );
+      expect(await readBuiltTranslation(root, 'getArchiveLabel', 'pt')).toBe(
+        'Archive conversation',
+      );
+    } finally {
+      await watcher.close();
+    }
+  });
+
+  test('compiles the locales when the root is a symlink', async () => {
+    const linkRoot = path.join(tmpDir, 'app-link');
+    await symlink(root, linkRoot, 'dir');
+
+    await build({
+      ...getViteConfig(linkRoot),
+      build: getBuildOptions(linkRoot),
+    });
+
+    expect(await readBuiltTranslation(linkRoot, 'getExportLabel', 'pt')).toBe(
+      'Export as PDF',
+    );
+    expect(await readBuiltTranslation(root, 'getTermsOfService', 'en')).toBe(
+      'By using this app you agree to our terms of service.',
+    );
   });
 });

@@ -73,6 +73,42 @@ describe('analyzeTranslations', () => {
     expect(calls).toEqual([]);
   });
 
+  test('ignores translation functions declared in the file', () => {
+    const { calls } = analyzeTranslations(
+      '/app/src/emails/welcomeEmail.ts',
+      `
+        import { __jsx } from '@ls-stack/i18n';
+
+        export function getWelcomeEmail(i18n: I18n, name: string) {
+          const { __, __p } = i18n;
+
+          return {
+            subject: __\`Welcome to the team, \${name}\`,
+            body: __p(3)\`You have # pending invites\`,
+            footer: __jsx\`Sent by \${<strong>Acme</strong>}\`,
+          };
+        }
+      `,
+    );
+
+    expect(calls.map((call) => call.hash)).toEqual(['Sent by {1}']);
+  });
+
+  test('finds translations with comments before the template', () => {
+    const { calls } = analyzeTranslations(
+      '/app/src/Toolbar.tsx',
+      `
+        const saved = __ /* shown after autosave */ \`Saved\`;
+        const pending = __p /* count */ (count)\`# pending changes\`;
+      `,
+    );
+
+    expect(calls.map((call) => call.hash)).toEqual([
+      'Saved',
+      '# pending changes',
+    ]);
+  });
+
   test('parses .ts files with generic arrow functions', () => {
     const { calls } = analyzeTranslations(
       '/app/src/utils.ts',
