@@ -6,6 +6,7 @@ import {
   type TranslationAnalysis,
   type TranslationKey,
 } from '@ls-stack/i18n-core/compiler';
+import { realpathSync } from 'node:fs';
 import { readdir, readFile } from 'node:fs/promises';
 import path from 'node:path';
 import { normalizePath, type Plugin, type ViteDevServer } from 'vite';
@@ -33,6 +34,23 @@ function isSourceFile(file: string): boolean {
   return SOURCE_FILE_REGEX.test(file) && !file.endsWith('.d.ts');
 }
 
+function isMissingFileError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    'code' in error &&
+    (error.code === 'ENOENT' || error.code === 'EISDIR')
+  );
+}
+
+/** Vite resolves imports to the real path unless `preserveSymlinks` is set */
+function getRealPath(filePath: string): string {
+  try {
+    return normalizePath(realpathSync(filePath));
+  } catch {
+    return normalizePath(filePath);
+  }
+}
+
 function isIgnoredDir(relativePath: string): boolean {
   return relativePath
     .split(path.sep)
@@ -57,7 +75,11 @@ export function i18nVitePlugin({
   let isBuild = false;
   let srcPath = '';
   let localesPath = '';
+  /** Configured and real paths, ids may use either */
+  let srcPaths: string[] = [];
+  let localesPaths: string[] = [];
   let devServer: ViteDevServer | null = null;
+  let registry: TranslationRegistry | null = null;
   let registryPromise: Promise<TranslationRegistry> | null = null;
 
   const analysisCache = new Map<string, CachedAnalysis>();
@@ -66,15 +88,30 @@ export function i18nVitePlugin({
   async function scanTranslations(): Promise<TranslationRegistry> {
     analysisCache.clear();
 
-    const entries = await readdir(srcPath, { recursive: true });
+    const entries = await readdir(srcPath, {
+      recursive: true,
+      withFileTypes: true,
+    });
     const keys: TranslationKey[] = [];
 
     await Promise.all(
       entries.map(async (entry) => {
-        if (!isSourceFile(entry) || isIgnoredDir(entry)) return;
+        if (!entry.isFile() || !isSourceFile(entry.name)) return;
 
-        const file = normalizePath(path.join(srcPath, entry));
-        const code = await readFile(file, 'utf-8');
+        const fullPath = path.join(entry.parentPath, entry.name);
+
+        if (isIgnoredDir(path.relative(srcPath, fullPath))) return;
+
+        const file = normalizePath(fullPath);
+        let code: string;
+
+        try {
+          code = await readFile(file, 'utf-8');
+        } catch (error) {
+          if (isMissingFileError(error)) return;
+          throw error;
+        }
+
         const analysis = analyzeTranslations(file, code);
 
         if (analysis.calls.length === 0) return;
@@ -87,12 +124,35 @@ export function i18nVitePlugin({
       }),
     );
 
-    return TranslationRegistry.fromKeys(keys);
+    // ids are kept on watch rebuilds, unchanged modules keep their cached transforms
+    if (registry) {
+      registry.addKeys(keys);
+    } else {
+      registry = TranslationRegistry.fromKeys(keys);
+    }
+
+    return registry;
+  }
+
+  function startScan(): Promise<TranslationRegistry> {
+    const scan = scanTranslations();
+    registryPromise = scan;
+
+    scan.catch(() => {
+      if (registryPromise === scan) registryPromise = null;
+    });
+
+    return scan;
   }
 
   function getRegistry(): Promise<TranslationRegistry> {
-    registryPromise ??= scanTranslations();
-    return registryPromise;
+    return registryPromise ?? startScan();
+  }
+
+  function isLocaleFile(file: string): boolean {
+    return (
+      file.endsWith('.json') && localesPaths.includes(path.posix.dirname(file))
+    );
   }
 
   function getAnalysis(file: string, code: string): TranslationAnalysis {
@@ -121,8 +181,23 @@ export function i18nVitePlugin({
 
     configResolved(config) {
       isBuild = config.command === 'build';
-      srcPath = normalizePath(path.resolve(config.root, srcDir));
-      localesPath = normalizePath(path.resolve(config.root, localesDir));
+      const configuredSrcPath = normalizePath(
+        path.resolve(config.root, srcDir),
+      );
+      const configuredLocalesPath = normalizePath(
+        path.resolve(config.root, localesDir),
+      );
+
+      if (config.resolve.preserveSymlinks) {
+        srcPath = configuredSrcPath;
+        localesPath = configuredLocalesPath;
+      } else {
+        srcPath = getRealPath(configuredSrcPath);
+        localesPath = getRealPath(configuredLocalesPath);
+      }
+
+      srcPaths = [...new Set([srcPath, configuredSrcPath])];
+      localesPaths = [...new Set([localesPath, configuredLocalesPath])];
 
       const ownIndex = config.plugins.findIndex((p) => p.name === PLUGIN_NAME);
       const reactIndex = config.plugins.findIndex((p) =>
@@ -140,8 +215,8 @@ export function i18nVitePlugin({
       devServer = server;
     },
 
-    buildStart() {
-      registryPromise = scanTranslations();
+    async buildStart() {
+      await startScan();
     },
 
     buildEnd() {
@@ -162,7 +237,7 @@ export function i18nVitePlugin({
 
       const file = removeQuery(resolved.id);
 
-      if (path.posix.dirname(file) !== localesPath) return null;
+      if (!isLocaleFile(file)) return null;
 
       return `${VIRTUAL_LOCALE_PREFIX}${path.posix.basename(file, '.json')}`;
     },
@@ -175,14 +250,14 @@ export function i18nVitePlugin({
       this.addWatchFile(file);
       loadedLocaleIds.add(id);
 
-      const [registry, content] = await Promise.all([
+      const [currentRegistry, content] = await Promise.all([
         getRegistry(),
         readFile(file, 'utf-8'),
       ]);
 
       try {
         const locale: unknown = JSON.parse(content);
-        return compileLocaleModule(registry, locale);
+        return compileLocaleModule(currentRegistry, locale);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         return this.error(`Failed to compile locale "${file}": ${message}`);
@@ -200,9 +275,9 @@ export function i18nVitePlugin({
 
       if (analysis.calls.length === 0) return null;
 
-      const registry = await getRegistry();
-      const sizeBefore = registry.size;
-      const isInSrcDir = file.startsWith(`${srcPath}/`);
+      const currentRegistry = await getRegistry();
+      const sizeBefore = currentRegistry.size;
+      const isInSrcDir = srcPaths.some((dir) => file.startsWith(`${dir}/`));
 
       const result = transformTranslations({
         fileName: file,
@@ -210,7 +285,7 @@ export function i18nVitePlugin({
         analysis,
         devFallbacks: !isBuild,
         getId: (call) => {
-          const translationId = registry.getId(call.hash, call.plural);
+          const translationId = currentRegistry.getId(call.hash, call.plural);
           if (translationId !== undefined) return translationId;
 
           if (isBuild) {
@@ -227,19 +302,17 @@ export function i18nVitePlugin({
             );
           }
 
-          return registry.add(call.hash, call.plural);
+          return currentRegistry.add(call.hash, call.plural);
         },
       });
 
-      if (registry.size !== sizeBefore) invalidateLocaleModules();
+      if (currentRegistry.size !== sizeBefore) invalidateLocaleModules();
 
       return result;
     },
 
     handleHotUpdate({ file, modules, server }) {
-      if (!file.endsWith('.json') || path.posix.dirname(file) !== localesPath) {
-        return;
-      }
+      if (!isLocaleFile(file)) return;
 
       const mod = server.moduleGraph.getModuleById(
         `${VIRTUAL_LOCALE_PREFIX}${path.posix.basename(file, '.json')}`,

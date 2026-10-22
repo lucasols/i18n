@@ -2,11 +2,12 @@
  * @vitest-environment happy-dom
  */
 import { cleanup, render, screen } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, test } from 'vitest';
+import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   __,
   __p,
   __registerDevFallbacks,
+  __timeDuration,
   __t,
   __tjsx,
   __tp,
@@ -295,5 +296,73 @@ describe('dev fallbacks', () => {
     await controller.setLocale('pt');
 
     expect(__t(archiveId)).toBe('');
+  });
+});
+
+test('__timeDuration formats durations with a compiled locale', async () => {
+  const { controller } = setup();
+  await controller.setLocale('en');
+
+  const compiledDuration = __timeDuration({ ms: 90 * 60_000 });
+
+  resetState();
+  const uncompiledController = createTestController({ locales: { en } });
+  await uncompiledController.setLocale('en');
+
+  expect(compiledDuration.formatted).not.toBe('?');
+  expect(compiledDuration).toEqual(__timeDuration({ ms: 90 * 60_000 }));
+});
+
+describe('misconfigured compilation', () => {
+  test('locale loaded without the vite plugin logs an error and uses the dev fallbacks', async () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const { id } = createTestCompiler(inboxSource);
+    const controller = createTestController({ locales: { pt } });
+
+    __registerDevFallbacks([[id('Direct Messages'), 'Direct Messages']]);
+    await controller.setLocale('pt');
+
+    expect(__t(id('Direct Messages'))).toBe('Direct Messages');
+    expect(__t(id('Export as PDF'))).toBe('');
+    expect(consoleError).toHaveBeenCalledOnce();
+    expect(consoleError).toHaveBeenCalledWith(
+      'I18n error: the locale "pt" was not compiled by the vite plugin, the locale loader must import a JSON file from the plugin localesDir',
+    );
+
+    consoleError.mockRestore();
+  });
+
+  test('calls not compiled by the vite plugin log an error with a compiled locale', async () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const { controller } = setup();
+
+    await controller.setLocale('pt');
+
+    expect(__`Direct Messages`).toBe('Direct Messages');
+    expect(__p(2)`You have # unread messages`).toBe(
+      'You have 2 unread messages',
+    );
+    expect(consoleError).toHaveBeenCalledOnce();
+    expect(consoleError).toHaveBeenCalledWith(
+      'I18n error: the translation "Direct Messages" was not compiled by the vite plugin, so it can\'t be translated with the loaded locale. Use direct `__`, `__p`, `__jsx` or `__pjsx` calls inside the plugin srcDir',
+    );
+
+    consoleError.mockRestore();
+  });
+
+  test('uncompiled calls before a locale is loaded do not log errors', () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    setup();
+
+    expect(__`Direct Messages`).toBe('Direct Messages');
+    expect(consoleError).not.toHaveBeenCalled();
+
+    consoleError.mockRestore();
   });
 });

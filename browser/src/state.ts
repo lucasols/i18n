@@ -58,6 +58,7 @@ let clearIntlCacheFn: (() => void) | null = null;
 let fallbackLocale: string | null = null;
 let preloadRegionLocale: { value: string | null } | null = null;
 const devFallbacks = new Map<number, CompiledTranslation>();
+const reportedErrors = new Set<string>();
 
 const invalidScopeErrorMessage =
   'I18n error: Invalid usage of translation function, check if the translate function is called inside a React component scope';
@@ -121,6 +122,14 @@ export function registerDevFallbacks(
 
 export function getDevFallback(id: number): CompiledTranslation | undefined {
   return devFallbacks.get(id);
+}
+
+/** Logs the error only once per error key, used for misconfigurations */
+export function reportErrorOnce(key: string, message: string): void {
+  if (reportedErrors.has(key)) return;
+
+  reportedErrors.add(key);
+  console.error(message);
 }
 
 export function getLocalesConfig(): LocaleConfig<string>[] {
@@ -383,6 +392,7 @@ export function resetState(): void {
   listeners.clear();
   stateListeners.clear();
   devFallbacks.clear();
+  reportedErrors.clear();
   cachedSnapshot = null;
   persistenceKey = null;
   fallbackLocale = null;

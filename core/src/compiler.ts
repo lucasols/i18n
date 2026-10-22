@@ -10,7 +10,16 @@ export const RUNTIME_MODULE = '@ls-stack/i18n';
 
 const LOCAL_PREFIX = '__i18n';
 
-const QUICK_CHECK_REGEX = /\b__(?:p|jsx|pjsx)?\s*[`(]/;
+const QUICK_CHECK_REGEX = /\b__(?:p|jsx|pjsx)?\b/;
+
+type TranslationFn = '__' | '__p' | '__jsx' | '__pjsx';
+
+const TRANSLATION_FNS: ReadonlySet<string> = new Set<TranslationFn>([
+  '__',
+  '__p',
+  '__jsx',
+  '__pjsx',
+]);
 
 type Range = { start: number; end: number };
 
@@ -45,17 +54,22 @@ function getScriptKind(fileName: string): ts.ScriptKind {
   return ts.ScriptKind.JS;
 }
 
+type FoundCall = { fnName: string; call: TranslationCall };
+
 function getTranslationCall(
   node: ts.TaggedTemplateExpression,
   sourceFile: ts.SourceFile,
-): TranslationCall | null {
+): FoundCall | null {
   const { tag, template } = node;
 
+  let fnName: string;
   let plural: boolean;
   let jsx: boolean;
   let count: Range | null = null;
 
   if (ts.isIdentifier(tag)) {
+    fnName = tag.text;
+
     if (tag.text === '__') {
       plural = false;
       jsx = false;
@@ -70,7 +84,7 @@ function getTranslationCall(
     ts.isIdentifier(tag.expression) &&
     tag.arguments.length === 1
   ) {
-    const fnName = tag.expression.text;
+    fnName = tag.expression.text;
 
     if (fnName === '__p') {
       plural = true;
@@ -115,20 +129,41 @@ function getTranslationCall(
   }
 
   return {
-    hash,
-    plural,
-    jsx,
-    start: node.getStart(sourceFile),
-    end: node.end,
-    count,
-    exprs,
+    fnName,
+    call: {
+      hash,
+      plural,
+      jsx,
+      start: node.getStart(sourceFile),
+      end: node.end,
+      count,
+      exprs,
+    },
   };
+}
+
+/** Name of a local (non import) declaration, e.g. `const { __ } = i18n` */
+function getLocalDeclarationName(node: ts.Node): string | null {
+  if (
+    (ts.isVariableDeclaration(node) ||
+      ts.isParameter(node) ||
+      ts.isBindingElement(node) ||
+      ts.isFunctionDeclaration(node) ||
+      ts.isClassDeclaration(node)) &&
+    node.name &&
+    ts.isIdentifier(node.name)
+  ) {
+    return node.name.text;
+  }
+
+  return null;
 }
 
 /**
  * Finds the `__`, `__p`, `__jsx` and `__pjsx` tagged template calls in the
  * source code. Only direct identifier calls are considered, member calls like
- * `i18n.__` are left untouched.
+ * `i18n.__` and files that declare their own `__` (e.g. `const { __ } = i18n`)
+ * are left untouched.
  */
 export function analyzeTranslations(
   fileName: string,
@@ -144,18 +179,30 @@ export function analyzeTranslations(
     getScriptKind(fileName),
   );
 
-  const calls: TranslationCall[] = [];
+  const foundCalls: FoundCall[] = [];
+  const localDeclarations = new Set<string>();
 
   function visit(node: ts.Node): void {
     if (ts.isTaggedTemplateExpression(node)) {
-      const call = getTranslationCall(node, sourceFile);
-      if (call) calls.push(call);
+      const found = getTranslationCall(node, sourceFile);
+      if (found) foundCalls.push(found);
+    } else {
+      const declarationName = getLocalDeclarationName(node);
+
+      if (declarationName && TRANSLATION_FNS.has(declarationName)) {
+        localDeclarations.add(declarationName);
+      }
     }
 
     ts.forEachChild(node, visit);
   }
 
   visit(sourceFile);
+
+  const calls: TranslationCall[] = [];
+  for (const { fnName, call } of foundCalls) {
+    if (!localDeclarations.has(fnName)) calls.push(call);
+  }
 
   if (calls.length === 0) return emptyAnalysis;
 
@@ -194,12 +241,15 @@ export class TranslationRegistry {
   /** Creates a registry with deterministic ids, sorted by hash */
   static fromKeys(keys: Iterable<TranslationKey>): TranslationRegistry {
     const registry = new TranslationRegistry();
-
-    for (const key of [...keys].sort(compareKeys)) {
-      registry.add(key.hash, key.plural);
-    }
-
+    registry.addKeys(keys);
     return registry;
+  }
+
+  /** Appends the new keys sorted by hash, existing ids are kept */
+  addKeys(keys: Iterable<TranslationKey>): void {
+    for (const key of [...keys].sort(compareKeys)) {
+      this.add(key.hash, key.plural);
+    }
   }
 
   get size(): number {

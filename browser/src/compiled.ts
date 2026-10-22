@@ -9,6 +9,7 @@ import {
   getDevFallback,
   getState,
   registerDevFallbacks,
+  reportErrorOnce,
 } from './state';
 import type { JsxInterpolation } from './translate';
 
@@ -33,9 +34,17 @@ export function __registerDevFallbacks(
 }
 
 function getTranslation(id: number): CompiledTranslation | undefined {
-  const { compiledTranslations } = getState();
+  const { compiledTranslations, translations, activeLocale } = getState();
 
-  if (!compiledTranslations) return undefined;
+  if (!compiledTranslations) {
+    if (!translations) return undefined;
+
+    reportErrorOnce(
+      'uncompiled-locale',
+      `I18n error: the locale "${activeLocale}" was not compiled by the vite plugin, the locale loader must import a JSON file from the plugin localesDir`,
+    );
+    return getDevFallback(id);
+  }
 
   return compiledTranslations[id] ?? getDevFallback(id);
 }
