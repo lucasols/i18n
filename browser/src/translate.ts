@@ -48,7 +48,7 @@ export function __(
   const selectedTranslation = translations[hash];
 
   if (selectedTranslation === undefined) {
-    if (fallbackTranslation.startsWith('$')) {
+    if (hash.startsWith('$')) {
       return '…';
     }
     return fallbackTranslation;
@@ -88,7 +88,7 @@ export function __p(num: number) {
     const selectedTranslation = translations[hash];
 
     if (selectedTranslation === undefined) {
-      if (fallbackTranslation.startsWith('$')) {
+      if (hash.startsWith('$')) {
         return '…';
       }
       return replaceHashWithNum(fallbackTranslation, num);
@@ -114,7 +114,7 @@ export function __p(num: number) {
       );
     }
 
-    return fallbackTranslation;
+    return replaceHashWithNum(fallbackTranslation, num);
   };
 }
 
@@ -168,7 +168,7 @@ export function __jsx(
   const selectedTranslation = translations[hash];
 
   if (selectedTranslation === undefined) {
-    if (fallbackTranslation.startsWith('$')) {
+    if (hash.startsWith('$')) {
       return '…';
     }
     return interpolateJsx(fallbackTranslation, exprs);
@@ -212,7 +212,7 @@ export function __pjsx(num: number) {
     const selectedTranslation = translations[hash];
 
     if (selectedTranslation === undefined) {
-      if (fallbackTranslation.startsWith('$')) {
+      if (hash.startsWith('$')) {
         return '…';
       }
       return interpolateJsx(replaceHashWithNum(fallbackTranslation, num), exprs);
@@ -238,6 +238,6 @@ export function __pjsx(num: number) {
       );
     }
 
-    return interpolateJsx(fallbackTranslation, exprs);
+    return interpolateJsx(replaceHashWithNum(fallbackTranslation, num), exprs);
   };
 }

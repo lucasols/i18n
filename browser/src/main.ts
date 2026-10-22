@@ -21,13 +21,13 @@ import {
 export type I18nController<T extends string> = {
   /**
    * Sets the active locale. Pass 'auto' to detect from browser settings.
-   * @returns `true` if the locale was set successfully, `false` if it fell back to the fallback locale.
+   * @returns `true` if the locale was set successfully, `false` if it fell back to the fallback locale or a newer selection replaced it.
    */
   setLocale: (localeId: T | 'auto') => Promise<boolean>;
   /**
    * Sets the nearest available locale from a language identifier (e.g., "en", "pt-BR").
    * Matching priority: exact match → regional input matches base → base input matches regional.
-   * @returns `true` if a matching locale was found and set, `false` otherwise.
+   * @returns `true` if a matching locale was found and set, `false` otherwise (including when a newer selection replaced it).
    */
   setNearestLocale: (lang: string) => Promise<boolean>;
   /**
@@ -210,7 +210,8 @@ export function i18nitialize<T extends string>(
     }
 
     await setLocale(resolvedLocaleId);
-    return true;
+    // a newer selection may have replaced or cancelled this one
+    return getState().activeLocale === resolvedLocaleId;
   };
 
   const controller: I18nController<T> = {
@@ -219,7 +220,7 @@ export function i18nitialize<T extends string>(
       const matchedLocale = findLocaleFromLang(lang);
       if (matchedLocale) {
         await setLocale(matchedLocale);
-        return true;
+        return getState().activeLocale === matchedLocale;
       }
       return false;
     },

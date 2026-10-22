@@ -30,8 +30,9 @@
       "types": "./dist/main.d.mts"
     },
     "./vite": {
+      "types": "./dist/vite.d.mts",
       "import": "./dist/vite.mjs",
-      "types": "./dist/vite.d.mts"
+      "default": "./dist/vite.mjs"
     }
   },
   "sideEffects": false,

@@ -227,13 +227,13 @@ const controller = i18nitialize({
 
 ### Controller Methods
 
-| Method                    | Description                                                   |
-| ------------------------- | ------------------------------------------------------------- |
-| `setLocale(id \| 'auto')` | Load and activate a locale. Returns `Promise<boolean>`        |
-| `getLoadedLocale()`       | Get the currently loaded locale ID                            |
-| `getRegionLocale()`       | Get the region-specific locale (e.g., `'en-US'`)              |
-| `onLoad(callback)`        | Subscribe to locale load events. Returns unsubscribe function |
-| `useLoadedLocale()`       | React hook for locale state                                   |
+| Method                    | Description                                                                                                                       |
+| ------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| `setLocale(id \| 'auto')` | Load and activate a locale. Returns `Promise<boolean>`, `false` when it used the fallback locale or a newer selection replaced it |
+| `getLoadedLocale()`       | Get the currently loaded locale ID                                                                                                |
+| `getRegionLocale()`       | Get the region-specific locale (e.g., `'en-US'`)                                                                                  |
+| `onLoad(callback)`        | Subscribe to locale load events. Returns unsubscribe function                                                                     |
+| `useLoadedLocale()`       | React hook for locale state                                                                                                       |
 
 ### Global Functions
 
@@ -448,9 +448,9 @@ Behavior differences from the uncompiled runtime:
 - Every locale loader must import a JSON file from `localesDir` with the `.json` extension and no query, e.g. `() => import('./locales/pt.json')`. A locale loaded another way (e.g. `fetch` or an inline object) can't be read by the compiled calls, so translations render empty and an error is logged. The build fails when `localesDir` has no locale files or a locale file is imported without the extension or with a query, and warns when translations were compiled but no locale file was imported.
 - Every imported `__`, `__p`, `__jsx` and `__pjsx`, directly or re-exported from a local module, is assumed to be the `@ls-stack/i18n` one. Don't import other translators (e.g. a `@ls-stack/server-i18n` instance) under these names in code compiled by the plugin, locally declared bindings with these names are left untouched.
 - Only direct calls of `__`, `__p`, `__jsx` and `__pjsx` are compiled. Member calls like `i18n.__`, aliased imports, calls inside a scope that declares its own `__` (e.g. `const { __ } = i18n`) code in `node_modules` and translations in files compiled to JS by other plugins (e.g. `.mdx`, `.vue` or `.svelte`) are left untouched. Those calls can't be translated with a compiled locale, they render the source string and an error is logged.
-- In the build, every translation must be inside `srcDir` (`node_modules` and `.git` directories are not scanned), translations outside it fail the build. On the dev server, translations added while the server is running get new ids and render the source string until the locale file is updated.
+- In the build, every translation must be inside `srcDir` (`node_modules` and `.git` directories are not scanned), translations outside it fail the build. Symlinked files and directories inside `srcDir` are scanned too. On the dev server, translations added while the server is running get new ids and render the source string until the locale file is updated.
 - Ids are assigned in the sorted order of the translations, so adding or removing a string changes the ids of the strings after it. The compiled calls change in most chunks, so a deploy that touches a string also changes the hash of most app chunks and returning users download them again.
-- The plugin is for app builds only, the compiled ids only match the locales of the build that compiled them, so library builds (`build.lib`) fail. Packages of a monorepo should be compiled by the app that uses them (add their directories to `srcDir`), their `@ls-stack/i18n` imports are resolved from the app root so they share the runtime configured by the app.
+- The plugin is for app builds only, the compiled ids only match the locales of the build that compiled them, so library builds (`build.lib`) fail. Packages of a monorepo should be compiled by the app that uses them (add their directories to `srcDir`), every `@ls-stack/i18n` import, including the ones of wrapper packages that call `i18nitialize`, is resolved from the app root so all of them share the runtime configured by the app (imports the app root can't resolve keep the normal resolution).
 - On the dev server, editing a locale file reloads the page, so the active locale is loaded again with the new translations.
 
 #### Rendering with the React Compiler

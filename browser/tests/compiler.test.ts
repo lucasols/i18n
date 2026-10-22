@@ -170,6 +170,24 @@ describe('analyzeTranslations', () => {
     expect(calls.map((call) => call.hash)).toEqual(['Title']);
   });
 
+  test('computed method names are not shadowed by the method parameters', () => {
+    const { calls } = analyzeTranslations(
+      '/app/src/profileFields.ts',
+      `
+        export const fields = {
+          [__\`Display name\`](__: string) {
+            return __.trim();
+          },
+          get [__\`Email\`]() {
+            return '';
+          },
+        };
+      `,
+    );
+
+    expect(calls.map((call) => call.hash)).toEqual(['Display name', 'Email']);
+  });
+
   test('var declarations in the body do not shadow parameter initializers', () => {
     const { calls } = analyzeTranslations(
       '/app/src/header.ts',
