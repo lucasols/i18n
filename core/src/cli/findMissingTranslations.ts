@@ -1,5 +1,5 @@
 import ts from 'typescript';
-import { getScriptKind } from '../scriptKind';
+import { getScriptKind, QUICK_CHECK_REGEX } from '../scriptKind';
 
 export type TranslationLocation = {
   file: string;
@@ -111,12 +111,7 @@ export function getI18nUsagesInCode(
   fileName: string,
   code: string,
 ): I18nUsagesResult {
-  const checkFile =
-    code.includes('i18n') ||
-    code.includes('__`') ||
-    code.includes('__p(') ||
-    code.includes('__jsx`') ||
-    code.includes('__pjsx(');
+  const checkFile = code.includes('i18n') || QUICK_CHECK_REGEX.test(code);
 
   if (!checkFile) {
     return {

@@ -1,6 +1,6 @@
 import MagicString, { type SourceMap } from 'magic-string';
 import ts from 'typescript';
-import { getScriptKind } from './scriptKind';
+import { getScriptKind, QUICK_CHECK_REGEX } from './scriptKind';
 
 export { isTranslationSourceFile } from './scriptKind';
 import type {
@@ -14,7 +14,7 @@ export const RUNTIME_MODULE = '@ls-stack/i18n';
 const LOCAL_PREFIX = '__i18n';
 
 /** Matches code that may contain translation calls */
-export const QUICK_CHECK_REGEX = /\b__(?:p|jsx|pjsx)?\b/;
+export { QUICK_CHECK_REGEX } from './scriptKind';
 
 type TranslationFn = '__' | '__p' | '__jsx' | '__pjsx';
 
@@ -174,9 +174,10 @@ function hasDeclareModifier(node: ts.Node): boolean {
   if (!ts.canHaveModifiers(node)) return false;
 
   return (
-    ts.getModifiers(node)?.some(
-      (modifier) => modifier.kind === ts.SyntaxKind.DeclareKeyword,
-    ) ?? false
+    ts
+      .getModifiers(node)
+      ?.some((modifier) => modifier.kind === ts.SyntaxKind.DeclareKeyword) ??
+    false
   );
 }
 
@@ -240,7 +241,7 @@ function findScope(
 
 /**
  * Parts of a scope node that are evaluated in the enclosing scope: the
- * decorators and the computed name of a method
+ * decorators of the node and its parameters, and the computed name of a method
  */
 function getEnclosingScopeParts(node: ts.Node): ts.Node[] {
   const parts: ts.Node[] = [];
@@ -248,6 +249,13 @@ function getEnclosingScopeParts(node: ts.Node): ts.Node[] {
   if (ts.canHaveDecorators(node)) {
     const decorators = ts.getDecorators(node);
     if (decorators) parts.push(...decorators);
+  }
+
+  if (ts.isFunctionLike(node)) {
+    for (const parameter of node.parameters) {
+      const decorators = ts.getDecorators(parameter);
+      if (decorators) parts.push(...decorators);
+    }
   }
 
   if (
@@ -377,6 +385,7 @@ export function analyzeTranslations(
   } else {
     // declarations are hoisted, so a second pass skips the calls inside their scopes
     const shadowed = new Map<string, number>();
+    const enclosingScopePartsVisited = new Set<ts.Node>();
 
     function collectUnshadowed(node: ts.Node): void {
       const found = foundCalls.get(node);
@@ -386,7 +395,10 @@ export function analyzeTranslations(
       const names = shadowingScopes.get(node);
       const enclosingScopeParts = names ? getEnclosingScopeParts(node) : [];
 
-      for (const part of enclosingScopeParts) collectUnshadowed(part);
+      for (const part of enclosingScopeParts) {
+        enclosingScopePartsVisited.add(part);
+        collectUnshadowed(part);
+      }
 
       if (names) {
         for (const name of names)
@@ -394,7 +406,7 @@ export function analyzeTranslations(
       }
 
       ts.forEachChild(node, (child) => {
-        if (!enclosingScopeParts.includes(child)) collectUnshadowed(child);
+        if (!enclosingScopePartsVisited.has(child)) collectUnshadowed(child);
       });
 
       if (names) {

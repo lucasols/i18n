@@ -204,6 +204,28 @@ describe('analyzeTranslations', () => {
     expect(calls.map((call) => call.hash)).toEqual(['Save settings']);
   });
 
+  test('parameter decorators are not shadowed by the method parameters', () => {
+    const { calls } = analyzeTranslations(
+      '/app/src/profileForm.ts',
+      `
+        export class ProfileForm {
+          constructor(@label(__\`Display name\`) __: string) {
+            this.name = __;
+          }
+
+          rename(@label(__\`New name\`) __: string) {
+            return __.trim();
+          }
+        }
+      `,
+    );
+
+    expect(calls.map((call) => call.hash)).toEqual([
+      'Display name',
+      'New name',
+    ]);
+  });
+
   test('ambient declarations do not shadow the translation functions', () => {
     const { calls } = analyzeTranslations(
       '/app/src/legacyBanner.ts',
@@ -219,7 +241,10 @@ describe('analyzeTranslations', () => {
       `,
     );
 
-    expect(calls.map((call) => call.hash)).toEqual(['Legacy banner', '# items']);
+    expect(calls.map((call) => call.hash)).toEqual([
+      'Legacy banner',
+      '# items',
+    ]);
   });
 
   test('leaves calls with syntax errors untouched', () => {
