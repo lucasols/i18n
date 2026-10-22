@@ -217,17 +217,47 @@ function buildOrderedTranslations(
   return result;
 }
 
+const PERMISSION_ERRORS: ReadonlySet<unknown> = new Set(['EACCES', 'EPERM']);
+
+function isPermissionError(error: unknown): boolean {
+  return (
+    error instanceof Error &&
+    'code' in error &&
+    PERMISSION_ERRORS.has(error.code)
+  );
+}
+
 export const defaultFs: FileSystem = {
   existsSync: (filePath) => existsSync(filePath),
   readFileSync: (filePath, encoding) => readFileSync(filePath, encoding),
   writeFileSync: (filePath, content) => writeFileSync(filePath, content),
   async *scanDir(dirPath, options) {
-    for await (const entry_ of readdirp(dirPath, {
+    const stream = readdirp(dirPath, {
       fileFilter: options.fileFilter,
       directoryFilter: (entry) => !IGNORED_DIRS.has(entry.basename),
-    })) {
+    });
+    const unreadableEntries: string[] = [];
+
+    // readdirp skips the entries it can't read with a warning, the files of an
+    // unreadable directory would be scanned as removed and `fix` would delete
+    // their translations. Broken and looping symlinks are skipped like the
+    // vite plugin does.
+    stream.on('warn', (error: unknown) => {
+      if (!isPermissionError(error)) return;
+      unreadableEntries.push(
+        error instanceof Error ? error.message : String(error),
+      );
+    });
+
+    for await (const entry_ of stream) {
       const entry = entry_ as EntryInfo;
       yield { fullPath: entry.fullPath, basename: entry.basename };
+    }
+
+    if (unreadableEntries.length > 0) {
+      throw new Error(
+        `Failed to scan ${dirPath}: ${unreadableEntries.join(', ')}`,
+      );
     }
   },
 };
@@ -263,8 +293,16 @@ function checkIdsFile({
     return false;
   }
 
-  const content =
-    fs.existsSync(idsPath) ? fs.readFileSync(idsPath, 'utf-8') : null;
+  let content: string | null = null;
+
+  try {
+    content = fs.existsSync(idsPath) ? fs.readFileSync(idsPath, 'utf-8') : null;
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    log.error(`❌ Failed to read the ids file ${name}: ${message}`);
+    return false;
+  }
+
   let stableIds: Map<string, number> | null = null;
 
   if (content !== null) {
@@ -424,64 +462,72 @@ export async function validateTranslations(
   /** Found with the analysis of the vite plugin, which only compiles some of the calls */
   const compiledKeys: TranslationKey[] = [];
 
-  for (const srcPath of srcPaths) {
-    for await (const entry of fs.scanDir(srcPath, {
-      fileFilter: (entry) => isTranslationSourceFile(entry.path),
-    })) {
-      const { fullPath } = entry;
+  // an incomplete scan would make `fix` delete the translations of the files
+  // it couldn't read
+  try {
+    for (const srcPath of srcPaths) {
+      for await (const entry of fs.scanDir(srcPath, {
+        fileFilter: (entry) => isTranslationSourceFile(entry.path),
+      })) {
+        const { fullPath } = entry;
 
-      if (scannedFiles.has(fullPath)) continue;
-      scannedFiles.add(fullPath);
+        if (scannedFiles.has(fullPath)) continue;
+        scannedFiles.add(fullPath);
 
-      const fileTextContent = fs.readFileSync(fullPath, 'utf-8');
+        const fileTextContent = fs.readFileSync(fullPath, 'utf-8');
 
-      let sourceFile: ts.SourceFile | undefined;
+        let sourceFile: ts.SourceFile | undefined;
 
-      if (idsFile && QUICK_CHECK_REGEX.test(fileTextContent)) {
-        sourceFile = parseSourceFile(fullPath, fileTextContent);
-        compiledKeys.push(
-          ...analyzeTranslations(fullPath, fileTextContent, sourceFile).calls,
+        if (idsFile && QUICK_CHECK_REGEX.test(fileTextContent)) {
+          sourceFile = parseSourceFile(fullPath, fileTextContent);
+          compiledKeys.push(
+            ...analyzeTranslations(fullPath, fileTextContent, sourceFile).calls,
+          );
+        }
+
+        const i18nUsages: I18nUsagesResult = getI18nUsagesInCode(
+          getIssuePath(srcPath, fullPath),
+          fileTextContent,
+          sourceFile,
         );
-      }
 
-      const i18nUsages: I18nUsagesResult = getI18nUsagesInCode(
-        getIssuePath(srcPath, fullPath),
-        fileTextContent,
-        sourceFile,
-      );
+        for (const hash of i18nUsages.stringTranslations) {
+          allStringTranslationHashs.add(hash);
+        }
 
-      for (const hash of i18nUsages.stringTranslations) {
-        allStringTranslationHashs.add(hash);
-      }
+        for (const hash of i18nUsages.pluralTranslations) {
+          allPluralTranslationHashs.add(hash);
+        }
 
-      for (const hash of i18nUsages.pluralTranslations) {
-        allPluralTranslationHashs.add(hash);
-      }
+        for (const hash of i18nUsages.jsxStringTranslations) {
+          globalJsxStringTranslations.add(hash);
+        }
 
-      for (const hash of i18nUsages.jsxStringTranslations) {
-        globalJsxStringTranslations.add(hash);
-      }
+        for (const hash of i18nUsages.jsxPluralTranslations) {
+          globalJsxPluralTranslations.add(hash);
+        }
 
-      for (const hash of i18nUsages.jsxPluralTranslations) {
-        globalJsxPluralTranslations.add(hash);
-      }
+        for (const hash of i18nUsages.primitiveOnlyJsx) {
+          globalPrimitiveOnlyJsx.add(hash);
+        }
 
-      for (const hash of i18nUsages.primitiveOnlyJsx) {
-        globalPrimitiveOnlyJsx.add(hash);
-      }
-
-      for (const [hash, usage] of i18nUsages.usageMap) {
-        const existing = globalUsageMap.get(hash);
-        if (existing) {
-          existing.locations.push(...usage.locations);
-          if (!usage.hasOnlyPrimitiveInterpolations) {
-            existing.hasOnlyPrimitiveInterpolations = false;
+        for (const [hash, usage] of i18nUsages.usageMap) {
+          const existing = globalUsageMap.get(hash);
+          if (existing) {
+            existing.locations.push(...usage.locations);
+            if (!usage.hasOnlyPrimitiveInterpolations) {
+              existing.hasOnlyPrimitiveInterpolations = false;
+            }
+          } else {
+            globalUsageMap.set(hash, { ...usage });
           }
-        } else {
-          globalUsageMap.set(hash, { ...usage });
         }
       }
     }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    log.error(`❌ Failed to scan the source files: ${message}`);
+    return { hasError: true };
   }
 
   if (
@@ -497,7 +543,11 @@ export async function validateTranslations(
       path.join(process.cwd(), configDir)
     );
 
-  if (idsFile) {
+  if (idsFile === '') {
+    // e.g. `--ids-file` without a value, the check would be skipped silently
+    log.error('❌ --ids-file requires a file path');
+    hasError = true;
+  } else if (idsFile !== undefined) {
     const idsFileResult = checkIdsFile({
       idsPath:
         path.isAbsolute(idsFile) ? idsFile : path.join(process.cwd(), idsFile),

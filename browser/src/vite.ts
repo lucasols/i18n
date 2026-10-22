@@ -18,6 +18,7 @@ import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
 import {
   normalizePath,
+  type Logger,
   type Plugin,
   type ResolvedBuildEnvironmentOptions,
   type ResolvedConfig,
@@ -281,6 +282,7 @@ export function i18nVitePlugin({
   let srcRoots: string[] = [];
   let localesPath = '';
   let idsFilePath: string | null = null;
+  let logger: Logger | null = null;
   /** Reported by the build when the ids file doesn't match the scanned translations */
   let idsFileWarning: string | null = null;
   /** Configured and real paths, ids may use either */
@@ -411,18 +413,24 @@ export function i18nVitePlugin({
     try {
       content = await readFile(idsFilePath, 'utf-8');
     } catch (error) {
-      if (isMissingFileError(error)) return null;
+      // a directory is reported like the CLI does
+      if (getErrorCode(error) === 'ENOENT') return null;
       throw error;
     }
 
     try {
       return parseIdsFile(content);
     } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `[${PLUGIN_NAME}] Failed to read the ids file "${idsFilePath}": ${message}`,
-        { cause: error },
-      );
+      const message = `Failed to read the ids file "${idsFilePath}": ${error instanceof Error ? error.message : String(error)}`;
+
+      // ids don't need to be stable on the dev server, e.g. while a merge
+      // conflict of the file is being resolved
+      if (!isBuild && logger) {
+        logger.warn(`[${PLUGIN_NAME}] ${message}`);
+        return null;
+      }
+
+      throw new Error(`[${PLUGIN_NAME}] ${message}`, { cause: error });
     }
   }
 
@@ -546,6 +554,7 @@ export function i18nVitePlugin({
     configResolved(config) {
       isBuild = config.command === 'build';
       generateSourcemaps = shouldGenerateSourcemaps(config);
+      logger = config.logger;
 
       if (isBuild && config.build.lib) throw new Error(LIBRARY_BUILD_ERROR);
 
