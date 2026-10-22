@@ -109,19 +109,48 @@ const runtimeFiles = new Set([pluginFile, getRealPath(pluginFile)]);
 const runtimeDirs = [...runtimeFiles].map(
   (file) => `${path.posix.dirname(file)}/`,
 );
+/** Name of the runtime directory, e.g. `dist`, only these ids are resolved */
+const runtimeDirNames: ReadonlySet<string> = new Set(
+  runtimeDirs.map((dir) => path.posix.basename(dir)),
+);
+const runtimeRealPaths = new Map<string, string>();
+
+function isRuntimeFile(file: string): boolean {
+  return (
+    !runtimeFiles.has(file) && runtimeDirs.some((dir) => file.startsWith(dir))
+  );
+}
 
 /**
  * Returns `'i18n-runtime'` for the modules of the `@ls-stack/i18n` runtime, to
  * use in `build.rollupOptions.output.manualChunks`. The runtime gets its own
  * chunk, so the chunks that use translations don't import the entry chunk,
- * which changes with every locale change.
+ * which changes with every locale change. Rollup also moves the runtime
+ * dependencies that no other manual chunk claims (e.g. React) into it.
  */
 export function i18nRuntimeChunk(id: string): string | undefined {
   const file = removeQuery(id);
 
-  if (runtimeFiles.has(file)) return undefined;
+  if (isRuntimeFile(file)) return RUNTIME_CHUNK_NAME;
 
-  return runtimeDirs.some((dir) => file.startsWith(dir)) ? RUNTIME_CHUNK_NAME
+  // with `preserveSymlinks` the ids of a symlinked install (e.g. pnpm or a
+  // workspace link) use the symlink path, while this file has the real path
+  if (
+    file.startsWith('\0') ||
+    !runtimeDirNames.has(path.posix.basename(path.posix.dirname(file)))
+  ) {
+    return undefined;
+  }
+
+  let realPath = runtimeRealPaths.get(file);
+
+  if (realPath === undefined) {
+    realPath = getRealPath(file);
+    runtimeRealPaths.set(file, realPath);
+  }
+
+  return realPath !== file && isRuntimeFile(realPath) ?
+      RUNTIME_CHUNK_NAME
     : undefined;
 }
 

@@ -436,6 +436,12 @@ export async function validateTranslations(
   /** Files of nested or repeated srcDirs are only read once */
   const scannedFiles = new Set<string>();
 
+  // e.g. `--src-dir` without a value, it would scan the whole working directory
+  if (srcDirs.length === 0 || srcDirs.includes('')) {
+    log.error('❌ --src-dir requires a directory path');
+    return { hasError: true };
+  }
+
   // a misspelled dir would be scanned as empty and `fix` would remove its
   // translations from the locale and ids files
   const missingSrcDirs = srcDirs.filter(

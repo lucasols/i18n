@@ -484,6 +484,17 @@ export default defineConfig({
 
 Call it first from an existing `manualChunks` and fall back to your own chunks when it returns `undefined`. Chunking only changes when `i18nRuntimeChunk` is used.
 
+Rollup also moves the dependencies of the runtime (e.g. React and `@ls-stack/utils`) into the `i18n-runtime` chunk, unless your `manualChunks` puts them in another chunk:
+
+```ts
+manualChunks(id) {
+  return (
+    i18nRuntimeChunk(id) ??
+    (id.includes('/node_modules/') ? 'vendor' : undefined)
+  );
+},
+```
+
 Chunks that import other modules of the entry chunk, like the `i18n` controller returned by `i18nitialize`, still change with every locale change.
 
 ```bash

@@ -606,6 +606,26 @@ test('i18nRuntimeChunk only puts the runtime modules in the runtime chunk', () =
   expect(i18nRuntimeChunk('\0ls-stack-i18n-locale/pt')).toBeUndefined();
 });
 
+test('i18nRuntimeChunk matches the symlink paths of a symlinked install', async () => {
+  const runtimeDir = await realpath(path.dirname(runtimeEntry));
+  const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'ls-stack-i18n-link-'));
+
+  try {
+    // e.g. a pnpm or workspace install built with `preserveSymlinks`
+    const packageDir = path.join(tmpDir, 'node_modules/@ls-stack/i18n');
+    await mkdir(packageDir, { recursive: true });
+    const linkedDir = path.join(packageDir, path.basename(runtimeDir));
+    await symlink(runtimeDir, linkedDir, 'dir');
+
+    expect(i18nRuntimeChunk(path.join(linkedDir, 'main.ts'))).toBe(
+      'i18n-runtime',
+    );
+    expect(i18nRuntimeChunk(path.join(linkedDir, 'vite.ts'))).toBeUndefined();
+  } finally {
+    await rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
 describe('vite build with an ids file', { timeout: 30_000 }, () => {
   const archiveLabel = `\nexport function getArchiveLabel() {\n  return __\`Archive conversation\`;\n}\n`;
 

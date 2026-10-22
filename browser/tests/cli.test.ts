@@ -998,6 +998,27 @@ test('fails without changing the files when a src dir is not found', async () =>
   expect(ctx.getIdsFile()).toBe(JSON.stringify(mainIds));
 });
 
+test('fails without changing the files when a --src-dir has no value', async () => {
+  const ctx = createCliTestContext({
+    src: { 'main.tsx': mainTsx },
+    config: {
+      'en.json': JSON.stringify(enCorrectTranslations),
+      'pt.json': JSON.stringify(ptCorrectTranslations),
+    },
+    idsFile: JSON.stringify(mainIds),
+  });
+
+  // e.g. `--src-dir $UNSET_VAR --fix`, which would scan the working directory
+  const result = await ctx.validate({ fix: true, extraSrcDirs: [''] });
+
+  expect(result.hasError).toBe(true);
+  expect(result.errors).toEqual(['❌ --src-dir requires a directory path']);
+  expect(JSON.parse(ctx.getConfigFileRaw('pt.json') ?? '')).toEqual(
+    ptCorrectTranslations,
+  );
+  expect(ctx.getIdsFile()).toBe(JSON.stringify(mainIds));
+});
+
 test('issues of multiple src dirs show the path from the working directory', async () => {
   const ctx = createCliTestContext({
     src: { 'main.tsx': mainTsx },
