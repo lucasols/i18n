@@ -1,9 +1,11 @@
+import { existsSync } from 'node:fs';
 import {
   cp,
   mkdir,
   mkdtemp,
   readdir,
   readFile,
+  realpath,
   rm,
   symlink,
   writeFile,
@@ -19,11 +21,13 @@ import {
   type Rollup,
   type ViteDevServer,
 } from 'vite';
-import { afterAll, beforeAll, describe, expect, test } from 'vitest';
+import { afterAll, beforeAll, describe, expect, test, vi } from 'vitest';
 import { i18nVitePlugin, type I18nVitePluginOptions } from '../src/vite';
 
 const fixtureRoot = path.join(import.meta.dirname, 'fixtures/vite-app');
 const outDir = path.join(fixtureRoot, 'dist');
+const runtimeEntry = path.join(import.meta.dirname, '../src/main.ts');
+const isCaseInsensitiveFs = existsSync(path.join(fixtureRoot, 'LOCALES'));
 
 type FixtureApp = typeof import('./fixtures/vite-app/src/main');
 
@@ -59,7 +63,7 @@ function getViteConfig(
       alias: [
         {
           find: /^@ls-stack\/i18n$/,
-          replacement: path.join(import.meta.dirname, '../src/main.ts'),
+          replacement: runtimeEntry,
         },
       ],
     },
@@ -426,6 +430,39 @@ function waitForBuildEnd(watcher: Rollup.RollupWatcher): Promise<void> {
   });
 }
 
+/**
+ * Writes the file and waits for the rebuild. The file watchers are set up
+ * asynchronously after the first build, so the write is repeated if the
+ * rebuild doesn't start.
+ */
+async function writeAndWaitForRebuild(
+  watcher: Rollup.RollupWatcher,
+  file: string,
+  content: string,
+): Promise<void> {
+  const rebuild = waitForBuildEnd(watcher);
+  const rebuildState = { started: false };
+  const onStart = (event: Rollup.RollupWatcherEvent) => {
+    if (event.code === 'START') rebuildState.started = true;
+  };
+
+  watcher.on('event', onStart);
+
+  try {
+    for (let attempt = 0; !rebuildState.started && attempt < 10; attempt++) {
+      await writeFile(file, content);
+      await Promise.race([
+        rebuild,
+        new Promise((resolve) => setTimeout(resolve, 2_000)),
+      ]);
+    }
+  } finally {
+    watcher.off('event', onStart);
+  }
+
+  await rebuild;
+}
+
 /** Reads the compiled translation used by an exported `() => __\`...\`` function */
 async function readBuiltTranslation(
   root: string,
@@ -495,13 +532,12 @@ describe('vite build of a copy of the app', { timeout: 30_000 }, () => {
 
       const chatMenuFile = path.join(root, 'src/chat/chatMenu.tsx');
       const chatMenu = await readFile(chatMenuFile, 'utf-8');
-      const rebuild = waitForBuildEnd(watcher);
 
-      await writeFile(
+      await writeAndWaitForRebuild(
+        watcher,
         chatMenuFile,
         `${chatMenu}\nexport function getArchiveLabel() {\n  return __\`Archive conversation\`;\n}\n`,
       );
-      await rebuild;
 
       expect(await readBuiltTranslation(root, 'getExportLabel', 'pt')).toBe(
         'Export as PDF',
@@ -692,5 +728,164 @@ describe('vite build of a copy of the app', { timeout: 30_000 }, () => {
         await readBuiltTranslation(copyRoot, 'getGeneratedLabel', 'pt'),
       ).toBe('Generated label');
     });
+  });
+
+  test('compiled packages outside the app use the runtime of the app', async () => {
+    const { tmpDir: copyDir, root: copyRoot } = await createFixtureCopy();
+
+    try {
+      // `packages/i18n` re-exports the translation functions and is the only
+      // package, besides the app, that depends on `@ls-stack/i18n`
+      const wrapperDir = path.join(copyDir, 'packages/i18n');
+      const uiDir = path.join(copyDir, 'packages/ui');
+      await mkdir(wrapperDir, { recursive: true });
+      await mkdir(uiDir, { recursive: true });
+      await writeFile(
+        path.join(wrapperDir, 'index.ts'),
+        "export { __ } from '@ls-stack/i18n';\n",
+      );
+      await writeFile(
+        path.join(uiDir, 'legal.ts'),
+        (await readFile(path.join(copyRoot, 'src/legal.ts'), 'utf-8')).replace(
+          "'@ls-stack/i18n'",
+          "'../i18n/index'",
+        ),
+      );
+      await rm(path.join(copyRoot, 'src/legal.ts'));
+      await replaceInFile(
+        path.join(copyRoot, 'src/main.ts'),
+        "'./legal'",
+        "'../../packages/ui/legal'",
+      );
+
+      const dependentDirs = await Promise.all(
+        [copyRoot, wrapperDir].map(async (dir) => [dir, await realpath(dir)]),
+      );
+      const config = getViteConfig(copyRoot, {
+        srcDir: ['src', '../packages/ui'],
+      });
+
+      await build({
+        ...config,
+        resolve: {},
+        plugins: [
+          {
+            name: 'workspace-dependencies',
+            enforce: 'pre',
+            resolveId(source, importer) {
+              if (source !== '@ls-stack/i18n' || !importer) return null;
+
+              const hasDependency = dependentDirs
+                .flat()
+                .some((dir) => importer.startsWith(`${dir}/`));
+
+              return hasDependency ? runtimeEntry : null;
+            },
+          },
+          ...(config.plugins ?? []),
+        ],
+        build: getBuildOptions(copyRoot),
+      });
+
+      expect(
+        await readBuiltTranslation(copyRoot, 'getTermsOfService', 'en'),
+      ).toBe('By using this app you agree to our terms of service.');
+      expect(await readBuiltTranslation(copyRoot, 'getExportLabel', 'pt')).toBe(
+        'Export as PDF',
+      );
+    } finally {
+      await rm(copyDir, { recursive: true, force: true });
+    }
+  });
+
+  test.skipIf(!isCaseInsensitiveFs)(
+    'compiles the locales when the localesDir casing differs from the disk',
+    async () => {
+      await build({
+        ...getViteConfig(root, { localesDir: 'Locales' }),
+        build: getBuildOptions(root),
+      });
+
+      expect(await readBuiltTranslation(root, 'getExportLabel', 'pt')).toBe(
+        'Export as PDF',
+      );
+    },
+  );
+
+  test('fails in library builds', async () => {
+    await expect(
+      build({
+        ...getViteConfig(root),
+        build: {
+          ...getBuildOptions(root),
+          lib: { entry: path.join(root, 'src/main.ts'), formats: ['es'] },
+        },
+      }),
+    ).rejects.toThrow("i18nVitePlugin() can't be used in library builds");
+  });
+});
+
+describe('vite dev server file changes', { timeout: 30_000 }, () => {
+  let tmpDir = '';
+  let root = '';
+  let server: ViteDevServer;
+
+  beforeAll(async () => {
+    ({ tmpDir, root } = await createFixtureCopy());
+    server = await createServer({
+      ...getViteConfig(root),
+      appType: 'custom',
+      server: { middlewareMode: true, ws: false, watch: null },
+      optimizeDeps: { noDiscovery: true },
+    });
+  });
+
+  afterAll(async () => {
+    await server.close();
+    await rm(tmpDir, { recursive: true, force: true });
+  });
+
+  test('compiles symlinked locale files added while the server runs', async () => {
+    const importer = path.join(root, 'src/i18n.ts');
+
+    expect(
+      (await server.pluginContainer.resolveId('../locales/pt.json', importer))
+        ?.id,
+    ).toBe('\0ls-stack-i18n-locale/pt');
+
+    const sharedLocale = path.join(tmpDir, 'translations/es.json');
+    const localeLink = path.join(root, 'locales/es.json');
+    await mkdir(path.dirname(sharedLocale));
+    await writeFile(sharedLocale, '{ "Export as PDF": "Exportar a PDF" }\n');
+    await symlink(sharedLocale, localeLink);
+    server.watcher.emit('add', localeLink);
+
+    expect(
+      (await server.pluginContainer.resolveId('../locales/es.json', importer))
+        ?.id,
+    ).toBe('\0ls-stack-i18n-locale/es');
+  });
+
+  test('editing a locale file reloads the page', async () => {
+    const app = await server.ssrLoadModule('/src/main.ts');
+    if (!isFixtureApp(app)) throw new Error('Invalid dev app');
+    await app.i18n.setLocale('pt');
+
+    const ptLocaleModule = server.moduleGraph.getModuleById(
+      '\0ls-stack-i18n-locale/pt',
+    );
+    expect(ptLocaleModule?.ssrTransformResult).toBeTruthy();
+
+    const send = vi.spyOn(server.ws, 'send');
+    const ptFile = path.join(root, 'locales/pt.json');
+    await replaceInFile(ptFile, 'Mensagens diretas', 'Conversas diretas');
+    server.watcher.emit('change', ptFile);
+
+    await vi.waitFor(() => {
+      expect(send).toHaveBeenCalledWith({ type: 'full-reload' });
+    });
+    expect(ptLocaleModule?.ssrTransformResult).toBeNull();
+
+    send.mockRestore();
   });
 });

@@ -14,10 +14,12 @@ import {
   __tpjsx,
   resetState,
 } from '../src/main';
+import { clearDevFallbacks } from '../src/state';
 import { createTestCompiler, createTestController } from './test-utils';
 
 beforeEach(() => {
   resetState();
+  clearDevFallbacks();
 });
 
 afterEach(() => {
@@ -284,7 +286,7 @@ describe('dev fallbacks', () => {
     expect(__t(id('Direct Messages'))).toBe('Mensagens diretas');
   });
 
-  test('resetState clears the registered fallbacks', async () => {
+  test('resetState keeps the fallbacks registered by the evaluated modules', async () => {
     const { registry, compile } = createTestCompiler(inboxSource);
     const compiledPt = compile(pt);
     const archiveId = registry.add('Archive conversation', false);
@@ -295,7 +297,7 @@ describe('dev fallbacks', () => {
     const controller = createTestController({ locales: { pt: compiledPt } });
     await controller.setLocale('pt');
 
-    expect(__t(archiveId)).toBe('');
+    expect(__t(archiveId)).toBe('Archive conversation');
   });
 });
 

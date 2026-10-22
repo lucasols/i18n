@@ -342,7 +342,13 @@ export function analyzeTranslations(
 
   if (calls.length === 0) return emptyAnalysis;
 
+  // the runtime import must come after a hashbang and the directives
   let insertPos = 0;
+  if (code.startsWith('#!')) {
+    const lineEnd = code.indexOf('\n');
+    insertPos = lineEnd === -1 ? code.length : lineEnd;
+  }
+
   for (const statement of sourceFile.statements) {
     if (
       !ts.isExpressionStatement(statement) ||

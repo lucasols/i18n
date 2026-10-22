@@ -124,6 +124,14 @@ export function getDevFallback(id: number): CompiledTranslation | undefined {
   return devFallbacks.get(id);
 }
 
+/**
+ * Dev fallbacks are registered once when the compiled modules are evaluated,
+ * so `resetState` keeps them. Only used to isolate the library tests.
+ */
+export function clearDevFallbacks(): void {
+  devFallbacks.clear();
+}
+
 /** Logs the error only once per error key, used for misconfigurations */
 export function reportErrorOnce(key: string, message: string): void {
   if (reportedErrors.has(key)) return;
@@ -398,7 +406,6 @@ export function resetState(): void {
   };
   listeners.clear();
   stateListeners.clear();
-  devFallbacks.clear();
   reportedErrors.clear();
   cachedSnapshot = null;
   persistenceKey = null;

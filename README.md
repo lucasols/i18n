@@ -450,6 +450,8 @@ Behavior differences from the uncompiled runtime:
 - Only direct calls of `__`, `__p`, `__jsx` and `__pjsx` are compiled. Member calls like `i18n.__`, aliased imports, calls inside a scope that declares its own `__` (e.g. `const { __ } = i18n`) code in `node_modules` and translations in files compiled to JS by other plugins (e.g. `.mdx`, `.vue` or `.svelte`) are left untouched. Those calls can't be translated with a compiled locale, they render the source string and an error is logged.
 - In the build, every translation must be inside `srcDir` (`node_modules` and `.git` directories are not scanned), translations outside it fail the build. On the dev server, translations added while the server is running get new ids and render the source string until the locale file is updated.
 - Ids are assigned in the sorted order of the translations, so adding or removing a string changes the ids of the strings after it. The compiled calls change in most chunks, so a deploy that touches a string also changes the hash of most app chunks and returning users download them again.
+- The plugin is for app builds only, the compiled ids only match the locales of the build that compiled them, so library builds (`build.lib`) fail. Packages of a monorepo should be compiled by the app that uses them (add their directories to `srcDir`), their `@ls-stack/i18n` imports are resolved from the app root so they share the runtime configured by the app.
+- On the dev server, editing a locale file reloads the page, so the active locale is loaded again with the new translations.
 
 #### Rendering with the React Compiler
 
@@ -486,6 +488,15 @@ export default defineConfig({
     react(),
   ],
 });
+```
+
+With the plugin applied, the compiled code imports the compiled functions (`__t`, `__tp`, `__tjsx`, `__tpjsx` and `__registerDevFallbacks`) from `@ls-stack/i18n`, so a mock of the module must keep them:
+
+```ts
+vi.mock('@ls-stack/i18n', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@ls-stack/i18n')>()),
+  // mocked functions
+}));
 ```
 
 ## CLI Tool
