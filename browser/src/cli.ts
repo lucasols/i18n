@@ -30,6 +30,9 @@ const parsed = typeFlag({
     alias: 'f',
     default: false,
   },
+  'ids-file': {
+    type: String,
+  },
   'no-color': {
     type: Boolean,
     default: false,
@@ -79,9 +82,7 @@ if (aiProviderInput) {
   const provider: AIProvider = aiProviderInput;
 
   const apiKeyEnvVar =
-    provider === 'google' ?
-      'GOOGLE_GENERATIVE_AI_API_KEY'
-    : 'OPENAI_API_KEY';
+    provider === 'google' ? 'GOOGLE_GENERATIVE_AI_API_KEY' : 'OPENAI_API_KEY';
   const hasApiKey = Boolean(process.env[apiKeyEnvVar]);
 
   if (!hasApiKey) {
@@ -130,6 +131,7 @@ const { hasError } = await validateTranslations({
   aiTranslator,
   rules,
   maxTranslationIdSize: parsed.flags['max-id-size'],
+  idsFile: parsed.flags['ids-file'],
 });
 
 if (hasError) {

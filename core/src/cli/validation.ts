@@ -1,4 +1,4 @@
-import { readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync } from 'fs';
 import path from 'path';
 import { readdirp, type EntryInfo } from 'readdirp';
 import {
@@ -17,6 +17,14 @@ import {
   type TranslationUsage,
 } from './findMissingTranslations';
 import { createSimilarityIndex, findSimilarFromIndex } from './similarity';
+import {
+  analyzeTranslations,
+  hasSameTranslations,
+  parseIdsFile,
+  serializeIdsFile,
+  TranslationRegistry,
+  type TranslationKey,
+} from '../compiler';
 import { isTranslationSourceFile } from '../scriptKind';
 
 type LocaleAITranslationTask = {
@@ -31,6 +39,7 @@ type LocaleAITranslationTask = {
 };
 
 export type FileSystem = {
+  existsSync: (path: string) => boolean;
   readFileSync: (path: string, encoding: 'utf-8') => string;
   writeFileSync: (path: string, content: string) => void;
   scanDir: (
@@ -69,6 +78,11 @@ export type ValidationOptions = {
   aiTranslator?: AITranslator;
   rules?: ValidationRuleConfig;
   maxTranslationIdSize?: number;
+  /**
+   * File with the translation ids used by the vite plugin, checked to list the
+   * translations of srcDir and updated with `fix`
+   */
+  idsFile?: string;
 };
 
 const pluralTranslationSchema = rc_object({
@@ -197,6 +211,7 @@ function buildOrderedTranslations(
 }
 
 export const defaultFs: FileSystem = {
+  existsSync: (filePath) => existsSync(filePath),
   readFileSync: (filePath, encoding) => readFileSync(filePath, encoding),
   writeFileSync: (filePath, content) => writeFileSync(filePath, content),
   async *scanDir(dirPath, options) {
@@ -210,6 +225,74 @@ export const defaultFs: FileSystem = {
     }
   },
 };
+
+/**
+ * Checks that the ids file lists the translations of srcDir, `fix` updates it
+ * keeping the ids of the unchanged translations. Returns false on errors.
+ */
+function checkIdsFile({
+  idsPath,
+  configPath,
+  keys,
+  fix,
+  fs,
+  log,
+}: {
+  idsPath: string;
+  configPath: string;
+  keys: TranslationKey[];
+  fix: boolean;
+  fs: FileSystem;
+  log: Logger;
+}): boolean {
+  const name = path.basename(idsPath);
+  const relativeToConfig = path.relative(configPath, idsPath);
+
+  // it would be read as a locale file
+  if (
+    !relativeToConfig.startsWith('..') &&
+    !path.isAbsolute(relativeToConfig)
+  ) {
+    log.error(`❌ The ids file ${name} must be outside of the config dir`);
+    return false;
+  }
+
+  const content =
+    fs.existsSync(idsPath) ? fs.readFileSync(idsPath, 'utf-8') : null;
+  let stableIds: Map<string, number> | null = null;
+
+  if (content !== null) {
+    try {
+      stableIds = parseIdsFile(content);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      log.error(`❌ ${name}: ${message}`);
+      return false;
+    }
+  }
+
+  const registry = TranslationRegistry.fromKeys(keys, stableIds ?? undefined);
+  const updatedContent = serializeIdsFile(registry);
+
+  if (stableIds && hasSameTranslations(registry, stableIds)) {
+    // also resolves the ids taken by two translations after a merge
+    if (fix && content !== updatedContent) {
+      fs.writeFileSync(idsPath, updatedContent);
+    }
+    return true;
+  }
+
+  if (!fix) {
+    log.error(
+      `❌ ${name} ${stableIds ? 'is outdated' : 'not found'}, run with --fix to update the translation ids`,
+    );
+    return false;
+  }
+
+  fs.writeFileSync(idsPath, updatedContent);
+  log.info(`✅ ${name} translation ids ${stableIds ? 'updated' : 'created'}`);
+  return true;
+}
 
 function hasInterpolationPlaceholder(hash: string): boolean {
   return /\{[0-9]+\}/.test(hash);
@@ -286,6 +369,7 @@ export async function validateTranslations(
     aiTranslator,
     rules = {},
     maxTranslationIdSize = 80,
+    idsFile,
   } = options;
 
   const getRuleSeverity = (rule: ValidationRuleName): RuleSeverity => {
@@ -303,6 +387,8 @@ export async function validateTranslations(
   const globalJsxStringTranslations = new Set<string>();
   const globalJsxPluralTranslations = new Set<string>();
   const globalPrimitiveOnlyJsx = new Set<string>();
+  /** Found with the analysis of the vite plugin, which only compiles some of the calls */
+  const compiledKeys: TranslationKey[] = [];
 
   for await (const entry of fs.scanDir(srcPath, {
     fileFilter: (entry) => isTranslationSourceFile(entry.path),
@@ -310,6 +396,12 @@ export async function validateTranslations(
     const { fullPath } = entry;
 
     const fileTextContent = fs.readFileSync(fullPath, 'utf-8');
+
+    if (idsFile) {
+      compiledKeys.push(
+        ...analyzeTranslations(fullPath, fileTextContent).calls,
+      );
+    }
 
     const relativePath = path.relative(srcPath, fullPath);
     const i18nUsages: I18nUsagesResult = getI18nUsagesInCode(
@@ -362,6 +454,20 @@ export async function validateTranslations(
     path.isAbsolute(configDir) ? configDir : (
       path.join(process.cwd(), configDir)
     );
+
+  if (idsFile) {
+    const idsFileResult = checkIdsFile({
+      idsPath:
+        path.isAbsolute(idsFile) ? idsFile : path.join(process.cwd(), idsFile),
+      configPath,
+      keys: compiledKeys,
+      fix,
+      fs,
+      log,
+    });
+
+    if (!idsFileResult) hasError = true;
+  }
 
   const allLocaleTranslations = new Map<
     string,

@@ -771,3 +771,141 @@ test('check mode reports existing null translations as missing for non-default l
   expect(result.hasError).toBe(true);
   expect(result.errors).toContainEqual(expect.stringContaining('missing 1'));
 });
+
+const mainIds = {
+  version: 1,
+  ids: {
+    'p:# Hello World': 0,
+    's:Hello World': 1,
+    's:Hello {1}': 2,
+  },
+};
+
+function createIdsFixture(idsFile: string | null) {
+  return createCliTestContext({
+    src: { 'main.tsx': mainTsx },
+    config: {
+      'en.json': JSON.stringify(enCorrectTranslations),
+      'pt.json': JSON.stringify(ptCorrectTranslations),
+    },
+    idsFile,
+  });
+}
+
+test('fix creates the ids file', async () => {
+  const ctx = createIdsFixture(null);
+
+  const result = await ctx.validate({ fix: true });
+
+  expect(result.hasError).toBe(false);
+  expect(result.infos).toContain('✅ i18n-ids.json translation ids created');
+  expect(ctx.getIdsFile()).toBe(`${JSON.stringify(mainIds, null, 2)}\n`);
+});
+
+test('an up to date ids file is valid', async () => {
+  const ctx = createIdsFixture(JSON.stringify(mainIds, null, 2));
+
+  const result = await ctx.validate();
+
+  expect(result.hasError).toBe(false);
+  expect(result.errors).toEqual([]);
+});
+
+test('check mode reports a missing ids file', async () => {
+  const ctx = createIdsFixture(null);
+
+  const result = await ctx.validate();
+
+  expect(result.hasError).toBe(true);
+  expect(result.errors).toContain(
+    '❌ i18n-ids.json not found, run with --fix to update the translation ids',
+  );
+  expect(ctx.getIdsFile()).toBeUndefined();
+});
+
+test('check mode reports an outdated ids file', async () => {
+  const ctx = createIdsFixture(
+    JSON.stringify({
+      version: 1,
+      ids: { 's:Hello World': 0, 's:Goodbye World': 1 },
+    }),
+  );
+
+  const result = await ctx.validate();
+
+  expect(result.hasError).toBe(true);
+  expect(result.errors).toContain(
+    '❌ i18n-ids.json is outdated, run with --fix to update the translation ids',
+  );
+});
+
+test('fix keeps the ids of the existing translations and reuses the free ones', async () => {
+  const ctx = createIdsFixture(
+    JSON.stringify({
+      version: 1,
+      ids: { 's:Goodbye World': 0, 's:Hello World': 1, 's:Hello {1}': 2 },
+    }),
+  );
+
+  const result = await ctx.validate({ fix: true });
+
+  expect(result.hasError).toBe(false);
+  expect(result.infos).toContain('✅ i18n-ids.json translation ids updated');
+  expect(JSON.parse(ctx.getIdsFile() ?? '')).toEqual({
+    version: 1,
+    ids: { 'p:# Hello World': 0, 's:Hello World': 1, 's:Hello {1}': 2 },
+  });
+});
+
+test('fix resolves an id taken by two translations after a merge', async () => {
+  const ctx = createIdsFixture(
+    JSON.stringify({
+      version: 1,
+      ids: { 'p:# Hello World': 0, 's:Hello World': 1, 's:Hello {1}': 1 },
+    }),
+  );
+
+  // the build resolves it the same way, so it doesn't fail the check
+  expect((await ctx.validate()).hasError).toBe(false);
+
+  await ctx.validate({ fix: true });
+
+  expect(JSON.parse(ctx.getIdsFile() ?? '')).toEqual(mainIds);
+});
+
+test('reports an invalid ids file', async () => {
+  const ctx = createIdsFixture('{ "ids": {} }');
+
+  const result = await ctx.validate({ fix: true });
+
+  expect(result.hasError).toBe(true);
+  expect(result.errors).toContainEqual(
+    expect.stringContaining('❌ i18n-ids.json: Invalid ids file'),
+  );
+  expect(ctx.getIdsFile()).toBe('{ "ids": {} }');
+});
+
+test('the ids file only lists the translations compiled by the vite plugin', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.tsx': mainTsx,
+      'server.ts': `
+        import { i18nitialize } from '@ls-stack/server-i18n';
+        import en from './locales/en.json';
+
+        const i18n = i18nitialize({ locales: { en } }).with('en');
+
+        export const emailSubject = i18n.__\`Your weekly summary\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify(enCorrectTranslations),
+      'pt.json': JSON.stringify(ptCorrectTranslations),
+    },
+    idsFile: null,
+  });
+
+  await ctx.validate({ fix: true });
+
+  expect(JSON.parse(ctx.getIdsFile() ?? '')).toEqual(mainIds);
+});

@@ -455,14 +455,65 @@ function compareKeys(a: TranslationKey, b: TranslationKey): number {
  * the translation in the compiled locales.
  */
 export class TranslationRegistry {
-  readonly keys: TranslationKey[] = [];
+  /** Indexed by id, `null` marks the free ids between the stable ids */
+  readonly keys: (TranslationKey | null)[] = [];
   private readonly ids = new Map<string, number>();
 
-  /** Creates a registry with deterministic ids, sorted by hash */
-  static fromKeys(keys: Iterable<TranslationKey>): TranslationRegistry {
+  /**
+   * Creates a registry with deterministic ids. Without `stableIds` the ids
+   * follow the hash order, with it the listed translations keep their ids and
+   * the new ones take the free ids in hash order.
+   */
+  static fromKeys(
+    keys: Iterable<TranslationKey>,
+    stableIds?: StableIds,
+  ): TranslationRegistry {
     const registry = new TranslationRegistry();
-    registry.addKeys(keys);
+
+    if (!stableIds) {
+      registry.addKeys(keys);
+      return registry;
+    }
+
+    const newKeys = new Map<string, TranslationKey>();
+
+    for (const { hash, plural } of keys) {
+      newKeys.set(getRegistryKey(hash, plural), { hash, plural });
+    }
+
+    // sorted, so an id taken by two translations (e.g. when merging branches
+    // that added different translations) is resolved the same way everywhere
+    const keptIds = [...stableIds]
+      .filter(([registryKey]) => newKeys.has(registryKey))
+      .sort(([a], [b]) => (a < b ? -1 : 1));
+
+    for (const [registryKey, id] of keptIds) {
+      const key = newKeys.get(registryKey);
+      if (!key || registry.keys[id]) continue;
+
+      registry.setId(registryKey, key, id);
+      newKeys.delete(registryKey);
+    }
+
+    let freeId = 0;
+
+    for (const key of [...newKeys.values()].sort(compareKeys)) {
+      while (registry.keys[freeId]) freeId++;
+      registry.setId(getRegistryKey(key.hash, key.plural), key, freeId);
+    }
+
     return registry;
+  }
+
+  private setId(registryKey: string, key: TranslationKey, id: number): void {
+    while (this.keys.length < id) this.keys.push(null);
+    this.keys[id] = key;
+    this.ids.set(registryKey, id);
+  }
+
+  /** The ids of the translations, keyed like the `ids` of the ids file */
+  getIds(): ReadonlyMap<string, number> {
+    return this.ids;
   }
 
   /** Appends the new keys sorted by hash, existing ids are kept */
@@ -494,6 +545,81 @@ export class TranslationRegistry {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/**
+ * Ids kept across builds, keyed by `s:<hash>` for simple translations and
+ * `p:<hash>` for plurals
+ */
+export type StableIds = ReadonlyMap<string, number>;
+
+const IDS_FILE_VERSION = 1;
+const IDS_FILE_KEY_REGEX = /^[sp]:/;
+
+export function parseIdsFile(content: string): Map<string, number> {
+  const data: unknown = JSON.parse(
+    content.charCodeAt(0) === 0xfeff ? content.slice(1) : content,
+  );
+
+  if (
+    !isRecord(data) ||
+    data.version !== IDS_FILE_VERSION ||
+    !isRecord(data.ids)
+  ) {
+    throw new Error(
+      `Invalid ids file, expected { "version": ${IDS_FILE_VERSION}, "ids": { ... } }`,
+    );
+  }
+
+  const ids = new Map<string, number>();
+
+  for (const [registryKey, id] of Object.entries(data.ids)) {
+    if (
+      !IDS_FILE_KEY_REGEX.test(registryKey) ||
+      typeof id !== 'number' ||
+      !Number.isSafeInteger(id) ||
+      id < 0
+    ) {
+      throw new Error(`Invalid id of "${registryKey}" in the ids file`);
+    }
+
+    ids.set(registryKey, id);
+  }
+
+  return ids;
+}
+
+/** One sorted entry per line, so most merges of the file don't conflict */
+export function serializeIdsFile(registry: TranslationRegistry): string {
+  const entries = registry.keys.flatMap((key, id) =>
+    key ? [{ key, id }] : [],
+  );
+  const ids: Record<string, number> = {};
+
+  for (const { key, id } of entries.sort((a, b) => compareKeys(a.key, b.key))) {
+    ids[getRegistryKey(key.hash, key.plural)] = id;
+  }
+
+  return `${JSON.stringify({ version: IDS_FILE_VERSION, ids }, null, 2)}\n`;
+}
+
+/**
+ * Whether the ids file lists exactly the translations of the registry, ids
+ * taken by two translations are still resolved the same way by every build
+ */
+export function hasSameTranslations(
+  registry: TranslationRegistry,
+  stableIds: StableIds,
+): boolean {
+  const ids = registry.getIds();
+
+  if (ids.size !== stableIds.size) return false;
+
+  for (const registryKey of stableIds.keys()) {
+    if (!ids.has(registryKey)) return false;
+  }
+
+  return true;
 }
 
 function getNonEmptyString(value: unknown): string | null {
@@ -557,10 +683,13 @@ export function compileLocale(
   }
 
   return registry.keys.map((key) =>
-    compileTranslation(
-      key,
-      Object.hasOwn(locale, key.hash) ? locale[key.hash] : undefined,
-    ),
+    key ?
+      compileTranslation(
+        key,
+        Object.hasOwn(locale, key.hash) ? locale[key.hash] : undefined,
+      )
+      // free ids are never used by the compiled calls
+    : 0,
   );
 }
 

@@ -2,6 +2,9 @@ import {
   analyzeTranslations,
   compileLocale,
   compileLocaleModule,
+  hasSameTranslations,
+  parseIdsFile,
+  serializeIdsFile,
   transformTranslations,
   TranslationRegistry,
 } from '@ls-stack/i18n-core/compiler';
@@ -477,6 +480,142 @@ describe('TranslationRegistry', () => {
     expect(registry.getId('Bookmarked', false)).toBe(0);
     expect(registry.add('Bookmarked', false)).toBe(0);
     expect(registry.size).toBe(3);
+  });
+});
+
+describe('stable ids', () => {
+  const inboxKeys = [
+    { hash: 'Bookmarked', plural: false },
+    { hash: 'Direct Messages', plural: false },
+    { hash: 'Remove bookmark', plural: false },
+    { hash: 'You have # unread messages', plural: true },
+  ];
+
+  function getIdsOf(registry: TranslationRegistry) {
+    return parseIdsFile(serializeIdsFile(registry));
+  }
+
+  test('adding a translation keeps the ids of the existing ones', () => {
+    const stableIds = getIdsOf(TranslationRegistry.fromKeys(inboxKeys));
+
+    const registry = TranslationRegistry.fromKeys(
+      [...inboxKeys, { hash: 'Archive conversation', plural: false }],
+      stableIds,
+    );
+
+    for (const { hash, plural } of inboxKeys) {
+      expect(registry.getId(hash, plural)).toBe(
+        stableIds.get(`${plural ? 'p' : 's'}:${hash}`),
+      );
+    }
+    expect(registry.getId('Archive conversation', false)).toBe(4);
+    expect(hasSameTranslations(registry, stableIds)).toBe(false);
+  });
+
+  test('removing a translation leaves a free id compiled to 0', () => {
+    const stableIds = getIdsOf(TranslationRegistry.fromKeys(inboxKeys));
+
+    const registry = TranslationRegistry.fromKeys(
+      inboxKeys.filter((key) => key.hash !== 'Direct Messages'),
+      stableIds,
+    );
+
+    expect(registry.getId('Bookmarked', false)).toBe(0);
+    expect(registry.getId('Remove bookmark', false)).toBe(2);
+    expect(registry.getId('You have # unread messages', true)).toBe(3);
+    expect(
+      compileLocale(registry, {
+        Bookmarked: 'Salvo',
+        'Direct Messages': 'Mensagens diretas',
+        'Remove bookmark': 'Remover dos salvos',
+      }),
+    ).toEqual(['Salvo', 0, 'Remover dos salvos', 'You have # unread messages']);
+  });
+
+  test('new translations take the free ids in hash order', () => {
+    const stableIds = getIdsOf(TranslationRegistry.fromKeys(inboxKeys));
+    const keys = [
+      ...inboxKeys.filter((key) => key.hash !== 'Direct Messages'),
+      { hash: 'Mute channel', plural: false },
+      { hash: 'Archive conversation', plural: false },
+    ];
+
+    const registry = TranslationRegistry.fromKeys(keys, stableIds);
+    const reversedRegistry = TranslationRegistry.fromKeys(
+      [...keys].reverse(),
+      stableIds,
+    );
+
+    expect(registry.getId('Archive conversation', false)).toBe(1);
+    expect(registry.getId('Mute channel', false)).toBe(4);
+    expect(reversedRegistry.keys).toEqual(registry.keys);
+  });
+
+  test('an id taken by translations added in two merged branches is resolved deterministically', () => {
+    const base = getIdsOf(TranslationRegistry.fromKeys(inboxKeys));
+    const archiveBranch = getIdsOf(
+      TranslationRegistry.fromKeys(
+        [...inboxKeys, { hash: 'Archive conversation', plural: false }],
+        base,
+      ),
+    );
+    const muteBranch = getIdsOf(
+      TranslationRegistry.fromKeys(
+        [...inboxKeys, { hash: 'Mute channel', plural: false }],
+        base,
+      ),
+    );
+    const merged = new Map([...archiveBranch, ...muteBranch]);
+
+    expect(merged.get('s:Archive conversation')).toBe(4);
+    expect(merged.get('s:Mute channel')).toBe(4);
+
+    const mergedKeys = [
+      ...inboxKeys,
+      { hash: 'Mute channel', plural: false },
+      { hash: 'Archive conversation', plural: false },
+    ];
+    const registry = TranslationRegistry.fromKeys(mergedKeys, merged);
+
+    expect(registry.getId('Archive conversation', false)).toBe(4);
+    expect(registry.getId('Mute channel', false)).toBe(5);
+    expect(
+      TranslationRegistry.fromKeys([...mergedKeys].reverse(), merged).keys,
+    ).toEqual(registry.keys);
+    // the build resolves it the same way until the file is updated
+    expect(hasSameTranslations(registry, merged)).toBe(true);
+  });
+
+  test('the ids file lists one translation per line sorted by hash', () => {
+    const registry = TranslationRegistry.fromKeys([
+      { hash: 'Remove bookmark', plural: false },
+      { hash: '# members', plural: true },
+      { hash: 'Bookmarked', plural: false },
+    ]);
+
+    expect(serializeIdsFile(registry)).toBe(
+      [
+        '{',
+        '  "version": 1,',
+        '  "ids": {',
+        '    "p:# members": 0,',
+        '    "s:Bookmarked": 1,',
+        '    "s:Remove bookmark": 2',
+        '  }',
+        '}',
+        '',
+      ].join('\n'),
+    );
+  });
+
+  test('invalid ids files are rejected', () => {
+    expect(() => parseIdsFile('{ "ids": {} }')).toThrow('Invalid ids file');
+    expect(() =>
+      parseIdsFile('{ "version": 1, "ids": { "s:Bookmarked": -1 } }'),
+    ).toThrow('Invalid id of "s:Bookmarked"');
+    expect(() =>
+      parseIdsFile('{ "version": 1, "ids": { "Bookmarked": 0 } }'),
+    ).toThrow('Invalid id of "Bookmarked"');
   });
 });
 
