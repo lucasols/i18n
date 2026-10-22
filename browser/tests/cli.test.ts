@@ -172,6 +172,121 @@ export function Component() {
   `);
 });
 
+test('scans the same source files compiled by the vite plugin', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'legacy/banner.jsx': `
+import { __ } from '@ls-stack/i18n';
+
+export function Banner() {
+  return <p>{__\`Legacy banner\`}</p>;
+}
+`,
+      'legacy/format.js': `
+import { __ } from '@ls-stack/i18n';
+
+export const formatError = () => __\`Something went wrong\`;
+`,
+      'server/routes.mts': `
+import { __ } from '@ls-stack/i18n';
+
+export const notFound = __\`Page not found\`;
+`,
+      'types/i18n.d.ts': `
+import { __ } from '@ls-stack/i18n';
+
+export declare const typeOnly: typeof __;
+declare const example = __\`Only in a declaration file\`;
+`,
+    },
+    config: {
+      'en.json': JSON.stringify({
+        'Legacy banner': 'Legacy banner',
+        'Something went wrong': 'Something went wrong',
+        'Page not found': 'Page not found',
+      }),
+    },
+  });
+
+  const result = await ctx.validate();
+
+  expect(result).toMatchInlineSnapshot(`
+    {
+      "errors": [],
+      "hasError": false,
+      "infos": [
+        "✅ en.json translations are up to date",
+      ],
+      "output": [
+        "✅ en.json translations are up to date",
+      ],
+    }
+  `);
+});
+
+test('parses .ts files with generic arrow functions', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'utils/list.ts': `
+        import { __ } from '@ls-stack/i18n';
+
+        const identity = <T>(value: T) => value;
+
+        export const emptyListLabel = identity(__\`No items found\`);
+        export const loadMoreLabel = __\`Load more\`;
+      `,
+      'components/Header.tsx': `
+        import { __ } from '@ls-stack/i18n';
+        export const title = __\`Inbox\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({}),
+      'pt.json': JSON.stringify({
+        Inbox: 'Caixa de entrada',
+        'No items found': 'Nenhum item encontrado',
+        'Load more': 'Carregar mais',
+      }),
+    },
+  });
+
+  await ctx.validate({ fix: true, defaultLocale: 'en' });
+
+  const ptLocale: unknown = JSON.parse(ctx.getConfigFileRaw('pt.json') ?? '');
+
+  expect(ptLocale).toEqual({
+    Inbox: 'Caixa de entrada',
+    'No items found': 'Nenhum item encontrado',
+    'Load more': 'Carregar mais',
+  });
+});
+
+test('finds calls with a comment between the tag and the template', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'components/Toast.tsx': `
+        import { __ } from '../translate';
+
+        export const savedLabel = __ /* toast title */ \`Saved\`;
+      `,
+      'components/Header.tsx': `
+        import { __ } from '@ls-stack/i18n';
+        export const title = __\`Inbox\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({}),
+      'pt.json': JSON.stringify({ Inbox: 'Caixa de entrada', Saved: 'Salvo' }),
+    },
+  });
+
+  await ctx.validate({ fix: true, defaultLocale: 'en' });
+
+  const ptLocale: unknown = JSON.parse(ctx.getConfigFileRaw('pt.json') ?? '');
+
+  expect(ptLocale).toEqual({ Inbox: 'Caixa de entrada', Saved: 'Salvo' });
+});
+
 test('handles nested source directories', async () => {
   const ctx = createCliTestContext({
     src: {
@@ -336,9 +451,7 @@ test('detects missing __jsx translations', async () => {
   const result = await ctx.validate();
 
   expect(result.hasError).toBe(true);
-  expect(result.errors).toContainEqual(
-    expect.stringContaining('missing 1'),
-  );
+  expect(result.errors).toContainEqual(expect.stringContaining('missing 1'));
 });
 
 test('detects missing __pjsx translations', async () => {
@@ -359,9 +472,7 @@ test('detects missing __pjsx translations', async () => {
   const result = await ctx.validate();
 
   expect(result.hasError).toBe(true);
-  expect(result.errors).toContainEqual(
-    expect.stringContaining('missing 1'),
-  );
+  expect(result.errors).toContainEqual(expect.stringContaining('missing 1'));
 });
 
 test('handles mixed __, __p, __jsx, and __pjsx in same file', async () => {

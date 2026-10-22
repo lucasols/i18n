@@ -4,11 +4,25 @@ import {
   selectPluralForm,
 } from '@ls-stack/i18n-core';
 import { createElement, Fragment, type ReactNode } from 'react';
-import { assertDevScope, getState } from './state';
+import { assertDevScope, getState, reportErrorOnce } from './state';
 
 const JSX_INTERPOLATION_SPLITTER = /{(\d+)}/;
 
 export type JsxInterpolation = string | number | ReactNode;
+
+/**
+ * Calls that the vite plugin didn't compile (e.g. member calls, aliased
+ * imports, or code outside the plugin scope) can't be translated with a
+ * compiled locale.
+ */
+function reportIfCompiledLocale(hash: string): void {
+  if (!getState().compiledTranslations) return;
+
+  reportErrorOnce(
+    'uncompiled-call',
+    `I18n error: the translation "${hash}" was not compiled by the vite plugin, so it can't be translated with the loaded locale. Use direct \`__\`, \`__p\`, \`__jsx\` or \`__pjsx\` calls inside the plugin srcDir`,
+  );
+}
 
 function replaceHashWithNum(fallback: string, num: number): string {
   return fallback.replace('#', String(num));
@@ -27,13 +41,14 @@ export function __(
   const { translations } = getState();
 
   if (!translations) {
+    reportIfCompiledLocale(hash);
     return fallbackTranslation;
   }
 
   const selectedTranslation = translations[hash];
 
   if (selectedTranslation === undefined) {
-    if (fallbackTranslation.startsWith('$')) {
+    if (hash.startsWith('$')) {
       return '…';
     }
     return fallbackTranslation;
@@ -66,13 +81,14 @@ export function __p(num: number) {
     const { translations } = getState();
 
     if (!translations) {
+      reportIfCompiledLocale(hash);
       return replaceHashWithNum(fallbackTranslation, num);
     }
 
     const selectedTranslation = translations[hash];
 
     if (selectedTranslation === undefined) {
-      if (fallbackTranslation.startsWith('$')) {
+      if (hash.startsWith('$')) {
         return '…';
       }
       return replaceHashWithNum(fallbackTranslation, num);
@@ -98,7 +114,7 @@ export function __p(num: number) {
       );
     }
 
-    return fallbackTranslation;
+    return replaceHashWithNum(fallbackTranslation, num);
   };
 }
 
@@ -145,13 +161,14 @@ export function __jsx(
   const { translations } = getState();
 
   if (!translations) {
+    reportIfCompiledLocale(hash);
     return interpolateJsx(fallbackTranslation, exprs);
   }
 
   const selectedTranslation = translations[hash];
 
   if (selectedTranslation === undefined) {
-    if (fallbackTranslation.startsWith('$')) {
+    if (hash.startsWith('$')) {
       return '…';
     }
     return interpolateJsx(fallbackTranslation, exprs);
@@ -188,13 +205,14 @@ export function __pjsx(num: number) {
     const { translations } = getState();
 
     if (!translations) {
+      reportIfCompiledLocale(hash);
       return interpolateJsx(replaceHashWithNum(fallbackTranslation, num), exprs);
     }
 
     const selectedTranslation = translations[hash];
 
     if (selectedTranslation === undefined) {
-      if (fallbackTranslation.startsWith('$')) {
+      if (hash.startsWith('$')) {
         return '…';
       }
       return interpolateJsx(replaceHashWithNum(fallbackTranslation, num), exprs);
@@ -220,6 +238,6 @@ export function __pjsx(num: number) {
       );
     }
 
-    return interpolateJsx(fallbackTranslation, exprs);
+    return interpolateJsx(replaceHashWithNum(fallbackTranslation, num), exprs);
   };
 }

@@ -202,6 +202,27 @@ describe('pluralization', () => {
     errorSpy.mockRestore();
   });
 
+  test('plural call with a non plural translation falls back with # replacement', async () => {
+    const controller = createTestController({
+      locales: {
+        pt: {
+          '# unread messages': '# mensagens não lidas',
+        },
+      },
+    });
+
+    await controller.setLocale('pt');
+
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    expect(__p(3)`# unread messages`).toBe('3 unread messages');
+    expect(errorSpy).toHaveBeenCalledWith(
+      'Invalid translation, this translation should use the `__` method',
+    );
+
+    errorSpy.mockRestore();
+  });
+
   test('uses +2 translation when many/zero are missing', async () => {
     const controller = createTestController({
       locales: {
@@ -259,6 +280,17 @@ describe('$ prefix handling', () => {
     await controller.setLocale('en');
 
     expect(__`$pending ${'value'}`).toBe('…');
+  });
+
+  test('a missing translation starting with an interpolated $ value is not a placeholder', async () => {
+    const controller = createTestController({
+      locales: { en: {} },
+    });
+
+    await controller.setLocale('en');
+
+    expect(__`${'$9.99'} per month`).toBe('$9.99 per month');
+    expect(__p(2)`${'$4.50'} for # items`).toBe('$4.50 for 2 items');
   });
 
   test('returns actual translation when $ prefix translation exists', async () => {

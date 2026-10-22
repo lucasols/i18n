@@ -16,8 +16,8 @@ catalogs:
       specifier: ^3.0.7
       version: 3.0.7
     '@ls-stack/utils':
-      specifier: ^4.0.0
-      version: 4.0.0
+      specifier: ^4.1.0
+      version: 4.1.0
     '@testing-library/react':
       specifier: ^16.3.2
       version: 16.3.2
@@ -27,6 +27,9 @@ catalogs:
     ai:
       specifier: ^6.0.69
       version: 6.0.69
+    magic-string:
+      specifier: ^0.30.21
+      version: 0.30.21
     readdirp:
       specifier: ^5.0.0
       version: 5.0.0
@@ -55,7 +58,7 @@ importers:
         version: 0.83.0(eslint@9.39.2(jiti@2.6.1)(supports-color@7.2.0))(supports-color@7.2.0)(typescript@5.9.3)
       '@ls-stack/utils':
         specifier: 'catalog:'
-        version: 4.0.0
+        version: 4.1.0
       '@types/eslint':
         specifier: ^9.6.1
         version: 9.6.1
@@ -136,13 +139,16 @@ importers:
         version: 3.0.7
       '@ls-stack/utils':
         specifier: 'catalog:'
-        version: 4.0.0
+        version: 4.1.0
       '@types/react':
         specifier: ^18.0.0
         version: 18.3.27
       ai:
         specifier: 'catalog:'
         version: 6.0.69(zod@4.3.6)
+      magic-string:
+        specifier: 'catalog:'
+        version: 0.30.21
       react:
         specifier: ^18.0.0 || ^19.0.0
         version: 19.2.4
@@ -168,6 +174,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      vite:
+        specifier: ^7.3.1
+        version: 7.3.1(@types/node@25.2.0)(jiti@2.6.1)(tsx@4.21.0)
 
   core:
     dependencies:
@@ -182,7 +191,7 @@ importers:
         version: 3.0.7
       '@ls-stack/utils':
         specifier: 'catalog:'
-        version: 4.0.0
+        version: 4.1.0
       '@types/node':
         specifier: ^25.1.0
         version: 25.2.0
@@ -192,6 +201,9 @@ importers:
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
+      magic-string:
+        specifier: 'catalog:'
+        version: 0.30.21
       readdirp:
         specifier: 'catalog:'
         version: 5.0.0
@@ -210,7 +222,7 @@ importers:
     dependencies:
       '@ls-stack/utils':
         specifier: 'catalog:'
-        version: 4.0.0
+        version: 4.1.0
       type-flag:
         specifier: 'catalog:'
         version: 4.0.3
@@ -597,8 +609,8 @@ packages:
     resolution: {integrity: sha512-FauX6JhE8VLo/2ZB/doiUOxo2e2TD6ZpvN1eUe0+vKTEypbZaWnZ/TX0CVFS0prJvEjmz0jnMzF9fRwlBs9guQ==}
     engines: {node: '>=20.0.0'}
 
-  '@ls-stack/utils@4.0.0':
-    resolution: {integrity: sha512-b+0ysXyHUSbhNhLcZpUHDzaN4am8vFYHbnPbyAjejBRPGIvE6w6JClS61Tmgs1eMxiR2Bn5ISCENGj6KaDtqvw==}
+  '@ls-stack/utils@4.1.0':
+    resolution: {integrity: sha512-fHhY2OjUxI4wfk4DwFQONE2OpnfBUGjDqosPLSsmoA/8EdKs3YBYYLTDNWd8P1L5dHnYCiWitJvDGMdDs0jrNg==}
     engines: {node: '>=20.0.0'}
 
   '@napi-rs/wasm-runtime@1.1.1':
@@ -2327,7 +2339,7 @@ snapshots:
       evtmitter: 1.1.1
       t-result: 0.6.1
 
-  '@ls-stack/utils@4.0.0':
+  '@ls-stack/utils@4.1.0':
     dependencies:
       '@leeoniya/ufuzzy': 1.0.19
       evtmitter: 1.1.1

@@ -1,8 +1,16 @@
-import type { Locale } from '@ls-stack/i18n-core';
+import type {
+  CompiledLocale,
+  CompiledTranslation,
+  Locale,
+} from '@ls-stack/i18n-core';
 import { cachedGetter } from '@ls-stack/utils/cache';
 import { retryOnError } from '@ls-stack/utils/retryOnError';
 
-export type LocaleLoader = () => Promise<{ default: Locale }>;
+/**
+ * Loads the locale file, locale files imported through the vite plugin are
+ * compiled to a `CompiledLocale` array.
+ */
+export type LocaleLoader = () => Promise<{ default: Locale | CompiledLocale }>;
 
 export type LocaleConfig<T extends string = string> = {
   id: T;
@@ -15,6 +23,8 @@ export type I18nState<T extends string = string> = {
   isLoaded: boolean;
   loadError: Error | null;
   translations: Locale | null;
+  /** Translations compiled by the vite plugin, indexed by translation id */
+  compiledTranslations: CompiledLocale | null;
   regionLocale: string | null;
 };
 
@@ -25,6 +35,7 @@ let state: I18nState<string> = {
   isLoaded: false,
   loadError: null,
   translations: null,
+  compiledTranslations: null,
   regionLocale: null,
 };
 
@@ -42,10 +53,12 @@ let devEnvReady = false;
 let loadingLocaleId: string | null = null;
 let loadingPromise: Promise<void> | null = null;
 let loadedLocaleId: string | null = null;
-let loadRequestId = 0;
+let loadController: AbortController | null = null;
 let clearIntlCacheFn: (() => void) | null = null;
 let fallbackLocale: string | null = null;
 let preloadRegionLocale: { value: string | null } | null = null;
+const devFallbacks = new Map<number, CompiledTranslation>();
+const reportedErrors = new Set<string>();
 
 const invalidScopeErrorMessage =
   'I18n error: Invalid usage of translation function, check if the translate function is called inside a React component scope';
@@ -59,7 +72,8 @@ export function configure<T extends string>(options: {
   dev?: boolean;
 }) {
   localesConfig = options.locales;
-  persistenceKey = options.persistenceKey === false ? null : options.persistenceKey;
+  persistenceKey =
+    options.persistenceKey === false ? null : options.persistenceKey;
   fallbackLocale = options.fallbackLocale;
   retryAttempts = options.retryAttempts ?? 3;
   retryDelay = options.retryDelay ?? 1000;
@@ -96,6 +110,34 @@ export function assertDevScope(): void {
   if (devMode && !devEnvReady) {
     throw new Error(invalidScopeErrorMessage);
   }
+}
+
+export function registerDevFallbacks(
+  entries: [id: number, fallback: CompiledTranslation][],
+): void {
+  for (const [id, fallback] of entries) {
+    devFallbacks.set(id, fallback);
+  }
+}
+
+export function getDevFallback(id: number): CompiledTranslation | undefined {
+  return devFallbacks.get(id);
+}
+
+/**
+ * Dev fallbacks are registered once when the compiled modules are evaluated,
+ * so `resetState` keeps them. Only used to isolate the library tests.
+ */
+export function clearDevFallbacks(): void {
+  devFallbacks.clear();
+}
+
+/** Logs the error only once per error key, used for misconfigurations */
+export function reportErrorOnce(key: string, message: string): void {
+  if (reportedErrors.has(key)) return;
+
+  reportedErrors.add(key);
+  console.error(message);
 }
 
 export function getLocalesConfig(): LocaleConfig<string>[] {
@@ -186,12 +228,25 @@ export function registerClearIntlCache(fn: () => void): void {
   clearIntlCacheFn = fn;
 }
 
+function cancelPendingLoad(): void {
+  loadController?.abort();
+  loadController = null;
+}
+
 export async function setLocale(localeId: string): Promise<void> {
   if (loadingLocaleId === localeId && loadingPromise) {
     return loadingPromise;
   }
 
   if (loadedLocaleId === localeId) {
+    // cancels a pending load of another locale, so it doesn't override this
+    // selection, and clears the error of a failed load of another locale
+    if (loadingLocaleId || state.loadError) {
+      cancelPendingLoad();
+      loadingLocaleId = null;
+      loadingPromise = null;
+      updateState({ isLoading: false, loadError: null });
+    }
     return;
   }
 
@@ -201,7 +256,10 @@ export async function setLocale(localeId: string): Promise<void> {
     throw new Error(`Locale "${localeId}" not found`);
   }
 
-  const requestId = ++loadRequestId;
+  // a newer selection cancels the pending load
+  cancelPendingLoad();
+  const controller = new AbortController();
+  loadController = controller;
   loadingLocaleId = localeId;
 
   updateState({
@@ -211,13 +269,13 @@ export async function setLocale(localeId: string): Promise<void> {
 
   const doLoad = async () => {
     try {
-      const translations = await retryOnError(
+      const loadedTranslations = await retryOnError(
         async () => (await localeConfig.loader()).default,
         retryAttempts,
-        { delayBetweenRetriesMs: retryDelay },
+        { delayBetweenRetriesMs: retryDelay, signal: controller.signal },
       );
 
-      if (requestId !== loadRequestId) {
+      if (controller.signal.aborted) {
         return;
       }
 
@@ -231,7 +289,10 @@ export async function setLocale(localeId: string): Promise<void> {
 
       updateState({
         activeLocale: localeId,
-        translations,
+        translations:
+          Array.isArray(loadedTranslations) ? null : loadedTranslations,
+        compiledTranslations:
+          Array.isArray(loadedTranslations) ? loadedTranslations : null,
         isLoading: false,
         isLoaded: true,
         regionLocale,
@@ -253,13 +314,15 @@ export async function setLocale(localeId: string): Promise<void> {
         }
       }
 
+      loadController = null;
       loadingLocaleId = null;
       loadingPromise = null;
       notifyListeners();
     } catch (error) {
-      if (requestId !== loadRequestId) {
+      if (controller.signal.aborted) {
         return;
       }
+      loadController = null;
       loadingLocaleId = null;
       loadingPromise = null;
       updateState({
@@ -349,10 +412,12 @@ export function resetState(): void {
     isLoaded: false,
     loadError: null,
     translations: null,
+    compiledTranslations: null,
     regionLocale: null,
   };
   listeners.clear();
   stateListeners.clear();
+  reportedErrors.clear();
   cachedSnapshot = null;
   persistenceKey = null;
   fallbackLocale = null;
@@ -364,5 +429,5 @@ export function resetState(): void {
   loadingLocaleId = null;
   loadingPromise = null;
   loadedLocaleId = null;
-  loadRequestId = 0;
+  cancelPendingLoad();
 }

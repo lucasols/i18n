@@ -1,0 +1,28 @@
+{
+  "Direct Messages": "Mensagens diretas",
+  "You have no direct messages": "Você não tem mensagens diretas",
+  "Bookmarked": "Salvos",
+  "You have no bookmarked conversations": "Você não tem conversas salvas",
+  "Remove bookmark": "Remover dos salvos",
+  "You have # unread messages": {
+    "zero": "Você não tem mensagens não lidas",
+    "one": "Você tem uma mensagem não lida",
+    "+2": "Você tem # mensagens não lidas",
+    "many": "Você tem muitas mensagens não lidas",
+    "manyLimit": 99
+  },
+  "Hello {1}, welcome back!": "Olá {1}, bem-vindo de volta!",
+  "Hello {1}, welcome back!~~formal": "Seja bem-vindo novamente, {1}!",
+  "Message {1} directly": "Enviar mensagem direta para {1}",
+  "# files in {1}": {
+    "zero": "Nenhum arquivo em {1}",
+    "one": "1 arquivo em {1}",
+    "+2": "# arquivos em {1}"
+  },
+  "{1} has {2}": "{1} tem {2}",
+  "# members": {
+    "one": "1 membro",
+    "+2": "# membros"
+  },
+  "Archived conversations": "Conversas arquivadas"
+}

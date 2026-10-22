@@ -414,9 +414,9 @@ export function __timeDuration(value: {
   short?: boolean;
 }): { formatted: string; unit: RelativeTimeUnits } {
   assertDevScope();
-  const { translations } = getState();
+  const { translations, compiledTranslations } = getState();
 
-  if (!translations) {
+  if (!translations && !compiledTranslations) {
     return { formatted: '?', unit: 'second' };
   }
 
