@@ -18,6 +18,7 @@ import { pathToFileURL } from 'node:url';
 import { Children, isValidElement, type ReactNode } from 'react';
 import {
   build,
+  createLogger,
   createServer,
   type InlineConfig,
   type Rollup,
@@ -808,6 +809,70 @@ describe('vite build with an ids file', { timeout: 30_000 }, () => {
       expect(
         warnings.filter((warning) => warning.includes('ids file')),
       ).toEqual([]);
+    });
+  });
+
+  const conflictedIdsFile = [
+    '{',
+    '  "version": 1,',
+    '  "ids": {',
+    '    "s:Direct Messages": 3,',
+    '<<<<<<< HEAD',
+    '    "s:Archive conversation": 9,',
+    '=======',
+    '    "s:Mute channel": 9,',
+    '>>>>>>> feature/mute-channel',
+    '    "s:Export as PDF": 4',
+    '  }',
+    '}',
+    '',
+  ].join('\n');
+
+  test('fails the build when the ids file has merge conflicts', async () => {
+    await withFixtureCopy(async (copyRoot) => {
+      await writeFile(path.join(copyRoot, 'i18n-ids.json'), conflictedIdsFile);
+
+      await expect(
+        build({
+          ...getViteConfig(copyRoot, { idsFile: 'i18n-ids.json' }),
+          build: getBuildOptions(copyRoot),
+        }),
+      ).rejects.toThrow('Failed to read the ids file');
+    });
+  });
+
+  test('the dev server ignores an ids file with merge conflicts', async () => {
+    await withFixtureCopy(async (copyRoot) => {
+      await writeFile(path.join(copyRoot, 'i18n-ids.json'), conflictedIdsFile);
+
+      const warnings: string[] = [];
+      const logger = createLogger('silent');
+      logger.warn = (message) => {
+        warnings.push(message);
+      };
+
+      const server = await createServer({
+        ...getViteConfig(copyRoot, { idsFile: 'i18n-ids.json' }),
+        customLogger: logger,
+        appType: 'custom',
+        server: { middlewareMode: true, ws: false, watch: null },
+        optimizeDeps: { noDiscovery: true },
+      });
+
+      try {
+        const app = await server.ssrLoadModule('/src/main.ts');
+        if (!isFixtureApp(app)) throw new Error('Invalid dev app');
+        await app.i18n.setLocale('pt');
+
+        expect(app.getExportLabel()).toBe('Export as PDF');
+        expect(
+          warnings.some((warning) =>
+            warning.includes('Failed to read the ids file'),
+          ),
+        ).toBe(true);
+      } finally {
+        await server.close();
+      }
     });
   });
 

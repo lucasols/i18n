@@ -1,4 +1,18 @@
-import { createCliTestContext } from '@ls-stack/i18n-core/cli';
+import {
+  createCliTestContext,
+  createMockLog,
+  validateTranslations,
+} from '@ls-stack/i18n-core/cli';
+import { existsSync } from 'node:fs';
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { expect, test } from 'vitest';
 
@@ -1011,3 +1025,108 @@ export function OkButton() {
     expect.stringContaining(`❌ ${buttonPath}:4:`),
   );
 });
+
+test('reports an --ids-file without a path', async () => {
+  const ctx = createCliTestContext({
+    src: { 'main.tsx': mainTsx },
+    config: {
+      'en.json': JSON.stringify(enCorrectTranslations),
+      'pt.json': JSON.stringify(ptCorrectTranslations),
+    },
+  });
+  ctx.log.clear();
+
+  const result = await validateTranslations({
+    configDir: ctx.configDir,
+    srcDir: ctx.srcDir,
+    fs: ctx.fs,
+    log: ctx.log,
+    noColor: true,
+    fix: true,
+    idsFile: '',
+  });
+
+  expect(result.hasError).toBe(true);
+  expect(ctx.log.errors).toContain('❌ --ids-file requires a file path');
+});
+
+test('reports an --ids-file that is a directory', async () => {
+  const ctx = createCliTestContext({
+    src: { 'main.tsx': mainTsx },
+    config: {
+      'en.json': JSON.stringify(enCorrectTranslations),
+      'pt.json': JSON.stringify(ptCorrectTranslations),
+    },
+  });
+  ctx.log.clear();
+
+  const result = await validateTranslations({
+    configDir: ctx.configDir,
+    srcDir: ctx.srcDir,
+    fs: ctx.fs,
+    log: ctx.log,
+    noColor: true,
+    idsFile: ctx.srcDir,
+  });
+
+  expect(result.hasError).toBe(true);
+  expect(ctx.log.errors).toContainEqual(
+    expect.stringContaining('❌ Failed to read the ids file src'),
+  );
+});
+
+const isRoot = process.getuid?.() === 0;
+
+// root can read directories without permission
+test.skipIf(isRoot || process.platform === 'win32')(
+  'fails without deleting translations when a source directory is unreadable',
+  async () => {
+    const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'ls-stack-i18n-cli-'));
+    const srcDir = path.join(tmpDir, 'src');
+    const archiveDir = path.join(srcDir, 'archive');
+    const configDir = path.join(tmpDir, 'locales');
+    const ptFile = path.join(configDir, 'pt.json');
+    const ptContent = JSON.stringify(
+      {
+        'Direct Messages': 'Mensagens diretas',
+        'Archive conversation': 'Arquivar conversa',
+      },
+      null,
+      2,
+    );
+
+    try {
+      await mkdir(archiveDir, { recursive: true });
+      await mkdir(configDir);
+      await writeFile(
+        path.join(srcDir, 'inbox.ts'),
+        "import { __ } from '@ls-stack/i18n';\nexport const title = __`Direct Messages`;\n",
+      );
+      await writeFile(
+        path.join(archiveDir, 'archive.ts'),
+        "import { __ } from '@ls-stack/i18n';\nexport const archive = __`Archive conversation`;\n",
+      );
+      await writeFile(ptFile, ptContent);
+      await chmod(archiveDir, 0o000);
+
+      const log = createMockLog();
+      const result = await validateTranslations({
+        configDir,
+        srcDir,
+        fix: true,
+        idsFile: path.join(tmpDir, 'i18n-ids.json'),
+        log,
+      });
+
+      expect(result.hasError).toBe(true);
+      expect(log.errors).toContainEqual(
+        expect.stringContaining('❌ Failed to scan the source files'),
+      );
+      expect(await readFile(ptFile, 'utf-8')).toBe(ptContent);
+      expect(existsSync(path.join(tmpDir, 'i18n-ids.json'))).toBe(false);
+    } finally {
+      await chmod(archiveDir, 0o755);
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  },
+);
