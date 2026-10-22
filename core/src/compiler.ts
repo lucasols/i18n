@@ -477,15 +477,18 @@ export class TranslationRegistry {
       newKeys.set(getRegistryKey(hash, plural), { hash, plural });
     }
 
-    // sorted, so an id taken by two translations (e.g. when merging branches
-    // that added different translations) is resolved the same way everywhere
+    // in the order of the file, so an id taken by two translations (e.g. when
+    // merging branches that added different translations) is resolved the
+    // same way everywhere
     const keptIds = [...stableIds]
-      .filter(([registryKey]) => newKeys.has(registryKey))
-      .sort(([a], [b]) => (a < b ? -1 : 1));
+      .flatMap(([registryKey, id]) => {
+        const key = newKeys.get(registryKey);
+        return key ? [{ registryKey, key, id }] : [];
+      })
+      .sort((a, b) => compareKeys(a.key, b.key));
 
-    for (const [registryKey, id] of keptIds) {
-      const key = newKeys.get(registryKey);
-      if (!key || registry.keys[id]) continue;
+    for (const { registryKey, key, id } of keptIds) {
+      if (registry.keys[id]) continue;
 
       registry.setId(registryKey, key, id);
       newKeys.delete(registryKey);

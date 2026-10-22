@@ -542,9 +542,15 @@ export function i18nVitePlugin({
       srcPaths = [...new Set([...srcRoots, ...configuredSrcPaths])];
       localesPaths = [...new Set([localesPath, configuredLocalesPath])];
 
-      if (idsFilePath && isInLocalesDir(idsFilePath)) {
+      const idsFileInLocalesDir = idsFilePath;
+
+      // the CLI also reads the locales in the subdirectories of localesDir
+      if (
+        idsFileInLocalesDir &&
+        localesPaths.some((dir) => idsFileInLocalesDir.startsWith(`${dir}/`))
+      ) {
         throw new Error(
-          `[${PLUGIN_NAME}] The idsFile "${idsFilePath}" must be outside of localesDir, it would be compiled as a locale`,
+          `[${PLUGIN_NAME}] The idsFile "${idsFileInLocalesDir}" must be outside of localesDir, it would be read as a locale`,
         );
       }
 

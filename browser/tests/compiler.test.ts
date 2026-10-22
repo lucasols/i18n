@@ -587,6 +587,26 @@ describe('stable ids', () => {
     expect(getIdsFileState(registry, getIdsOf(registry))).toBe('up-to-date');
   });
 
+  test('an id taken by two translations is kept by the first one in the order of the file', () => {
+    const merged = new Map([
+      ['s:Bookmarked', 0],
+      ['p:You have # unread messages', 0],
+    ]);
+    const keys = [
+      { hash: 'You have # unread messages', plural: true },
+      { hash: 'Bookmarked', plural: false },
+    ];
+
+    const registry = TranslationRegistry.fromKeys(keys, merged);
+
+    expect(registry.getId('Bookmarked', false)).toBe(0);
+    expect(registry.getId('You have # unread messages', true)).toBe(1);
+    expect([...parseIdsFile(serializeIdsFile(registry)).keys()]).toEqual([
+      's:Bookmarked',
+      'p:You have # unread messages',
+    ]);
+  });
+
   test('the ids file lists one translation per line sorted by hash', () => {
     const registry = TranslationRegistry.fromKeys([
       { hash: 'Remove bookmark', plural: false },

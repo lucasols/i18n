@@ -922,6 +922,15 @@ describe('vite build with an ids file', { timeout: 30_000 }, () => {
       }),
     ).rejects.toThrow('must be outside of localesDir');
   });
+
+  test('fails when the ids file is in a subdirectory of localesDir', async () => {
+    await expect(
+      build({
+        ...getViteConfig(fixtureRoot, { idsFile: 'locales/meta/ids.json' }),
+        build: { ...getBuildOptions(fixtureRoot), write: false },
+      }),
+    ).rejects.toThrow('must be outside of localesDir');
+  });
 });
 
 describe('vite build of a copy of the app', { timeout: 30_000 }, () => {
