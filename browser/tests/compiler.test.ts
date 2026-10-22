@@ -94,6 +94,67 @@ describe('analyzeTranslations', () => {
     expect(calls.map((call) => call.hash)).toEqual(['Sent by {1}']);
   });
 
+  test('only ignores the calls inside the scope of the local declaration', () => {
+    const { calls } = analyzeTranslations(
+      '/app/src/ChannelList.tsx',
+      `
+        import { __ } from '@ls-stack/i18n';
+
+        export function ChannelList({ channels }: Props) {
+          return (
+            <section>
+              <h2>{__\`Channels\`}</h2>
+              {channels.map((_, __) => <Row key={__} />)}
+              {channels.length === 0 && __\`You have no channels\`}
+            </section>
+          );
+        }
+
+        export function getInviteEmail(i18n: I18n) {
+          if (i18n.isServer) {
+            const { __ } = i18n;
+            return __\`Server invite\`;
+          }
+
+          return __\`Join the channel\`;
+        }
+
+        export function getFooter() {
+          try {
+            return __\`Sent by Acme\`;
+          } catch (__) {
+            return __\`Unknown sender\`;
+          }
+        }
+      `,
+    );
+
+    expect(calls.map((call) => call.hash)).toEqual([
+      'Channels',
+      'You have no channels',
+      'Join the channel',
+      'Sent by Acme',
+    ]);
+  });
+
+  test('declarations are hoisted to the start of their scope', () => {
+    const { calls } = analyzeTranslations(
+      '/app/src/legacy.ts',
+      `
+        export function getTitle() {
+          return __\`Title\`;
+          function __() {
+            return 'custom';
+          }
+        }
+
+        export const subtitle = __\`Subtitle\`;
+      `,
+    );
+
+    expect(calls.map((call) => call.hash)).toEqual(['Subtitle']);
+  });
+
   test('finds translations with comments before the template', () => {
     const { calls } = analyzeTranslations(
       '/app/src/Toolbar.tsx',
@@ -186,6 +247,20 @@ describe('transformTranslations', () => {
 
     expect(code).toBe(
       `'use client';\nimport { __t as __i18n__t } from '@ls-stack/i18n';\nexport const label = __i18n__t(0);`,
+    );
+  });
+
+  test('runtime imports do not collide with identifiers of the file', () => {
+    const { code } = compileSource(
+      'const __i18n__t = 1;\nexport const label = __`Saved`;',
+    );
+
+    expect(code).toBe(
+      [
+        `import { __t as __i18n1__t } from '@ls-stack/i18n';`,
+        'const __i18n__t = 1;',
+        'export const label = __i18n1__t(0);',
+      ].join('\n'),
     );
   });
 

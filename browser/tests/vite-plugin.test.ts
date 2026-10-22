@@ -19,7 +19,7 @@ import {
   type ViteDevServer,
 } from 'vite';
 import { afterAll, beforeAll, describe, expect, test } from 'vitest';
-import { i18nVitePlugin } from '../src/vite';
+import { i18nVitePlugin, type I18nVitePluginOptions } from '../src/vite';
 
 const fixtureRoot = path.join(import.meta.dirname, 'fixtures/vite-app');
 const outDir = path.join(fixtureRoot, 'dist');
@@ -46,7 +46,10 @@ function isFixtureApp(value: unknown): value is FixtureApp {
   );
 }
 
-function getViteConfig(root = fixtureRoot): InlineConfig {
+function getViteConfig(
+  root = fixtureRoot,
+  pluginOptions: Partial<I18nVitePluginOptions> = {},
+): InlineConfig {
   return {
     root,
     configFile: false,
@@ -59,7 +62,7 @@ function getViteConfig(root = fixtureRoot): InlineConfig {
         },
       ],
     },
-    plugins: [i18nVitePlugin({ localesDir: 'locales' })],
+    plugins: [i18nVitePlugin({ localesDir: 'locales', ...pluginOptions })],
   };
 }
 
@@ -488,6 +491,62 @@ describe('vite build of a copy of the app', { timeout: 30_000 }, () => {
       );
     } finally {
       await watcher.close();
+    }
+  });
+
+  test('scans multiple source directories', async () => {
+    const { tmpDir: copyDir, root: copyRoot } = await createFixtureCopy();
+
+    try {
+      const sharedDir = path.join(copyDir, 'packages/ui');
+      await cp(
+        path.join(copyRoot, 'src/legal.ts'),
+        path.join(sharedDir, 'legal.ts'),
+      );
+      await rm(path.join(copyRoot, 'src/legal.ts'));
+
+      const mainFile = path.join(copyRoot, 'src/main.ts');
+      const main = await readFile(mainFile, 'utf-8');
+      await writeFile(
+        mainFile,
+        main.replace("'./legal'", "'../../packages/ui/legal'"),
+      );
+
+      await build({
+        ...getViteConfig(copyRoot, { srcDir: ['src', '../packages/ui'] }),
+        build: getBuildOptions(copyRoot),
+      });
+
+      expect(
+        await readBuiltTranslation(copyRoot, 'getTermsOfService', 'en'),
+      ).toBe('By using this app you agree to our terms of service.');
+      expect(await readBuiltTranslation(copyRoot, 'getExportLabel', 'pt')).toBe(
+        'Export as PDF',
+      );
+    } finally {
+      await rm(copyDir, { recursive: true, force: true });
+    }
+  });
+
+  test('compiles symlinked locale files', async () => {
+    const { tmpDir: copyDir, root: copyRoot } = await createFixtureCopy();
+
+    try {
+      const sharedLocale = path.join(copyDir, 'translations/pt.json');
+      await cp(path.join(copyRoot, 'locales/pt.json'), sharedLocale);
+      await rm(path.join(copyRoot, 'locales/pt.json'));
+      await symlink(sharedLocale, path.join(copyRoot, 'locales/pt.json'));
+
+      await build({
+        ...getViteConfig(copyRoot),
+        build: getBuildOptions(copyRoot),
+      });
+
+      expect(await readBuiltTranslation(copyRoot, 'getExportLabel', 'pt')).toBe(
+        'Export as PDF',
+      );
+    } finally {
+      await rm(copyDir, { recursive: true, force: true });
     }
   });
 

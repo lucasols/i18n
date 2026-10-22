@@ -436,17 +436,17 @@ export default defineConfig({
 });
 ```
 
-| Option       | Default | Description                                                         |
-| ------------ | ------- | ------------------------------------------------------------------- |
-| `localesDir` |         | Directory of the locale JSON files, relative to the vite root       |
-| `srcDir`     | `src`   | Directory scanned for translations at startup, relative to the root |
+| Option       | Default | Description                                                                                                                                          |
+| ------------ | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `localesDir` |         | Directory of the locale JSON files, relative to the vite root                                                                                        |
+| `srcDir`     | `src`   | Directory, or list of directories, scanned for translations at startup, relative to the root (e.g. `['src', '../../packages/ui/src']` in a monorepo) |
 
 Behavior differences from the uncompiled runtime:
 
 - The default locale strings are moved from the code into the default locale chunk, so translations return an empty string until a locale is loaded. Use `useLoadedLocale()` to render after the locale loads.
 - Locale files must only be imported by the locale loaders, a static `import en from './locales/en.json'` also receives the compiled array.
 - Every locale loader must import a JSON file from `localesDir`. A locale loaded another way (e.g. `fetch` or an inline object) can't be read by the compiled calls, so translations render empty and an error is logged.
-- Only direct calls of `__`, `__p`, `__jsx` and `__pjsx` are compiled. Member calls like `i18n.__`, aliased imports, files that declare their own `__` (e.g. `const { __ } = i18n`) and code in `node_modules` are left untouched. Those calls can't be translated with a compiled locale, they render the source string and an error is logged.
+- Only direct calls of `__`, `__p`, `__jsx` and `__pjsx` are compiled. Member calls like `i18n.__`, aliased imports, calls inside a scope that declares its own `__` (e.g. `const { __ } = i18n`) and code in `node_modules` are left untouched. Those calls can't be translated with a compiled locale, they render the source string and an error is logged.
 - In the build, every translation must be inside `srcDir`, translations outside it fail the build. On the dev server, translations added while the server is running get new ids and render the source string until the locale file is updated.
 
 ## CLI Tool
