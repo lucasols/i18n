@@ -53,7 +53,7 @@ let devEnvReady = false;
 let loadingLocaleId: string | null = null;
 let loadingPromise: Promise<void> | null = null;
 let loadedLocaleId: string | null = null;
-let loadRequestId = 0;
+let loadController: AbortController | null = null;
 let clearIntlCacheFn: (() => void) | null = null;
 let fallbackLocale: string | null = null;
 let preloadRegionLocale: { value: string | null } | null = null;
@@ -228,6 +228,11 @@ export function registerClearIntlCache(fn: () => void): void {
   clearIntlCacheFn = fn;
 }
 
+function cancelPendingLoad(): void {
+  loadController?.abort();
+  loadController = null;
+}
+
 export async function setLocale(localeId: string): Promise<void> {
   if (loadingLocaleId === localeId && loadingPromise) {
     return loadingPromise;
@@ -237,7 +242,7 @@ export async function setLocale(localeId: string): Promise<void> {
     // cancels a pending load of another locale, so it doesn't override this
     // selection, and clears the error of a failed load of another locale
     if (loadingLocaleId || state.loadError) {
-      loadRequestId++;
+      cancelPendingLoad();
       loadingLocaleId = null;
       loadingPromise = null;
       updateState({ isLoading: false, loadError: null });
@@ -251,7 +256,10 @@ export async function setLocale(localeId: string): Promise<void> {
     throw new Error(`Locale "${localeId}" not found`);
   }
 
-  const requestId = ++loadRequestId;
+  // a newer selection cancels the pending load
+  cancelPendingLoad();
+  const controller = new AbortController();
+  loadController = controller;
   loadingLocaleId = localeId;
 
   updateState({
@@ -262,23 +270,12 @@ export async function setLocale(localeId: string): Promise<void> {
   const doLoad = async () => {
     try {
       const loadedTranslations = await retryOnError(
-        async () => {
-          // `retryCondition` is only checked before the retry delay, a load
-          // cancelled during the delay must not call the loader again
-          if (requestId !== loadRequestId) {
-            throw new Error(`Load of locale "${localeId}" was cancelled`);
-          }
-          return (await localeConfig.loader()).default;
-        },
+        async () => (await localeConfig.loader()).default,
         retryAttempts,
-        {
-          delayBetweenRetriesMs: retryDelay,
-          // a newer selection cancels this load
-          retryCondition: () => requestId === loadRequestId,
-        },
+        { delayBetweenRetriesMs: retryDelay, signal: controller.signal },
       );
 
-      if (requestId !== loadRequestId) {
+      if (controller.signal.aborted) {
         return;
       }
 
@@ -317,13 +314,15 @@ export async function setLocale(localeId: string): Promise<void> {
         }
       }
 
+      loadController = null;
       loadingLocaleId = null;
       loadingPromise = null;
       notifyListeners();
     } catch (error) {
-      if (requestId !== loadRequestId) {
+      if (controller.signal.aborted) {
         return;
       }
+      loadController = null;
       loadingLocaleId = null;
       loadingPromise = null;
       updateState({
@@ -430,6 +429,5 @@ export function resetState(): void {
   loadingLocaleId = null;
   loadingPromise = null;
   loadedLocaleId = null;
-  // keeps increasing so a load started before the reset can't match a new request
-  loadRequestId++;
+  cancelPendingLoad();
 }
