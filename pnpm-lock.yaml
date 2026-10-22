@@ -27,6 +27,9 @@ catalogs:
     ai:
       specifier: ^6.0.69
       version: 6.0.69
+    magic-string:
+      specifier: ^0.30.21
+      version: 0.30.21
     readdirp:
       specifier: ^5.0.0
       version: 5.0.0
@@ -143,6 +146,9 @@ importers:
       ai:
         specifier: 'catalog:'
         version: 6.0.69(zod@4.3.6)
+      magic-string:
+        specifier: 'catalog:'
+        version: 0.30.21
       react:
         specifier: ^18.0.0 || ^19.0.0
         version: 19.2.4
@@ -168,6 +174,9 @@ importers:
       typescript:
         specifier: 'catalog:'
         version: 5.9.3
+      vite:
+        specifier: ^7.3.1
+        version: 7.3.1(@types/node@25.2.0)(jiti@2.6.1)(tsx@4.21.0)
 
   core:
     dependencies:
@@ -192,6 +201,9 @@ importers:
       dotenv:
         specifier: ^17.2.3
         version: 17.2.3
+      magic-string:
+        specifier: 'catalog:'
+        version: 0.30.21
       readdirp:
         specifier: 'catalog:'
         version: 5.0.0

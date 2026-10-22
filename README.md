@@ -14,6 +14,7 @@ A lightweight, type-safe internationalization (i18n) library for TypeScript/Java
 - **CLI tool** - Scan code and validate translation files
 - **Lazy loading** - Async locale loading with retry logic (browser)
 - **Persistence** - localStorage support for locale preference (browser)
+- **Vite plugin** - Compiles translations to numeric ids for smaller bundles and faster lookups (browser)
 
 ## Installation
 
@@ -160,6 +161,7 @@ __`$privacy_policy`;
 ```
 
 This is useful for:
+
 - Large blocks of text (terms, policies, descriptions)
 - Translations where the ID is a key, not readable text
 - Preventing long fallback strings from appearing in the UI
@@ -404,6 +406,48 @@ i18nitialize({
 
 The library checks `navigator.languages` and matches against configured locales.
 
+### Vite Plugin
+
+The vite plugin compiles the translations of the app, in both build and dev server:
+
+- Translation calls are replaced by numeric id calls, so the source strings are removed from the app code and lookups are array accesses instead of building and hashing the source string on every call:
+
+  ```tsx
+  __`Hello ${name}`; // → __t(3, name)
+  __p(count)`You have # messages`; // → __tp(7, count)
+  __jsx`Click ${(<a />)}`; // → __tjsx(2, <a />)
+  ```
+
+- Locale files imported by the locale loaders are compiled to arrays indexed by the translation ids. Translation keys and unused translations are removed and missing translations are filled with the source string, so each user only downloads the strings of their own locale.
+- The output has no tagged templates, which keeps the components compatible with the React Compiler.
+
+```ts
+// vite.config.ts
+import { i18nVitePlugin } from '@ls-stack/i18n/vite';
+import react from '@vitejs/plugin-react';
+import { defineConfig } from 'vite';
+
+export default defineConfig({
+  plugins: [
+    // must be placed before react() so the React Compiler sees the compiled calls
+    i18nVitePlugin({ localesDir: 'src/locales', srcDir: 'src' }),
+    react(),
+  ],
+});
+```
+
+| Option       | Default | Description                                                         |
+| ------------ | ------- | ------------------------------------------------------------------- |
+| `localesDir` |         | Directory of the locale JSON files, relative to the vite root       |
+| `srcDir`     | `src`   | Directory scanned for translations at startup, relative to the root |
+
+Behavior differences from the uncompiled runtime:
+
+- The default locale strings are moved from the code into the default locale chunk, so translations return an empty string until a locale is loaded. Use `useLoadedLocale()` to render after the locale loads.
+- Locale files must only be imported by the locale loaders, a static `import en from './locales/en.json'` also receives the compiled array.
+- Only direct calls of `__`, `__p`, `__jsx` and `__pjsx` are compiled. Member calls like `i18n.__` are left untouched.
+- In the build, every translation must be inside `srcDir`, translations outside it fail the build. On the dev server, translations added while the server is running get new ids and render the source string until the locale file is updated.
+
 ## CLI Tool
 
 Both packages include the `ls-stack-i18n` CLI for managing translations.
@@ -420,17 +464,17 @@ ls-stack-i18n --config-dir ./locales --src-dir ./src --default en --fix
 
 ### Options
 
-| Option           | Alias | Description                                        |
-| ---------------- | ----- | -------------------------------------------------- |
-| `--config-dir`   | `-c`  | Path to translation JSON files (required)          |
-| `--src-dir`      | `-r`  | Path to source files to scan (required)            |
-| `--default`      | `-d`  | Default locale ID                                  |
-| `--fix`          | `-f`  | Auto-add missing translations                      |
-| `--ai`           |       | AI provider for auto-translation (`google`/`openai`) |
-| `--max-id-size`  |       | Maximum translation ID size (default: 80)          |
-| `--disable-rule` |       | Disable a validation rule (can be used multiple times) |
+| Option           | Alias | Description                                                   |
+| ---------------- | ----- | ------------------------------------------------------------- |
+| `--config-dir`   | `-c`  | Path to translation JSON files (required)                     |
+| `--src-dir`      | `-r`  | Path to source files to scan (required)                       |
+| `--default`      | `-d`  | Default locale ID                                             |
+| `--fix`          | `-f`  | Auto-add missing translations                                 |
+| `--ai`           |       | AI provider for auto-translation (`google`/`openai`)          |
+| `--max-id-size`  |       | Maximum translation ID size (default: 80)                     |
+| `--disable-rule` |       | Disable a validation rule (can be used multiple times)        |
 | `--warn-rule`    |       | Set a validation rule to warning (can be used multiple times) |
-| `--no-color`     |       | Disable colored output                             |
+| `--no-color`     |       | Disable colored output                                        |
 
 ### Validation Rules
 

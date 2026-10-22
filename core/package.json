@@ -9,7 +9,8 @@
   "types": "./src/main.ts",
   "exports": {
     ".": "./src/main.ts",
-    "./cli": "./src/cli/main.ts"
+    "./cli": "./src/cli/main.ts",
+    "./compiler": "./src/compiler.ts"
   },
   "devDependencies": {
     "typescript": "catalog:"
@@ -27,6 +28,7 @@
     "dotenv": "^17.2.3",
     "readdirp": "catalog:",
     "runcheck": "catalog:",
-    "zod": "catalog:"
+    "zod": "catalog:",
+    "magic-string": "catalog:"
   }
 }

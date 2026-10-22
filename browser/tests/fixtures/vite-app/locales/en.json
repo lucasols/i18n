@@ -1,0 +1,18 @@
+{
+  "You have # unread messages": {
+    "zero": "You have no unread messages",
+    "one": "You have one unread message",
+    "+2": "You have # unread messages",
+    "many": "You have a lot of unread messages",
+    "manyLimit": 99
+  },
+  "# files in {1}": {
+    "one": "1 file in {1}",
+    "+2": "# files in {1}"
+  },
+  "# members": {
+    "one": "1 member",
+    "+2": "# members"
+  },
+  "$terms_of_service": "By using this app you agree to our terms of service."
+}
