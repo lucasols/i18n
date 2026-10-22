@@ -19,7 +19,8 @@ import {
 import { createSimilarityIndex, findSimilarFromIndex } from './similarity';
 import {
   analyzeTranslations,
-  hasSameTranslations,
+  getIdsFileState,
+  IGNORED_DIRS,
   parseIdsFile,
   serializeIdsFile,
   TranslationRegistry,
@@ -68,7 +69,8 @@ export type ValidationRuleConfig = {
 
 export type ValidationOptions = {
   configDir: string;
-  srcDir: string;
+  /** Directory, or list of directories, scanned for translations */
+  srcDir: string | string[];
   defaultLocale?: string;
   fix?: boolean;
   noColor?: boolean;
@@ -217,8 +219,7 @@ export const defaultFs: FileSystem = {
   async *scanDir(dirPath, options) {
     for await (const entry_ of readdirp(dirPath, {
       fileFilter: options.fileFilter,
-      directoryFilter: (entry) =>
-        !entry.path.includes('node_modules') && !entry.path.includes('.git'),
+      directoryFilter: (entry) => !IGNORED_DIRS.has(entry.basename),
     })) {
       const entry = entry_ as EntryInfo;
       yield { fullPath: entry.fullPath, basename: entry.basename };
@@ -274,24 +275,34 @@ function checkIdsFile({
   const registry = TranslationRegistry.fromKeys(keys, stableIds ?? undefined);
   const updatedContent = serializeIdsFile(registry);
 
-  if (stableIds && hasSameTranslations(registry, stableIds)) {
-    // also resolves the ids taken by two translations after a merge
+  const state = stableIds ? getIdsFileState(registry, stableIds) : 'outdated';
+
+  if (state === 'up-to-date') {
     if (fix && content !== updatedContent) {
       fs.writeFileSync(idsPath, updatedContent);
     }
     return true;
   }
 
-  if (!fix) {
-    log.error(
-      `❌ ${name} ${stableIds ? 'is outdated' : 'not found'}, run with --fix to update the translation ids`,
-    );
-    return false;
+  if (fix) {
+    fs.writeFileSync(idsPath, updatedContent);
+    log.info(`✅ ${name} translation ids ${stableIds ? 'updated' : 'created'}`);
+    return true;
   }
 
-  fs.writeFileSync(idsPath, updatedContent);
-  log.info(`✅ ${name} translation ids ${stableIds ? 'updated' : 'created'}`);
-  return true;
+  // every build resolves them the same way, so merging branches that added
+  // different translations doesn't fail the check
+  if (state === 'duplicated-ids') {
+    log.info(
+      `🟠 ${name} has ids taken by two translations, run with --fix so the ids of both stay stable`,
+    );
+    return true;
+  }
+
+  log.error(
+    `❌ ${name} ${stableIds ? 'is outdated' : 'not found'}, run with --fix to update the translation ids`,
+  );
+  return false;
 }
 
 function hasInterpolationPlaceholder(hash: string): boolean {
@@ -340,16 +351,11 @@ type ValidationIssue = {
 function formatIssue(
   issue: ValidationIssue,
   severity: 'error' | 'warning',
-  srcPath: string,
 ): string {
   const icon = severity === 'error' ? '❌' : '⚠️';
   const location = issue.locations[0];
   if (location) {
-    const relativePath = path.relative(
-      path.dirname(srcPath),
-      path.join(srcPath, location.file),
-    );
-    return `${icon} ${relativePath}:${location.line}:${location.column} ${issue.message}`;
+    return `${icon} ${location.file}:${location.line}:${location.column} ${issue.message}`;
   }
   return `${icon} ${issue.message}`;
 }
@@ -380,8 +386,12 @@ export async function validateTranslations(
   const allPluralTranslationHashs = new Set<string>();
   let hasError = false;
 
-  const srcPath =
-    path.isAbsolute(srcDir) ? srcDir : path.join(process.cwd(), srcDir);
+  const srcDirs = Array.isArray(srcDir) ? srcDir : [srcDir];
+  const srcPaths = srcDirs.map((dir) =>
+    path.isAbsolute(dir) ? dir : path.join(process.cwd(), dir),
+  );
+  /** Files of nested or repeated srcDirs are only read once */
+  const scannedFiles = new Set<string>();
 
   const globalUsageMap = new Map<string, TranslationUsage>();
   const globalJsxStringTranslations = new Set<string>();
@@ -390,54 +400,60 @@ export async function validateTranslations(
   /** Found with the analysis of the vite plugin, which only compiles some of the calls */
   const compiledKeys: TranslationKey[] = [];
 
-  for await (const entry of fs.scanDir(srcPath, {
-    fileFilter: (entry) => isTranslationSourceFile(entry.path),
-  })) {
-    const { fullPath } = entry;
+  for (const srcPath of srcPaths) {
+    for await (const entry of fs.scanDir(srcPath, {
+      fileFilter: (entry) => isTranslationSourceFile(entry.path),
+    })) {
+      const { fullPath } = entry;
 
-    const fileTextContent = fs.readFileSync(fullPath, 'utf-8');
+      if (scannedFiles.has(fullPath)) continue;
+      scannedFiles.add(fullPath);
 
-    if (idsFile) {
-      compiledKeys.push(
-        ...analyzeTranslations(fullPath, fileTextContent).calls,
+      const fileTextContent = fs.readFileSync(fullPath, 'utf-8');
+
+      if (idsFile) {
+        compiledKeys.push(
+          ...analyzeTranslations(fullPath, fileTextContent).calls,
+        );
+      }
+
+      // shown in the issues, e.g. `src/main.tsx`
+      const relativePath = path.relative(path.dirname(srcPath), fullPath);
+      const i18nUsages: I18nUsagesResult = getI18nUsagesInCode(
+        relativePath,
+        fileTextContent,
       );
-    }
 
-    const relativePath = path.relative(srcPath, fullPath);
-    const i18nUsages: I18nUsagesResult = getI18nUsagesInCode(
-      relativePath,
-      fileTextContent,
-    );
+      for (const hash of i18nUsages.stringTranslations) {
+        allStringTranslationHashs.add(hash);
+      }
 
-    for (const hash of i18nUsages.stringTranslations) {
-      allStringTranslationHashs.add(hash);
-    }
+      for (const hash of i18nUsages.pluralTranslations) {
+        allPluralTranslationHashs.add(hash);
+      }
 
-    for (const hash of i18nUsages.pluralTranslations) {
-      allPluralTranslationHashs.add(hash);
-    }
+      for (const hash of i18nUsages.jsxStringTranslations) {
+        globalJsxStringTranslations.add(hash);
+      }
 
-    for (const hash of i18nUsages.jsxStringTranslations) {
-      globalJsxStringTranslations.add(hash);
-    }
+      for (const hash of i18nUsages.jsxPluralTranslations) {
+        globalJsxPluralTranslations.add(hash);
+      }
 
-    for (const hash of i18nUsages.jsxPluralTranslations) {
-      globalJsxPluralTranslations.add(hash);
-    }
+      for (const hash of i18nUsages.primitiveOnlyJsx) {
+        globalPrimitiveOnlyJsx.add(hash);
+      }
 
-    for (const hash of i18nUsages.primitiveOnlyJsx) {
-      globalPrimitiveOnlyJsx.add(hash);
-    }
-
-    for (const [hash, usage] of i18nUsages.usageMap) {
-      const existing = globalUsageMap.get(hash);
-      if (existing) {
-        existing.locations.push(...usage.locations);
-        if (!usage.hasOnlyPrimitiveInterpolations) {
-          existing.hasOnlyPrimitiveInterpolations = false;
+      for (const [hash, usage] of i18nUsages.usageMap) {
+        const existing = globalUsageMap.get(hash);
+        if (existing) {
+          existing.locations.push(...usage.locations);
+          if (!usage.hasOnlyPrimitiveInterpolations) {
+            existing.hasOnlyPrimitiveInterpolations = false;
+          }
+        } else {
+          globalUsageMap.set(hash, { ...usage });
         }
-      } else {
-        globalUsageMap.set(hash, { ...usage });
       }
     }
   }
@@ -446,7 +462,7 @@ export async function validateTranslations(
     allStringTranslationHashs.size === 0 &&
     allPluralTranslationHashs.size === 0
   ) {
-    log.error('❌ No translations found in dir: ', srcDir);
+    log.error('❌ No translations found in dir: ', srcDirs.join(', '));
     return { hasError: true };
   }
 
@@ -678,7 +694,7 @@ export async function validateTranslations(
     const severity = getRuleSeverity(issue.rule);
     if (severity === 'off') continue;
 
-    const message = formatIssue(issue, severity, srcPath);
+    const message = formatIssue(issue, severity);
     if (severity === 'error') {
       hasError = true;
       log.error(message);

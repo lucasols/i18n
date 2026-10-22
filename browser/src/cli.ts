@@ -18,7 +18,7 @@ const parsed = typeFlag({
     alias: 'c',
   },
   'src-dir': {
-    type: String,
+    type: [String],
     alias: 'r',
   },
   default: {
@@ -55,7 +55,7 @@ const parsed = typeFlag({
 });
 
 const srcDir = parsed.flags['src-dir'];
-if (!srcDir) {
+if (srcDir.length === 0) {
   console.error('--src-dir is required');
   process.exit(1);
 }

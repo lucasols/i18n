@@ -125,10 +125,13 @@ export function createCliTestContext(fixture: {
    * that doesn't exist yet
    */
   idsFile?: string | null;
+  /** Source of a monorepo package, scanned as a second `--src-dir` */
+  packageSrc?: VirtualFileTree;
 }) {
   const srcDir = '/virtual/src';
   const configDir = '/virtual/config';
   const idsFilePath = '/virtual/i18n-ids.json';
+  const packageSrcDir = '/virtual/packages/ui/src';
 
   const { fs: srcFs, getFile: getSrcFile } = createVirtualFs(
     srcDir,
@@ -142,6 +145,15 @@ export function createCliTestContext(fixture: {
 
   if (typeof fixture.idsFile === 'string') {
     configFs.writeFileSync(idsFilePath, fixture.idsFile);
+  }
+
+  if (fixture.packageSrc) {
+    const packageFiles = new Map<string, string>();
+    flattenTree(packageSrcDir, fixture.packageSrc, packageFiles);
+
+    for (const [filePath, content] of packageFiles) {
+      configFs.writeFileSync(filePath, content);
+    }
   }
 
   const combinedFs: FileSystem = {
@@ -181,7 +193,7 @@ export function createCliTestContext(fixture: {
     log.clear();
     const result = await validateTranslations({
       configDir,
-      srcDir,
+      srcDir: fixture.packageSrc ? [srcDir, packageSrcDir] : srcDir,
       fix: options?.fix,
       defaultLocale: options?.defaultLocale,
       aiTranslator: options?.aiTranslator,
