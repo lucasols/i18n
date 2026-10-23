@@ -16,13 +16,13 @@
   },
   "peerDependencies": {
     "@ls-stack/utils": "catalog:",
-    "@types/node": "^25.1.0",
-    "typescript": "^5.8.3"
+    "@types/node": "^25.1.0"
   },
   "dependencies": {
     "@ai-sdk/google": "catalog:",
     "@ai-sdk/openai": "catalog:",
     "@ai-sdk/provider": "catalog:",
+    "@typescript/typescript6": "^6.0.2",
     "ai": "catalog:",
     "dotenv": "^17.2.3",
     "readdirp": "catalog:",

@@ -140,6 +140,9 @@ importers:
       '@types/react':
         specifier: ^18.0.0
         version: 18.3.27
+      '@typescript/typescript6':
+        specifier: ^6.0.2
+        version: 6.0.2
       ai:
         specifier: 'catalog:'
         version: 6.0.69(zod@4.3.6)
@@ -186,6 +189,9 @@ importers:
       '@types/node':
         specifier: ^25.1.0
         version: 25.2.0
+      '@typescript/typescript6':
+        specifier: ^6.0.2
+        version: 6.0.2
       ai:
         specifier: 'catalog:'
         version: 6.0.69(zod@4.3.6)
@@ -211,6 +217,9 @@ importers:
       '@ls-stack/utils':
         specifier: 'catalog:'
         version: 4.0.0
+      '@typescript/typescript6':
+        specifier: ^6.0.2
+        version: 6.0.2
       type-flag:
         specifier: 'catalog:'
         version: 4.0.3
@@ -958,6 +967,10 @@ packages:
   '@typescript-eslint/visitor-keys@8.54.0':
     resolution: {integrity: sha512-VFlhGSl4opC0bprJiItPQ1RfUhGDIBokcPwaFH4yiBCaNPeld/9VeXbiPO1cLyorQi1G1vL+ecBk1x8o1axORA==}
     engines: {node: ^18.18.0 || ^20.9.0 || >=21.1.0}
+
+  '@typescript/typescript6@6.0.2':
+    resolution: {integrity: sha512-mbCddXd+jm7hfx7w2YU64/Av4/NqqeG3GoRZgxPcgoTxYjhrcfJRw9ULch71SS4G+Q3bOXFhRvPqjguN0Hyp5w==}
+    hasBin: true
 
   '@vercel/oidc@3.1.0':
     resolution: {integrity: sha512-Fw28YZpRnA3cAHHDlkt7xQHiJ0fcL+NRcIqsocZQUSmbzeIKRpwttJjik5ZGanXP+vlA4SbTg+AbA3bP363l+w==}
@@ -1813,6 +1826,11 @@ packages:
     engines: {node: '>=14.17'}
     hasBin: true
 
+  typescript@6.0.3:
+    resolution: {integrity: sha512-y2TvuxSZPDyQakkFRPZHKFm+KKVqIisdg9/CZwm9ftvKXLP8NRWj38/ODjNbr43SsoXqNuAisEf1GdCxqWcdBw==}
+    engines: {node: '>=14.17'}
+    hasBin: true
+
   unconfig-core@7.4.2:
     resolution: {integrity: sha512-VgPCvLWugINbXvMQDf8Jh0mlbvNjNC6eSUziHsBCMpxR05OPrNrvDnyatdMjRgcHaaNsCqz+wjNXxNw1kRLHUg==}
 
@@ -2622,6 +2640,10 @@ snapshots:
     dependencies:
       '@typescript-eslint/types': 8.54.0
       eslint-visitor-keys: 4.2.1
+
+  '@typescript/typescript6@6.0.2':
+    dependencies:
+      '@typescript/old': typescript@6.0.3
 
   '@vercel/oidc@3.1.0': {}
 
@@ -3504,6 +3526,8 @@ snapshots:
       - supports-color
 
   typescript@5.9.3: {}
+
+  typescript@6.0.3: {}
 
   unconfig-core@7.4.2:
     dependencies:

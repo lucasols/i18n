@@ -33,13 +33,11 @@
   },
   "dependencies": {
     "@ls-stack/utils": "catalog:",
+    "@typescript/typescript6": "^6.0.2",
     "type-flag": "catalog:"
   },
   "devDependencies": {
     "@ls-stack/i18n-core": "workspace:*",
     "typescript": "catalog:"
-  },
-  "peerDependencies": {
-    "typescript": "^5.8.3"
   }
 }
