@@ -1,7 +1,7 @@
 {
   "name": "@ls-stack/server-i18n",
   "description": "Super simple server-side i18n library",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "license": "MIT",
   "scripts": {
     "test": "vitest run",
