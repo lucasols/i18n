@@ -7,19 +7,102 @@ import {
 
 type I18nOptions<T extends string> = {
   locales: Record<T, Locale>;
+  /**
+   * Locale used by `toAvailableLocale` and `withUnknownLocale` when no locale
+   * matches. Defaults to the first locale in `locales`
+   */
+  fallbackLocale?: NoInfer<T>;
 };
 
 let config: I18nOptions<string> | null = null;
 
+function normalizeLocaleTag(localeTag: string): string {
+  return localeTag.trim().toLowerCase().replaceAll('_', '-');
+}
+
+function getBaseLanguage(normalizedTag: string): string {
+  const separatorIndex = normalizedTag.indexOf('-');
+  return separatorIndex === -1 ? normalizedTag : (
+      normalizedTag.slice(0, separatorIndex)
+    );
+}
+
 export function i18nitialize<T extends string>(options: I18nOptions<T>) {
   config = options;
 
+  function isLocaleId(id: string): id is T {
+    return Object.hasOwn(options.locales, id);
+  }
+
+  const localeIds = Object.keys(options.locales).filter(isLocaleId);
+  const fallbackLocale = options.fallbackLocale ?? localeIds[0];
+
+  const localeByTag = new Map<string, T>();
+  const localeByBaseLanguage = new Map<string, T>();
+
+  for (const localeId of localeIds) {
+    const normalizedId = normalizeLocaleTag(localeId);
+    localeByTag.set(normalizedId, localeId);
+
+    const baseLanguage = getBaseLanguage(normalizedId);
+    // a locale without region (e.g. `pt`) wins over regional ones (e.g. `pt-PT`)
+    if (
+      normalizedId === baseLanguage ||
+      !localeByBaseLanguage.has(baseLanguage)
+    ) {
+      localeByBaseLanguage.set(baseLanguage, localeId);
+    }
+  }
+
+  const instances = new Map<T, I18n>();
+
+  function getInstance(localeId: T): I18n {
+    let instance = instances.get(localeId);
+
+    if (!instance) {
+      instance = new I18n(localeId);
+      instances.set(localeId, instance);
+    }
+
+    return instance;
+  }
+
+  /**
+   * Closest available locale of a language tag like `pt-BR` or `pt_br`,
+   * matching the exact tag first, then its base language. Returns the
+   * fallback locale if nothing matches
+   */
+  function toAvailableLocale(localeTag: string | null | undefined): T {
+    if (localeTag) {
+      const normalizedTag = normalizeLocaleTag(localeTag);
+
+      const matchedLocale =
+        localeByTag.get(normalizedTag) ??
+        localeByBaseLanguage.get(getBaseLanguage(normalizedTag));
+
+      if (matchedLocale !== undefined) return matchedLocale;
+    }
+
+    if (fallbackLocale === undefined) {
+      throw new Error('No locales configured');
+    }
+
+    return fallbackLocale;
+  }
+
   return {
-    with(localeId: T) {
-      return new I18n(localeId);
+    with(localeId: T): I18n {
+      return getInstance(localeId);
     },
+    /** `with` for an unvalidated language tag, see `toAvailableLocale` */
+    withUnknownLocale(localeTag: string | null | undefined): I18n {
+      return getInstance(toAvailableLocale(localeTag));
+    },
+    toAvailableLocale,
   };
 }
+
+export type { I18n };
 
 class I18n {
   constructor(private localeId: string) {}

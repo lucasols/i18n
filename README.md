@@ -185,10 +185,34 @@ const i18n = i18nitialize({
       /* translations */
     },
   },
+  // Optional, used when a language tag matches no locale. Defaults to the first locale
+  fallbackLocale: 'en',
 });
 ```
 
-Returns `{ with(localeId): I18n }`.
+Returns:
+
+| Method                   | Description                                                           |
+| ------------------------ | --------------------------------------------------------------------- |
+| `with(localeId)`         | `I18n` instance for a known locale id                                 |
+| `withUnknownLocale(tag)` | `I18n` instance for the closest locale of an unvalidated language tag |
+| `toAvailableLocale(tag)` | Closest locale id of a language tag (e.g. `'pt-BR'` → `'pt'`)         |
+
+Instances are created once per locale and reused, so calling `with` per request is cheap.
+
+#### Matching unknown language tags
+
+`toAvailableLocale` and `withUnknownLocale` accept tags from user settings, headers, etc. (`string | null | undefined`). Tags are case-insensitive and `_` is treated as `-`. Matching order:
+
+1. Exact locale id (`'pt-br'` → `'pt-BR'`)
+2. Base language (`'pt-BR'` → `'pt'`, `'pt-PT'` → `'pt-BR'`); a locale without region wins over regional ones
+3. `fallbackLocale` (or the first locale)
+
+```typescript
+const { __ } = i18n.withUnknownLocale(user.language); // 'pt-BR', 'es_MX', undefined...
+
+type LocalizedI18n = ReturnType<typeof i18n.with>; // or `import type { I18n }`
+```
 
 #### `I18n` Methods
 
