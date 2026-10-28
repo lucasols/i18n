@@ -50,8 +50,9 @@ const i18n = i18nitialize({
 
 const ptI18n = i18n.with('pt');
 
-ptI18n`hello`; // "olá"
-ptI18n`hello ${'world'}`; // "olá world"
+ptI18n.__`hello`; // "olá"
+ptI18n.__`hello ${'world'}`; // "olá world"
+ptI18n.__p(0)`# items`; // "nenhum item"
 ```
 
 ### Browser/React
@@ -192,15 +193,17 @@ Returns `{ with(localeId): I18n }`.
 #### `I18n` Methods
 
 ```typescript
-const __ = i18n.with('pt');
+const { __, __p } = i18n.with('pt');
 
 // Simple translation
 __`hello`;
 __`hello ${'world'}`;
 
 // Plural translation
-__.__p(5)`# items`;
+__p(5)`# items`;
 ```
+
+`__` and `__p` are arrow functions bound to the instance, so they can be destructured.
 
 ## Browser Package (`@ls-stack/i18n`)
 
