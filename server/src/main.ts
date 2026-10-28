@@ -2,6 +2,7 @@ import {
   createHashAndFallbackTranslation,
   interpolate,
   type Locale,
+  replaceHashWithNum,
   selectPluralForm,
 } from '@ls-stack/i18n-core';
 
@@ -107,7 +108,10 @@ export type { I18n };
 class I18n {
   constructor(private localeId: string) {}
 
-  __ = (strings: TemplateStringsArray, ...exprs: (string | number)[]): string => {
+  __ = (
+    strings: TemplateStringsArray,
+    ...exprs: (string | number)[]
+  ): string => {
     const [hash, fallbackTranslation] = createHashAndFallbackTranslation(
       strings,
       exprs,
@@ -154,7 +158,7 @@ class I18n {
       const selectedTranslation = activeLocale[hash];
 
       if (selectedTranslation === undefined) {
-        return fallbackTranslation;
+        return replaceHashWithNum(fallbackTranslation, num);
       }
 
       if (
@@ -165,10 +169,13 @@ class I18n {
 
         if (translation === null) {
           console.error(`No plural configured for hash: ${hash}`);
-          return fallbackTranslation;
+          return replaceHashWithNum(fallbackTranslation, num);
         }
 
-        return interpolate(translation, exprs) || fallbackTranslation;
+        return (
+          interpolate(translation, exprs) ||
+          replaceHashWithNum(fallbackTranslation, num)
+        );
       }
 
       if (selectedTranslation) {
@@ -177,9 +184,14 @@ class I18n {
         );
       }
 
-      return fallbackTranslation;
+      return replaceHashWithNum(fallbackTranslation, num);
     };
   };
 }
 
-export type { Locale, LocaleConfig, PluralTranslation, TranslationValue } from '@ls-stack/i18n-core';
+export type {
+  Locale,
+  LocaleConfig,
+  PluralTranslation,
+  TranslationValue,
+} from '@ls-stack/i18n-core';

@@ -1,4 +1,4 @@
-import { beforeAll, describe, expect, test } from 'vitest';
+import { beforeAll, describe, expect, test, vi } from 'vitest';
 import { i18nitialize } from '../src/main';
 
 let i18n = i18nitialize({
@@ -114,7 +114,7 @@ describe('pluralization', () => {
   test('fallback to hash when no translation is found', () => {
     const { __p } = i18n.with('pt');
 
-    expect(__p(1)`# unknown`).toBe('# unknown');
+    expect(__p(1)`# unknown`).toBe('1 unknown');
   });
 
   test('using invalid method should throw an error', () => {
@@ -158,5 +158,61 @@ describe('translation variations', () => {
     const { __ } = i18n.with('en');
 
     expect(__`hello {1}~~formal`).toBe('hello {1}');
+  });
+});
+
+describe('plural fallback count', () => {
+  beforeAll(() => {
+    i18n = i18nitialize({
+      locales: {
+        en: {
+          '# files uploaded by {1}': {
+            one: '1 file uploaded by {1}',
+            '+2': null,
+          },
+          '# pending tasks': null,
+        },
+        pt: {
+          '# items': { one: '1 item', '+2': '# itens' },
+        },
+      },
+    });
+  });
+
+  test('replaces # with the count when the translation is missing', () => {
+    const { __p } = i18n.with('pt');
+
+    expect(__p(0)`# new messages`).toBe('0 new messages');
+    expect(__p(12)`# new messages from ${'Ana'}`).toBe(
+      '12 new messages from Ana',
+    );
+  });
+
+  test('replaces # with the count when no plural form matches', () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const { __p } = i18n.with('en');
+
+    expect(__p(1)`# files uploaded by ${'Ana'}`).toBe('1 file uploaded by Ana');
+    expect(__p(5)`# files uploaded by ${'Ana'}`).toBe(
+      '5 files uploaded by Ana',
+    );
+    expect(errorSpy).toHaveBeenCalledWith(
+      'No plural configured for hash: # files uploaded by {1}',
+    );
+
+    errorSpy.mockRestore();
+  });
+
+  test('replaces # with the count when the translation is pending (null)', () => {
+    const { __p } = i18n.with('en');
+
+    expect(__p(3)`# pending tasks`).toBe('3 pending tasks');
+  });
+
+  test('replaces # with the count when a plural variant is missing', () => {
+    const { __p } = i18n.with('pt');
+
+    expect(__p(2)`# items`).toBe('2 itens');
+    expect(__p(5)`# items~~verbose`).toBe('5 items');
   });
 });
