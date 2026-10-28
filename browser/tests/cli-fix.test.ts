@@ -517,6 +517,42 @@ test('fix adds null for missing $ prefixed translations', async () => {
   `);
 });
 
+test('fix adds missing $ prefixed translations to the default locale', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.tsx': `
+        import { __ } from '@ls-stack/i18n';
+        export const intro = __\`$onboarding_intro \${'Ana'}\`;
+        export const title = __\`Welcome back\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({}),
+      'pt.json': JSON.stringify({
+        '$onboarding_intro {1}': 'Olá {1}, vamos configurar seu primeiro agente',
+        'Welcome back': 'Bem-vindo de volta',
+      }),
+    },
+  });
+
+  const result = await ctx.validate({ fix: true, defaultLocale: 'en' });
+
+  expect(result.hasError).toBe(true);
+  expect(result.infos).toEqual([
+    '🟠 en.json:2 translations keys were added',
+    '✅ pt.json translations are up to date',
+  ]);
+
+  expect(ctx.getConfigFileRaw('en.json')).toMatchInlineSnapshot(`
+    "{
+      "👇 missing start 👇": "🛑 delete this line 🛑",
+      "$onboarding_intro {1}": null,
+      "👆 missing end 👆": "🛑 delete this line 🛑",
+      "": ""
+    }"
+  `);
+});
+
 test('fix mode reports error for variant translation equal to key', async () => {
   const ctx = createCliTestContext({
     src: {

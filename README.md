@@ -145,7 +145,7 @@ __`hello ${'John'}`; // "hello John"
 __`hello ${'John'}~~formal`; // "good day, John"
 ```
 
-If a variant isn't found, it falls back to the base translation.
+If a variant isn't found, it falls back to the source string without the `~~variant` suffix (not to the locale's base translation). Variants behave the same in the server and browser packages.
 
 ### Large Translations (`$` prefix)
 
@@ -164,6 +164,8 @@ This is useful for:
 - Large blocks of text (terms, policies, descriptions)
 - Translations where the ID is a key, not readable text
 - Preventing long fallback strings from appearing in the UI
+
+Since a `$` id isn't displayable text, it must also be translated in the default locale (`"$terms_of_service": "Terms of service..."`). The CLI reports `$` ids that are missing or `null` in the default locale, and `--fix` adds them as `null` under the missing markers.
 
 ## Server Package (`@ls-stack/server-i18n`)
 
