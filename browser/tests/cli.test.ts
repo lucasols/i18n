@@ -634,6 +634,79 @@ test('$ prefixed translation with null value is valid (pending)', async () => {
   `);
 });
 
+test('$ prefixed translation missing from the default locale is reported', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.tsx': `
+        import { __ } from '@ls-stack/i18n';
+        export const intro = __\`$onboarding_intro \${'Ana'}\`;
+        export const title = __\`Welcome back\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({}),
+      'pt.json': JSON.stringify({
+        '$onboarding_intro {1}': 'Olá {1}, vamos configurar seu primeiro agente',
+        'Welcome back': 'Bem-vindo de volta',
+      }),
+    },
+  });
+
+  const result = await ctx.validate({ defaultLocale: 'en' });
+
+  expect(result.hasError).toBe(true);
+  expect(result.errors).toEqual([
+    '❌ en.json has invalid translations: missing 1',
+  ]);
+  expect(result.infos).toContain('✅ pt.json translations are up to date');
+});
+
+test('$ prefixed translation with null value in the default locale is reported as missing', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.tsx': `
+        import { __ } from '@ls-stack/i18n';
+        export const t = __\`$terms_of_service\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({ $terms_of_service: null }),
+      'pt.json': JSON.stringify({ $terms_of_service: 'Termos de serviço...' }),
+    },
+  });
+
+  const result = await ctx.validate({ defaultLocale: 'en' });
+
+  expect(result.hasError).toBe(true);
+  expect(result.errors).toEqual([
+    '❌ en.json has invalid translations: missing 1, extra 1',
+  ]);
+});
+
+test('$ prefixed translation with text in the default locale is valid', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'main.tsx': `
+        import { __ } from '@ls-stack/i18n';
+        export const t = __\`$terms_of_service\`;
+        export const title = __\`Welcome back\`;
+      `,
+    },
+    config: {
+      'en.json': JSON.stringify({ $terms_of_service: 'Terms of service...' }),
+      'pt.json': JSON.stringify({
+        $terms_of_service: 'Termos de serviço...',
+        'Welcome back': 'Bem-vindo de volta',
+      }),
+    },
+  });
+
+  const result = await ctx.validate({ defaultLocale: 'en' });
+
+  expect(result.hasError).toBe(false);
+  expect(result.errors).toEqual([]);
+});
+
 test('check mode reports existing null translations as missing for non-default locale', async () => {
   const ctx = createCliTestContext({
     src: {

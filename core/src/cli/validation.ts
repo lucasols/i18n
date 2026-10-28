@@ -600,10 +600,19 @@ export async function validateTranslations(
     const localeFileHashs = Object.keys(localeTranslations);
 
     const extraHashs = new Set(localeFileHashs);
-    const missingHashs = new Set([
-      ...(isDefaultLocale ? [] : [...allStringTranslationHashs]),
-      ...allPluralTranslationHashs,
-    ]);
+    const missingHashs = new Set<string>();
+
+    for (const hash of allStringTranslationHashs) {
+      // the default locale falls back to the source string, except for `$`
+      // ids, whose source string is not displayable text
+      if (!isDefaultLocale || hash.startsWith('$')) {
+        missingHashs.add(hash);
+      }
+    }
+
+    for (const hash of allPluralTranslationHashs) {
+      missingHashs.add(hash);
+    }
 
     extraHashs.delete('');
 
@@ -611,16 +620,21 @@ export async function validateTranslations(
       if (allStringTranslationHashs.has(hash)) {
         const translationValue = localeTranslations[hash];
         const isNullTranslation = translationValue === null;
+        const isShortId = hash.startsWith('$');
 
         const isUnneededDefaultHash =
-          isDefaultLocale && (isNullTranslation || translationValue === hash);
+          isDefaultLocale &&
+          !isShortId &&
+          (isNullTranslation || translationValue === hash);
 
-        const isIncompleteNonDefaultTranslation =
-          defaultLocale !== undefined && !isDefaultLocale && isNullTranslation;
+        const isIncompleteTranslation =
+          defaultLocale !== undefined &&
+          isNullTranslation &&
+          (!isDefaultLocale || isShortId);
 
         if (isUnneededDefaultHash) {
           missingHashs.delete(hash);
-        } else if (!isIncompleteNonDefaultTranslation) {
+        } else if (!isIncompleteTranslation) {
           missingHashs.delete(hash);
           extraHashs.delete(hash);
         }
