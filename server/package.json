@@ -7,8 +7,10 @@
     "test": "vitest run",
     "tsc": "tsc -p tsconfig.prod.json",
     "build:no-test": "tsdown",
+    "build": "pnpm tsc && pnpm test && pnpm build:no-test",
     "test-cli:check": "pnpm build:no-test && node dist/cli.mjs --default en --config-dir ../cli-test/config --src-dir ../cli-test/src",
-    "test-cli:fix": "pnpm test-cli:check --fix"
+    "test-cli:fix": "pnpm test-cli:check --fix",
+    "pre-publish": "../scripts/check-if-is-sync.sh && pnpm build"
   },
   "files": [
     "dist"
@@ -28,6 +30,9 @@
     }
   },
   "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=21.5.0"
   },
