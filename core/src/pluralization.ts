@@ -26,3 +26,8 @@ export function selectPluralForm(
 
   return null;
 }
+
+/** Replaces the `#` count placeholder of a plural fallback string */
+export function replaceHashWithNum(fallback: string, num: number): string {
+  return fallback.replace('#', String(num));
+}

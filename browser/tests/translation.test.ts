@@ -139,9 +139,9 @@ describe('formatted values in translations', () => {
 
     await controller.setLocale('en-GB');
 
-    expect(
-      __`O valor é ${__num(100_000_000)} somado a ${__num(1.99)}`,
-    ).toBe('The value is 100,000,000 added to 1.99');
+    expect(__`O valor é ${__num(100_000_000)} somado a ${__num(1.99)}`).toBe(
+      'The value is 100,000,000 added to 1.99',
+    );
   });
 });
 
@@ -200,6 +200,20 @@ describe('pluralization', () => {
     expect(errorSpy).toHaveBeenCalled();
 
     errorSpy.mockRestore();
+  });
+
+  test('pending (null) plural translation falls back with the count', async () => {
+    const controller = createTestController({
+      locales: {
+        en: {
+          '# pending tasks': null,
+        },
+      },
+    });
+
+    await controller.setLocale('en');
+
+    expect(__p(3)`# pending tasks`).toBe('3 pending tasks');
   });
 
   test('uses +2 translation when many/zero are missing', async () => {

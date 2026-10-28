@@ -1,6 +1,7 @@
 import {
   createHashAndFallbackTranslation,
   interpolate,
+  replaceHashWithNum,
   selectPluralForm,
 } from '@ls-stack/i18n-core';
 import { createElement, Fragment, type ReactNode } from 'react';
@@ -9,10 +10,6 @@ import { assertDevScope, getState } from './state';
 const JSX_INTERPOLATION_SPLITTER = /{(\d+)}/;
 
 export type JsxInterpolation = string | number | ReactNode;
-
-function replaceHashWithNum(fallback: string, num: number): string {
-  return fallback.replace('#', String(num));
-}
 
 export function __(
   strings: TemplateStringsArray,
@@ -89,7 +86,10 @@ export function __p(num: number) {
         return replaceHashWithNum(fallbackTranslation, num);
       }
 
-      return interpolate(translation, exprs) || fallbackTranslation;
+      return (
+        interpolate(translation, exprs) ||
+        replaceHashWithNum(fallbackTranslation, num)
+      );
     }
 
     if (selectedTranslation) {
@@ -98,7 +98,7 @@ export function __p(num: number) {
       );
     }
 
-    return fallbackTranslation;
+    return replaceHashWithNum(fallbackTranslation, num);
   };
 }
 
@@ -188,7 +188,10 @@ export function __pjsx(num: number) {
     const { translations } = getState();
 
     if (!translations) {
-      return interpolateJsx(replaceHashWithNum(fallbackTranslation, num), exprs);
+      return interpolateJsx(
+        replaceHashWithNum(fallbackTranslation, num),
+        exprs,
+      );
     }
 
     const selectedTranslation = translations[hash];
@@ -197,7 +200,10 @@ export function __pjsx(num: number) {
       if (fallbackTranslation.startsWith('$')) {
         return '…';
       }
-      return interpolateJsx(replaceHashWithNum(fallbackTranslation, num), exprs);
+      return interpolateJsx(
+        replaceHashWithNum(fallbackTranslation, num),
+        exprs,
+      );
     }
 
     if (
@@ -208,7 +214,10 @@ export function __pjsx(num: number) {
 
       if (translation === null) {
         console.error(`No plural configured for hash: ${hash}`);
-        return interpolateJsx(replaceHashWithNum(fallbackTranslation, num), exprs);
+        return interpolateJsx(
+          replaceHashWithNum(fallbackTranslation, num),
+          exprs,
+        );
       }
 
       return interpolateJsx(translation, exprs);
@@ -220,6 +229,6 @@ export function __pjsx(num: number) {
       );
     }
 
-    return interpolateJsx(fallbackTranslation, exprs);
+    return interpolateJsx(replaceHashWithNum(fallbackTranslation, num), exprs);
   };
 }

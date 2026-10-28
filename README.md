@@ -129,6 +129,8 @@ __p(5)`# apples`; // "5 apples"
 __p(15)`# apples`; // "many apples" (manyLimit: 10)
 ```
 
+When the translation is missing, pending (`null`) or has no matching form, the source string is used with `#` replaced by the count (`__p(3)`# pears`` → `"3 pears"`).
+
 ### Translation Variants
 
 Create alternative translations by appending `~~variant`:
