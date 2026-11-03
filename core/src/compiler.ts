@@ -1,5 +1,6 @@
 import MagicString, { type SourceMap } from 'magic-string';
 import ts from '@typescript/typescript6';
+import { MISSING_TRANSLATION } from './constants';
 import { parseSourceFile, QUICK_CHECK_REGEX } from './scriptKind';
 
 export { IGNORED_DIRS, isTranslationSourceFile } from './scriptKind';
@@ -765,7 +766,7 @@ function compilePlural(
 /**
  * Compiles a translation value following the same fallback rules of the
  * uncompiled runtime: missing or invalid values fall back to the source
- * string, missing `$` translations are marked with `0`.
+ * string, missing `$` translations are `…` (marked with `0` in plurals).
  */
 export function compileTranslation(
   key: TranslationKey,
@@ -774,7 +775,9 @@ export function compileTranslation(
   const fallback = getFallback(key.hash);
 
   if (value === undefined) {
-    return key.hash.startsWith('$') ? 0 : fallback;
+    if (!key.hash.startsWith('$')) return fallback;
+
+    return key.plural ? 0 : MISSING_TRANSLATION;
   }
 
   if (key.plural) {
@@ -815,7 +818,8 @@ export function compileLocaleModule(
   return `export default JSON.parse(${JSON.stringify(json)});\n`;
 }
 
-type RuntimeFn = '__t' | '__tp' | '__tjsx' | '__tpjsx';
+/** `__l` is the array of the active locale strings, read with `__l[id]` */
+type RuntimeFn = '__l' | '__t' | '__tp' | '__tjsx' | '__tpjsx';
 
 const UNICODE_ESCAPE_REGEX = /\\u(?:([\da-fA-F]{4})|\{([\da-fA-F]+)\})/g;
 
@@ -845,8 +849,15 @@ function getLocalPrefix(code: string): string {
   return prefix;
 }
 
+/**
+ * Translations without interpolations are read from the locale array
+ * (`__l[id]`). The React Compiler treats the read of an imported binding as a
+ * constant, so it doesn't add a memoization block for each translation like
+ * it does for the function calls.
+ */
 function getRuntimeFn(call: TranslationCall): RuntimeFn {
   if (call.plural) return call.jsx ? '__tpjsx' : '__tp';
+  if (call.exprs.length === 0) return '__l';
   return call.jsx ? '__tjsx' : '__t';
 }
 
@@ -884,7 +895,8 @@ function getLineBreaks(code: string, start: number, end: number): string {
 
 /**
  * Replaces the tagged template calls with id based calls, e.g.
- * `` __`Hello ${name}` `` → `__i18n__t(3, name)`
+ * `` __`Hello ${name}` `` → `__i18n__t(3, name)` and `` __`Inbox` `` →
+ * `__i18n__l[4]`
  */
 export function transformTranslations({
   fileName,
@@ -908,6 +920,15 @@ export function transformTranslations({
 
     if (devFallbacks && !fallbacks.has(id)) {
       fallbacks.set(id, compileTranslation(call, undefined));
+    }
+
+    if (fn === '__l') {
+      s.overwrite(
+        call.start,
+        call.end,
+        `${localPrefix}__l[${id}${getLineBreaks(code, call.start, call.end)}]`,
+      );
+      continue;
     }
 
     let cursor = call.start;

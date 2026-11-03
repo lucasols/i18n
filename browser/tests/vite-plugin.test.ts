@@ -323,6 +323,7 @@ describe('vite dev server', { timeout: 30_000 }, () => {
     const result = await server.transformRequest('/src/chat/chatMenu.tsx');
 
     expect(result?.code).not.toMatch(/__(p|jsx|pjsx)?(\([^)]*\))?`/);
+    expect(result?.code).toContain('__i18n__l[');
     expect(result?.code).toContain('__i18n__t(');
     expect(result?.code).toContain('__i18n__tpjsx(');
     expect(result?.code).toContain('__i18n__registerDevFallbacks(');
@@ -359,7 +360,7 @@ describe('vite dev server', { timeout: 30_000 }, () => {
       file,
     );
 
-    const match = /__i18n__t\((\d+)\)/.exec(result.code);
+    const match = /__i18n__l\[(\d+)\]/.exec(result.code);
     const newId = Number(match?.[1]);
 
     expect(newId).toBe(14);
@@ -496,7 +497,7 @@ async function readBuiltTranslation(
   const main = await readFile(path.join(buildDir, 'main.js'), 'utf-8');
 
   const id = new RegExp(
-    `function ${exportName}\\(\\) \\{\\s*return \\w+\\((\\d+)\\)`,
+    `function ${exportName}\\(\\) \\{\\s*return \\w+\\[(\\d+)\\]`,
   ).exec(main)?.[1];
   const localeFile = new RegExp(
     `import\\("\\./(assets/${locale}-[\\w-]+\\.js)"\\)`,

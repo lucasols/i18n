@@ -1,4 +1,5 @@
 import {
+  MISSING_TRANSLATION,
   type CompiledLocale,
   type CompiledPlural,
   type CompiledTranslation,
@@ -9,12 +10,17 @@ import {
   getDevFallback,
   getState,
   registerDevFallbacks,
-  reportErrorOnce,
+  reportUncompiledLocale,
 } from './state';
 import type { JsxInterpolation } from './translate';
 
+/**
+ * Strings of the active compiled locale, the vite plugin compiles the
+ * translations without interpolations to `__l[id]`
+ */
+export { compiledStrings as __l } from './state';
+
 const PLACEHOLDER_SPLITTER = /{(\d+)}/;
-const MISSING_TRANSLATION = '…';
 
 /** Literal parts as strings and interpolation positions (0 based) as numbers */
 type TemplateParts = (string | number)[];
@@ -40,16 +46,10 @@ export function __registerDevFallbacks(
 }
 
 function getTranslation(id: number): CompiledTranslation | undefined {
-  const { compiledTranslations, translations, activeLocale } = getState();
+  const { compiledTranslations, translations } = getState();
 
   if (!compiledTranslations) {
-    if (!translations) return undefined;
-
-    // renders empty like in production, where there are no dev fallbacks
-    reportErrorOnce(
-      'uncompiled-locale',
-      `I18n error: the locale "${activeLocale}" was not compiled by the vite plugin, the locale loader must import a JSON file from the plugin localesDir`,
-    );
+    if (translations) reportUncompiledLocale();
     return undefined;
   }
 

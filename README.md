@@ -444,12 +444,14 @@ The vite plugin compiles the translations of the app, in both build and dev serv
 - Translation calls are replaced by numeric id calls, so the source strings are removed from the app code and lookups are array accesses instead of building and hashing the source string on every call:
 
   ```tsx
+  __`Inbox`; // → __l[4]
   __`Hello ${name}`; // → __t(3, name)
   __p(count)`You have # messages`; // → __tp(7, count)
   __jsx`Click ${(<a />)}`; // → __tjsx(2, <a />)
   ```
 
 - Locale files imported by the locale loaders are compiled to arrays indexed by the translation ids. Translation keys and translations not used by the `srcDir` source files are removed and missing translations are filled with the source string, so each user only downloads the strings of their own locale. Strings used anywhere in `srcDir`, including tests and stories, are kept.
+- Translations without interpolations (`__` and `__jsx`) are compiled to a read of the active locale strings (`__l[id]`) instead of a call. The React Compiler treats these reads as constants, so they don't add a memoization block each to the components.
 - The output has no tagged templates, which keeps the components compatible with the React Compiler.
 
 ```ts
@@ -564,7 +566,7 @@ ls-stack-i18n --config-dir ./src/locales --src-dir ./src --ids-file i18n-ids.jso
 
 #### Rendering with the React Compiler
 
-The React Compiler memoizes the compiled calls as their values don't depend on props or state, so a component keeps the text of the locale it first rendered with. Render the translated tree only after the locale loads and remount it when the locale changes:
+The React Compiler memoizes the compiled calls and treats the compiled string reads (`__l[id]`) as constants, as their values don't depend on props or state, so a component keeps the text of the locale it first rendered with. Render the translated tree only after the locale loads and remount it when the locale changes:
 
 ```tsx
 function Root() {
@@ -578,16 +580,7 @@ function Root() {
 
 #### Testing with Vitest
 
-When Vitest uses the same vite config, the plugin also compiles the code under test, so components rendered before a locale is loaded get empty strings. Load a locale in a setup file:
-
-```ts
-// vitest.setup.ts
-import { i18n } from './src/i18n';
-
-await i18n.setLocale('en');
-```
-
-Or don't apply the plugin in tests:
+Don't apply the plugin in tests. The code under test then uses the uncompiled runtime, so components render the source strings without loading a locale and the module can be mocked like any other:
 
 ```ts
 // vite.config.ts
@@ -599,13 +592,29 @@ export default defineConfig({
 });
 ```
 
-With the plugin applied, the compiled code imports the compiled functions (`__t`, `__tp`, `__tjsx`, `__tpjsx` and `__registerDevFallbacks`) from `@ls-stack/i18n`, so a mock of the module must keep them:
+If the plugin is applied in tests, components rendered before a locale is loaded get empty strings, so load a locale in a setup file:
 
 ```ts
-vi.mock('@ls-stack/i18n', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@ls-stack/i18n')>()),
-  // mocked functions
-}));
+// vitest.setup.ts
+import { i18n } from './src/i18n';
+
+await i18n.setLocale('en');
+```
+
+The compiled code also imports the compiled functions and strings (`__l`, `__t`, `__tp`, `__tjsx`, `__tpjsx` and `__registerDevFallbacks`) from `@ls-stack/i18n`, so a mock of the module must keep them. `__l` is replaced on each locale load, so read it with a getter, a spread copy keeps the strings of the moment the mock was created:
+
+```ts
+vi.mock('@ls-stack/i18n', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@ls-stack/i18n')>();
+
+  return {
+    ...original,
+    get __l() {
+      return original.__l;
+    },
+    // mocked functions
+  };
+});
 ```
 
 ## CLI Tool

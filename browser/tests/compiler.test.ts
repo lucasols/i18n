@@ -491,9 +491,9 @@ describe('transformTranslations', () => {
     );
 
     expect(code?.split('\n')[0]).toBe(
-      "import { __t as __i18n1__t } from '@ls-stack/i18n';const __i18\\u006e__t = 42;",
+      "import { __l as __i18n1__l } from '@ls-stack/i18n';const __i18\\u006e__t = 42;",
     );
-    expect(code).toContain('export const label = __i18n1__t(0);');
+    expect(code).toContain('export const label = __i18n1__l[0];');
   });
 
   test('replaces tagged templates with id based calls', () => {
@@ -510,8 +510,8 @@ describe('transformTranslations', () => {
 
     expect(code).toBe(
       [
-        `import { __t as __i18n__t, __tp as __i18n__tp, __tjsx as __i18n__tjsx, __tpjsx as __i18n__tpjsx } from '@ls-stack/i18n';import { __, __jsx, __p, __pjsx } from '@ls-stack/i18n';`,
-        `export const title = __i18n__t(2);`,
+        `import { __l as __i18n__l, __t as __i18n__t, __tp as __i18n__tp, __tjsx as __i18n__tjsx, __tpjsx as __i18n__tpjsx } from '@ls-stack/i18n';import { __, __jsx, __p, __pjsx } from '@ls-stack/i18n';`,
+        `export const title = __i18n__l[2];`,
         `export const welcome = (name: string) => __i18n__t(1, name);`,
         `export const unread = (count: number) => __i18n__tp(4, count);`,
         `export const link = (name: string) => __i18n__tjsx(3, <strong>{name}</strong>);`,
@@ -548,7 +548,7 @@ describe('transformTranslations', () => {
     );
 
     expect(code).toBe(
-      `'use client';import { __t as __i18n__t } from '@ls-stack/i18n';\nexport const label = __i18n__t(0);`,
+      `'use client';import { __l as __i18n__l } from '@ls-stack/i18n';\nexport const label = __i18n__l[0];`,
     );
   });
 
@@ -559,7 +559,7 @@ describe('transformTranslations', () => {
     );
 
     expect(code).toBe(
-      `#!/usr/bin/env node\n'use strict';import { __t as __i18n__t } from '@ls-stack/i18n';\nconsole.info(__i18n__t(0));`,
+      `#!/usr/bin/env node\n'use strict';import { __l as __i18n__l } from '@ls-stack/i18n';\nconsole.info(__i18n__l[0]);`,
     );
 
     const { code: withoutDirectives } = compileSource(
@@ -568,7 +568,7 @@ describe('transformTranslations', () => {
     );
 
     expect(withoutDirectives).toBe(
-      `#!/usr/bin/env node\nimport { __t as __i18n__t } from '@ls-stack/i18n';console.info(__i18n__t(0));`,
+      `#!/usr/bin/env node\nimport { __l as __i18n__l } from '@ls-stack/i18n';console.info(__i18n__l[0]);`,
     );
   });
 
@@ -578,7 +578,7 @@ describe('transformTranslations', () => {
     );
 
     expect(code).toBe(
-      `'use client';import { __t as __i18n__t } from '@ls-stack/i18n';\nexport const label = __i18n__t(0);`,
+      `'use client';import { __l as __i18n__l } from '@ls-stack/i18n';\nexport const label = __i18n__l[0];`,
     );
   });
 
@@ -607,6 +607,44 @@ describe('transformTranslations', () => {
     );
   });
 
+  test('translations without interpolations read the compiled strings', () => {
+    const { code } = compileSource(
+      [
+        `export const Header = () => (`,
+        `  <header title={__\`Direct Messages\`}>{__jsx\`Archived conversations\`}</header>`,
+        `);`,
+        `export const empty = (count: number) => __p(count)\`# unread messages\`;`,
+      ].join('\n'),
+    );
+
+    expect(code).toBe(
+      [
+        `import { __l as __i18n__l, __tp as __i18n__tp } from '@ls-stack/i18n';export const Header = () => (`,
+        `  <header title={__i18n__l[2]}>{__i18n__l[1]}</header>`,
+        `);`,
+        `export const empty = (count: number) => __i18n__tp(0, count);`,
+      ].join('\n'),
+    );
+  });
+
+  test('keeps the line numbers of multiline translations without interpolations', () => {
+    const source = [
+      `export function getHint() {`,
+      `  const hint = __\`Archived conversations`,
+      `    can be restored\`;`,
+      `  return hint;`,
+      `}`,
+    ].join('\n');
+
+    const { code } = compileSource(source, { sourcemap: false });
+    const lines = code?.split('\n') ?? [];
+
+    expect(lines).toHaveLength(5);
+    expect(lines[1]).toBe('  const hint = __i18n__l[0');
+    expect(lines[2]).toBe('];');
+    expect(lines[3]).toBe('  return hint;');
+  });
+
   test('runtime imports do not collide with identifiers of the file', () => {
     const { code } = compileSource(
       'const __i18n__t = 1;\nexport const label = __`Saved`;',
@@ -614,8 +652,8 @@ describe('transformTranslations', () => {
 
     expect(code).toBe(
       [
-        `import { __t as __i18n1__t } from '@ls-stack/i18n';const __i18n__t = 1;`,
-        'export const label = __i18n1__t(0);',
+        `import { __l as __i18n1__l } from '@ls-stack/i18n';const __i18n__t = 1;`,
+        'export const label = __i18n1__l[0];',
       ].join('\n'),
     );
   });
@@ -631,8 +669,9 @@ describe('transformTranslations', () => {
     );
 
     expect(code?.split('\n')[0]).toBe(
-      `import { __t as __i18n__t, __registerDevFallbacks as __i18n__registerDevFallbacks } from '@ls-stack/i18n';__i18n__registerDevFallbacks([[1,"Hello {1}, welcome back!"],[0,0]]);const welcome = __i18n__t(1, name);`,
+      `import { __t as __i18n__t, __l as __i18n__l, __registerDevFallbacks as __i18n__registerDevFallbacks } from '@ls-stack/i18n';__i18n__registerDevFallbacks([[1,"Hello {1}, welcome back!"],[0,"…"]]);const welcome = __i18n__t(1, name);`,
     );
+    expect(code).toContain('const terms = __i18n__l[0];');
   });
 
   test('generates source maps pointing to the original code', () => {
@@ -918,7 +957,7 @@ describe('compileLocale', () => {
     expect(compiled).toEqual([
       [0, 0, '# files in {1}'],
       '# members',
-      0,
+      '…',
       'Direct Messages',
       'Export as PDF',
       'Hello {1}, welcome back!',
