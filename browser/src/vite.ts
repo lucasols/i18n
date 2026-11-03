@@ -704,6 +704,15 @@ export function i18nVitePlugin({
         const sizeBefore = currentRegistry.size;
         const isInSrcDir = srcPaths.some((dir) => file.startsWith(`${dir}/`));
 
+        for (const call of analysis.calls) {
+          if (call.literalPlaceholder) {
+            this.warn(
+              `Translation "${call.hash}" has a literal "{n}" in its text, it can't be told apart from an interpolation placeholder, so the fallback and the translations replace it with an interpolated value. Interpolate it instead, e.g. \`\${'{1}'}\``,
+              call.start,
+            );
+          }
+        }
+
         const result = transformTranslations({
           fileName: file,
           code,

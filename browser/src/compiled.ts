@@ -19,7 +19,13 @@ const MISSING_TRANSLATION = '…';
 /** Literal parts as strings and interpolation positions (0 based) as numbers */
 type TemplateParts = (string | number)[];
 
+/** Parsed templates of the form `0` (simple translations and `zero`), by id */
 let partsCache: (TemplateParts | undefined)[] = [];
+/**
+ * Parsed templates of the plural forms `1` to `3`, by `id * 4 + form`. Most
+ * ids never use them, so they are kept apart to not preallocate their slots.
+ */
+let pluralPartsCache = new Map<number, TemplateParts>();
 let partsCacheLocale: CompiledLocale | null = null;
 
 /**
@@ -69,10 +75,7 @@ type PluralForm = 0 | 1 | 2 | 3;
 
 const FORMS_PER_ID = 4;
 
-/**
- * Parsed templates are cached by `id * 4 + plural form`, simple translations
- * use the form `0`.
- */
+/** Parsed templates are cached by id and plural form, simple translations use the form `0` */
 function getCachedTemplateParts(
   id: number,
   form: PluralForm,
@@ -83,16 +86,28 @@ function getCachedTemplateParts(
   if (partsCacheLocale !== compiledTranslations) {
     partsCacheLocale = compiledTranslations;
     partsCache = new Array<TemplateParts | undefined>(
-      (compiledTranslations?.length ?? 0) * FORMS_PER_ID,
+      compiledTranslations?.length ?? 0,
     );
+    pluralPartsCache = new Map();
+  }
+
+  if (form === 0) {
+    let parts = partsCache[id];
+
+    if (!parts) {
+      parts = parseTemplate(template);
+      partsCache[id] = parts;
+    }
+
+    return parts;
   }
 
   const cacheKey = id * FORMS_PER_ID + form;
-  let parts = partsCache[cacheKey];
+  let parts = pluralPartsCache.get(cacheKey);
 
   if (!parts) {
     parts = parseTemplate(template);
-    partsCache[cacheKey] = parts;
+    pluralPartsCache.set(cacheKey, parts);
   }
 
   return parts;

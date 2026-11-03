@@ -69,8 +69,11 @@ const pt = {
   },
   'Message {1} directly': 'Enviar mensagem direta para {1}',
   '# files shared in {1}': {
+    zero: 'Nenhum arquivo compartilhado em {1}',
     one: '1 arquivo compartilhado em {1}',
     '+2': '# arquivos compartilhados em {1}',
+    many: 'Muitos arquivos compartilhados em {1}',
+    manyLimit: 99,
   },
   '# files in {1}': {
     zero: 'Nenhum arquivo em {1}',
@@ -181,6 +184,48 @@ describe('compiled translations', () => {
 
     expect(__tp(sharedId, 1, '#design')).toBe('1 files shared in #design');
     expect(__tp(sharedId, 3, '#design')).toBe('3 files shared in #design');
+  });
+
+  test('each interpolated plural form is cached separately', async () => {
+    const { id, controller } = setup();
+    const sharedId = id('# files shared in {1}', { plural: true });
+    const welcomeId = id('Hello {1}, welcome back!');
+
+    await controller.setLocale('pt');
+
+    const renderAll = (channel: string) => [
+      __tp(sharedId, 0, channel),
+      __tp(sharedId, 1, channel),
+      __tp(sharedId, 4, channel),
+      __tp(sharedId, 250, channel),
+      __t(welcomeId, channel),
+    ];
+
+    const expectedPt = (channel: string) => [
+      `Nenhum arquivo compartilhado em ${channel}`,
+      `1 arquivo compartilhado em ${channel}`,
+      `4 arquivos compartilhados em ${channel}`,
+      `Muitos arquivos compartilhados em ${channel}`,
+      `Olá ${channel}, bem-vindo de volta!`,
+    ];
+
+    // the second render uses the cached templates of every form
+    expect(renderAll('#design')).toEqual(expectedPt('#design'));
+    expect(renderAll('#general')).toEqual(expectedPt('#general'));
+
+    await controller.setLocale('en');
+
+    expect(renderAll('#design')).toEqual([
+      '0 files shared in #design',
+      '1 files shared in #design',
+      '4 files shared in #design',
+      '250 files shared in #design',
+      'Hello #design, welcome back!',
+    ]);
+
+    await controller.setLocale('pt');
+
+    expect(renderAll('#random')).toEqual(expectedPt('#random'));
   });
 
   test('cached interpolations are updated when the locale changes', async () => {

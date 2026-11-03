@@ -956,6 +956,46 @@ describe('vite build of a copy of the app', { timeout: 30_000 }, () => {
     });
   });
 
+  test('warns when a translation has a literal {n} in its text', async () => {
+    await withFixtureCopy(async (copyRoot) => {
+      const legalFile = path.join(copyRoot, 'src/legal.ts');
+      await writeFile(
+        legalFile,
+        `${await readFile(legalFile, 'utf-8')}\nexport function getTemplateHelp() {\n  return __\`Use {1} to insert the customer name\`;\n}\n`,
+      );
+
+      const warnings: Rollup.RollupLog[] = [];
+      const buildOptions = getBuildOptions(copyRoot);
+
+      await build({
+        ...getViteConfig(copyRoot),
+        build: {
+          ...buildOptions,
+          rollupOptions: {
+            ...buildOptions?.rollupOptions,
+            onwarn: (warning) => {
+              warnings.push(warning);
+            },
+          },
+        },
+      });
+
+      const literalWarnings = warnings.filter((warning) =>
+        warning.message.includes('has a literal "{n}"'),
+      );
+
+      // only the new call, the interpolated calls of the app don't warn
+      expect(literalWarnings).toHaveLength(1);
+      expect(literalWarnings[0]?.message).toContain(
+        'Use {1} to insert the customer name',
+      );
+      expect(literalWarnings[0]?.loc?.file).toBe(
+        path.join(await realpath(copyRoot), 'src/legal.ts'),
+      );
+      expect(literalWarnings[0]?.loc?.line).toBe(13);
+    });
+  });
+
   test('compiles locale files with a UTF-8 BOM', async () => {
     await withFixtureCopy(async (copyRoot) => {
       const ptFile = path.join(copyRoot, 'locales/pt.json');

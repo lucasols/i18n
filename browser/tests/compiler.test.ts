@@ -65,6 +65,40 @@ describe('analyzeTranslations', () => {
     ]);
   });
 
+  test('flags calls with a literal {n} in their text', () => {
+    const { calls } = analyzeTranslations(
+      '/app/src/Templates.tsx',
+      `
+        export function TemplateHelp({ field, count }: Props) {
+          return [
+            __\`Use {1} to insert the customer name\`,
+            __\`Type \${field} or {2} in the subject\`,
+            __p(count)\`# templates use {1} and \${field}\`,
+            __\`Hello \${field}, welcome back!\`,
+            __\`Use {name} or {} for the default value\`,
+          ];
+        }
+      `,
+    );
+
+    expect(
+      calls.map(({ hash, literalPlaceholder }) => ({
+        hash,
+        literalPlaceholder,
+      })),
+    ).toEqual([
+      { hash: 'Use {1} to insert the customer name', literalPlaceholder: true },
+      { hash: 'Type {1} or {2} in the subject', literalPlaceholder: true },
+      // the literal {1} and the interpolation get the same placeholder
+      { hash: '# templates use {1} and {1}', literalPlaceholder: true },
+      { hash: 'Hello {1}, welcome back!', literalPlaceholder: false },
+      {
+        hash: 'Use {name} or {} for the default value',
+        literalPlaceholder: false,
+      },
+    ]);
+  });
+
   test('ignores member calls and calls that are not translations', () => {
     const { calls } = analyzeTranslations(
       '/app/src/server.ts',

@@ -40,6 +40,11 @@ export type TranslationCall = TranslationKey & {
   /** Range of the `__p(count)` argument */
   count: Range | null;
   exprs: ExprRange[];
+  /**
+   * The literal text has a `{n}`, which can't be told apart from the
+   * interpolation placeholders of the hash
+   */
+  literalPlaceholder: boolean;
 };
 
 export type TranslationAnalysis = {
@@ -51,6 +56,8 @@ export type TranslationAnalysis = {
 const emptyAnalysis: TranslationAnalysis = { calls: [], insertPos: 0 };
 
 type FoundCall = { fnName: string; call: TranslationCall };
+
+const LITERAL_PLACEHOLDER_REGEX = /\{\d+\}/;
 
 function getTranslationCall(
   node: ts.TaggedTemplateExpression,
@@ -113,6 +120,7 @@ function getTranslationCall(
   }
 
   let hash: string;
+  let literalPlaceholder: boolean;
   const exprs: ExprRange[] = [];
 
   // calls with syntax errors are left untouched, so the parser that runs after
@@ -121,8 +129,10 @@ function getTranslationCall(
     if (template.isUnterminated) return null;
 
     hash = template.text;
+    literalPlaceholder = LITERAL_PLACEHOLDER_REGEX.test(hash);
   } else {
     hash = template.head.text;
+    literalPlaceholder = LITERAL_PLACEHOLDER_REGEX.test(hash);
 
     for (let i = 0; i < template.templateSpans.length; i++) {
       const span = template.templateSpans[i];
@@ -140,6 +150,7 @@ function getTranslationCall(
       }
 
       hash += `{${i + 1}}${literal.text}`;
+      literalPlaceholder ||= LITERAL_PLACEHOLDER_REGEX.test(literal.text);
       exprs.push({
         start,
         end: expression.end,
@@ -160,6 +171,7 @@ function getTranslationCall(
       end: node.end,
       count,
       exprs,
+      literalPlaceholder,
     },
   };
 }
