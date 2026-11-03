@@ -162,7 +162,11 @@ function getTranslationCall(
   };
 }
 
-/** Name of a local (non import) declaration, e.g. `const { __ } = i18n` */
+/**
+ * Name of a local (non import) declaration, e.g. `const { __ } = i18n`.
+ * Namespaces are ignored, they can't be called and type only ones don't
+ * create a runtime binding.
+ */
 function getLocalDeclarationName(node: ts.Node): string | null {
   if (
     (ts.isVariableDeclaration(node) ||
@@ -172,8 +176,7 @@ function getLocalDeclarationName(node: ts.Node): string | null {
       ts.isClassDeclaration(node) ||
       ts.isFunctionExpression(node) ||
       ts.isClassExpression(node) ||
-      ts.isEnumDeclaration(node) ||
-      ts.isModuleDeclaration(node)) &&
+      ts.isEnumDeclaration(node)) &&
     node.name &&
     ts.isIdentifier(node.name)
   ) {
@@ -339,14 +342,19 @@ function getDeclarationScope(
 
 const NAME_OCCURRENCE_REGEX = new RegExp(QUICK_CHECK_REGEX.source, 'g');
 
-/** `_` or `\u{5f}`, the only escape that can hide a translation name */
-const ESCAPED_UNDERSCORE_REGEX = /\\u(?:005[fF]|\{0*5[fF]\})/;
+/**
+ * Escapes of the letters of the translation names (`_`, `p`, `j`, `s`, `x`),
+ * e.g. `\u005f_` or `__js\u0078`, the only escapes that can spell a name
+ */
+const ESCAPED_NAME_LETTER_REGEX =
+  /\\u(?:00(?:5[fF]|6[aA]|7[038])|\{0*(?:5[fF]|6[aA]|7[038])\})/;
 
 /**
  * Sorted positions of the translation function names in the code, `null` if
- * there are none. An escaped underscore can spell a name without matching the
- * regex (e.g. `__`), so code that has one is fully analyzed (`'all'`)
- * once it has a plain name, the files without one are skipped like before.
+ * there are none. An escaped letter can spell a name without matching the
+ * regex (e.g. `\u005f_` or `__js\u0078`), so code that has one is fully
+ * analyzed (`'all'`) once it has a plain name, the files without one are
+ * skipped like before.
  */
 function findNameOccurrences(code: string): number[] | 'all' | null {
   const occurrences: number[] = [];
@@ -361,7 +369,7 @@ function findNameOccurrences(code: string): number[] | 'all' | null {
 
   if (occurrences.length === 0) return null;
 
-  return ESCAPED_UNDERSCORE_REGEX.test(code) ? 'all' : occurrences;
+  return ESCAPED_NAME_LETTER_REGEX.test(code) ? 'all' : occurrences;
 }
 
 /** Whether a sorted occurrence is inside the node text (including its trivia) */
@@ -653,11 +661,28 @@ export function compileLocaleModule(
 
 type RuntimeFn = '__t' | '__tp' | '__tjsx' | '__tpjsx';
 
-/** Prefix of the runtime imports that doesn't collide with the file identifiers */
+const UNICODE_ESCAPE_REGEX = /\\u(?:([\da-fA-F]{4})|\{([\da-fA-F]+)\})/g;
+
+/** Code with the unicode escapes decoded, identifiers can be spelled with them */
+function decodeUnicodeEscapes(code: string): string {
+  return code.replace(
+    UNICODE_ESCAPE_REGEX,
+    (escape, hex4: string | undefined, hexCodePoint: string | undefined) => {
+      const codePoint = Number.parseInt(hex4 ?? hexCodePoint ?? '', 16);
+      return codePoint <= 0x10ffff ? String.fromCodePoint(codePoint) : escape;
+    },
+  );
+}
+
+/**
+ * Prefix of the runtime imports that doesn't collide with the file
+ * identifiers, including the ones spelled with escapes (e.g. `__i18\u006e__t`)
+ */
 function getLocalPrefix(code: string): string {
+  const searchedCode = code.includes('\\u') ? decodeUnicodeEscapes(code) : code;
   let prefix = LOCAL_PREFIX;
 
-  for (let i = 1; code.includes(prefix); i++) {
+  for (let i = 1; searchedCode.includes(prefix); i++) {
     prefix = `${LOCAL_PREFIX}${i}`;
   }
 

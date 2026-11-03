@@ -17,6 +17,7 @@ import { pathToFileURL } from 'node:url';
 import { Children, isValidElement, type ReactNode } from 'react';
 import {
   build,
+  createBuilder,
   createServer,
   type InlineConfig,
   type Rollup,
@@ -1053,6 +1054,30 @@ describe('vite build of a copy of the app', { timeout: 30_000 }, () => {
         },
       }),
     ).rejects.toThrow("i18nVitePlugin() can't be used in library builds");
+  });
+
+  test('fails when an environment builds a library', async () => {
+    const builder = await createBuilder({
+      ...getViteConfig(root),
+      builder: { sharedConfigBuild: true },
+      environments: {
+        sdk: {
+          consumer: 'client',
+          build: {
+            ...getBuildOptions(root),
+            outDir: path.join(root, 'dist-sdk'),
+            lib: { entry: path.join(root, 'src/main.ts'), formats: ['es'] },
+          },
+        },
+      },
+    });
+
+    const sdk = builder.environments.sdk;
+    if (!sdk) throw new Error('Missing sdk environment');
+
+    await expect(builder.build(sdk)).rejects.toThrow(
+      "i18nVitePlugin() can't be used in library builds",
+    );
   });
 });
 

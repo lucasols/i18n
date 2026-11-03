@@ -73,6 +73,8 @@ function isUnreadableEntryError(error: unknown): boolean {
   return UNREADABLE_ENTRY_ERRORS.has(getErrorCode(error));
 }
 
+const LIBRARY_BUILD_ERROR = `[${PLUGIN_NAME}] i18nVitePlugin() can't be used in library builds, the compiled translation ids only match the locales of the app build that compiled them. Use it in the app that consumes the library`;
+
 /** Source maps can be enabled by `sourcemap` or by the rollup output options */
 function hasSourcemaps(build: ResolvedBuildEnvironmentOptions): boolean {
   if (build.sourcemap) return true;
@@ -123,11 +125,43 @@ function stripBom(content: string): string {
   return content.charCodeAt(0) === 0xfeff ? content.slice(1) : content;
 }
 
+/**
+ * Max file system operations of a scan running at the same time, the walk
+ * starts every read at once and large source dirs would exhaust the file
+ * descriptors (`EMFILE`). Measured without a slowdown on a 3k files app.
+ */
+const MAX_CONCURRENT_FS_OPERATIONS = 64;
+
+type FsLimit = <T>(operation: () => Promise<T>) => Promise<T>;
+
+function createFsLimit(): FsLimit {
+  let active = 0;
+  const waiting: (() => void)[] = [];
+
+  return async (operation) => {
+    if (active < MAX_CONCURRENT_FS_OPERATIONS) {
+      active++;
+    } else {
+      // the finished operation hands its slot over, `active` stays the same
+      await new Promise<void>((resolve) => waiting.push(resolve));
+    }
+
+    try {
+      return await operation();
+    } finally {
+      const next = waiting.shift();
+      if (next) next();
+      else active--;
+    }
+  };
+}
+
 type WalkOptions = {
   /** Walks symlinks by their own path instead of the real path */
   preserveSymlinks: boolean;
   /** Real paths of the walked symlinked directories, prevents cycles */
   visitedDirs: Set<string>;
+  limitFs: FsLimit;
 };
 
 async function getStats(file: string): Promise<Stats | null> {
@@ -153,7 +187,9 @@ async function forEachSourceFile(
   let entries: Dirent[];
 
   try {
-    entries = await readdir(dir, { withFileTypes: true });
+    entries = await options.limitFs(() =>
+      readdir(dir, { withFileTypes: true }),
+    );
   } catch (error) {
     if (isUnreadableEntryError(error)) return;
     throw error;
@@ -182,7 +218,7 @@ async function forEachSourceFile(
 
       if (!entry.isSymbolicLink()) return;
 
-      const stats = await getStats(fullPath);
+      const stats = await options.limitFs(() => getStats(fullPath));
       if (!stats) return;
 
       const target = getRealPath(fullPath);
@@ -284,20 +320,33 @@ export function i18nVitePlugin({
   async function scanSourceDir(
     srcRoot: string,
     keys: TranslationKey[],
-    { isWatchBuild, isRebuild }: { isWatchBuild: boolean; isRebuild: boolean },
+    {
+      isWatchBuild,
+      isRebuild,
+      scannedStats,
+      limitFs,
+    }: {
+      isWatchBuild: boolean;
+      isRebuild: boolean;
+      /** Stats of this scan, saved only after its keys reach the registry */
+      scannedStats: Map<string, FileStats>;
+      /** Shared by the scans of every source dir */
+      limitFs: FsLimit;
+    },
   ): Promise<void> {
     const walkOptions: WalkOptions = {
       preserveSymlinks,
       visitedDirs: new Set([getRealPath(srcRoot)]),
+      limitFs,
     };
 
     await forEachSourceFile(srcRoot, srcRoot, walkOptions, async (file) => {
       if (isWatchBuild) {
-        const stats = await getStats(file);
+        const stats = await limitFs(() => getStats(file));
         if (!stats) return;
 
         const previous = scannedFiles.get(file);
-        scannedFiles.set(file, {
+        scannedStats.set(file, {
           size: stats.size,
           mtimeMs: stats.mtimeMs,
           ctimeMs: stats.ctimeMs,
@@ -318,7 +367,7 @@ export function i18nVitePlugin({
       let code: string;
 
       try {
-        code = await readFile(file, 'utf-8');
+        code = await limitFs(() => readFile(file, 'utf-8'));
       } catch (error) {
         if (isUnreadableEntryError(error)) return;
         throw error;
@@ -347,7 +396,12 @@ export function i18nVitePlugin({
 
     const keys: TranslationKey[] = [];
 
-    const scanOptions = { isWatchBuild, isRebuild: registry !== null };
+    const scanOptions = {
+      isWatchBuild,
+      isRebuild: registry !== null,
+      scannedStats: new Map<string, FileStats>(),
+      limitFs: createFsLimit(),
+    };
 
     await Promise.all([
       scanLocaleFiles(),
@@ -359,6 +413,11 @@ export function i18nVitePlugin({
       registry.addKeys(keys);
     } else {
       registry = TranslationRegistry.fromKeys(keys);
+    }
+
+    // a failed scan keeps the previous stats, so its files are read again
+    for (const [file, stats] of scanOptions.scannedStats) {
+      scannedFiles.set(file, stats);
     }
 
     return registry;
@@ -430,11 +489,7 @@ export function i18nVitePlugin({
       isBuild = config.command === 'build';
       generateSourcemaps = shouldGenerateSourcemaps(config);
 
-      if (isBuild && config.build.lib) {
-        throw new Error(
-          `[${PLUGIN_NAME}] i18nVitePlugin() can't be used in library builds, the compiled translation ids only match the locales of the app build that compiled them. Use it in the app that consumes the library`,
-        );
-      }
+      if (isBuild && config.build.lib) throw new Error(LIBRARY_BUILD_ERROR);
 
       rootImporter = `${normalizePath(config.root)}/index.html`;
 
@@ -496,6 +551,15 @@ export function i18nVitePlugin({
     },
 
     async buildStart() {
+      // environments can enable library mode on their own (vite 6+)
+      if (
+        isBuild &&
+        'environment' in this &&
+        this.environment.config.build.lib
+      ) {
+        this.error(LIBRARY_BUILD_ERROR);
+      }
+
       await startScan(isBuild && this.meta.watchMode);
 
       if (localeNames.size === 0) {

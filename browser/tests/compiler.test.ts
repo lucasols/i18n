@@ -358,6 +358,21 @@ describe('analyzeTranslations', () => {
     expect(calls.map((call) => call.hash)).toEqual(['Title']);
   });
 
+  test('declarations with an escaped letter in the name still shadow the translation functions', () => {
+    const { calls } = analyzeTranslations(
+      '/app/src/notes.tsx',
+      `
+        export function renderNote(highlight: Tag, text: string) {
+          const __js\\u0078 = highlight;
+          return __jsx\`Note: \${text}\`;
+        }
+        export const title = __\`Notes\`;
+      `,
+    );
+
+    expect(calls.map((call) => call.hash)).toEqual(['Notes']);
+  });
+
   test('optional chain and `new` tagged templates are left untouched', () => {
     const { calls } = analyzeTranslations(
       '/app/src/Toolbar.tsx',
@@ -376,7 +391,7 @@ describe('analyzeTranslations', () => {
     expect(calls.map((call) => call.hash)).toEqual(['Save']);
   });
 
-  test('enums and namespaces named like the translation functions shadow them', () => {
+  test('enums named like the translation functions shadow them', () => {
     const { calls } = analyzeTranslations(
       '/app/src/legacy.ts',
       `
@@ -385,16 +400,32 @@ describe('analyzeTranslations', () => {
           return __\`Saved\`;
         }
 
-        export function getHelpLabels() {
-          namespace __p { export const one = 'help' }
-          return __p(1)\`# articles\`;
-        }
-
         export const title = __\`Title\`;
       `,
     );
 
     expect(calls.map((call) => call.hash)).toEqual(['Title']);
+  });
+
+  test('namespaces named like the translation functions do not shadow them', () => {
+    // a namespace can't be called, so `__` still refers to the global function
+    const { calls } = analyzeTranslations(
+      '/app/src/help.ts',
+      `
+        namespace __p {
+          export type Form = 'one' | 'other';
+        }
+
+        export function getHelpLabel(count: number, form: __p.Form) {
+          return form === 'one' ? __\`One article\` : __p(count)\`# articles\`;
+        }
+      `,
+    );
+
+    expect(calls.map((call) => call.hash)).toEqual([
+      'One article',
+      '# articles',
+    ]);
   });
 
   test('declaration files are not translation sources', () => {
@@ -412,6 +443,21 @@ describe('analyzeTranslations', () => {
 });
 
 describe('transformTranslations', () => {
+  test('the runtime imports do not collide with identifiers spelled with escapes', () => {
+    const { code } = compileSource(
+      [
+        'const __i18\\u006e__t = 42;',
+        'export const answer = __i18\\u006e__t;',
+        'export const label = __`Saved`;',
+      ].join('\n'),
+    );
+
+    expect(code?.split('\n')[0]).toBe(
+      "import { __t as __i18n1__t } from '@ls-stack/i18n';",
+    );
+    expect(code).toContain('export const label = __i18n1__t(0);');
+  });
+
   test('replaces tagged templates with id based calls', () => {
     const { code } = compileSource(
       [
