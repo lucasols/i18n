@@ -284,11 +284,13 @@ function checkIdsFile({
   const name = path.basename(idsPath);
   const relativeToConfig = path.relative(configPath, idsPath);
 
-  // it would be read as a locale file
-  if (
-    !relativeToConfig.startsWith('..') &&
-    !path.isAbsolute(relativeToConfig)
-  ) {
+  const isOutsideConfig =
+    relativeToConfig === '..' ||
+    relativeToConfig.startsWith(`..${path.sep}`) ||
+    path.isAbsolute(relativeToConfig);
+
+  // it would be read as a locale file, a name like `..ids.json` is inside
+  if (!isOutsideConfig) {
     log.error(`❌ The ids file ${name} must be outside of the config dir`);
     return false;
   }
@@ -320,15 +322,24 @@ function checkIdsFile({
 
   const state = stableIds ? getIdsFileState(registry, stableIds) : 'outdated';
 
-  if (state === 'up-to-date') {
-    if (fix && content !== updatedContent) {
+  function writeIdsFile(): boolean {
+    try {
       fs.writeFileSync(idsPath, updatedContent);
+      return true;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      log.error(`❌ Failed to write the ids file ${name}: ${message}`);
+      return false;
     }
+  }
+
+  if (state === 'up-to-date') {
+    if (fix && content !== updatedContent) return writeIdsFile();
     return true;
   }
 
   if (fix) {
-    fs.writeFileSync(idsPath, updatedContent);
+    if (!writeIdsFile()) return false;
     log.info(`✅ ${name} translation ids ${stableIds ? 'updated' : 'created'}`);
     return true;
   }
@@ -573,10 +584,17 @@ export async function validateTranslations(
   >();
   const localeFiles: Array<{ fullPath: string; basename: string }> = [];
 
-  for await (const entry of fs.scanDir(configPath, {
-    fileFilter: (entry) => entry.path.endsWith('.json'),
-  })) {
-    localeFiles.push(entry);
+  // an incomplete scan would make `fix` skip the locales it couldn't read
+  try {
+    for await (const entry of fs.scanDir(configPath, {
+      fileFilter: (entry) => entry.path.endsWith('.json'),
+    })) {
+      localeFiles.push(entry);
+    }
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    log.error(`❌ Failed to scan the locale files: ${message}`);
+    return { hasError: true };
   }
 
   for (const { fullPath, basename } of localeFiles) {

@@ -575,9 +575,9 @@ export class TranslationRegistry {
       newKeys.set(getRegistryKey(hash, plural), { hash, plural });
     }
 
-    // in the order of the file, so an id taken by two translations (e.g. when
-    // merging branches that added different translations) is resolved the
-    // same way everywhere
+    // in sorted order, not in the order of the file, so an id taken by two
+    // translations (e.g. when merging branches that added different
+    // translations) is resolved the same way everywhere
     const keptIds = [...stableIds]
       .flatMap(([registryKey, id]) => {
         const key = newKeys.get(registryKey);

@@ -772,7 +772,8 @@ test('$ prefixed translation missing from the default locale is reported', async
     config: {
       'en.json': JSON.stringify({}),
       'pt.json': JSON.stringify({
-        '$onboarding_intro {1}': 'Olá {1}, vamos configurar seu primeiro agente',
+        '$onboarding_intro {1}':
+          'Olá {1}, vamos configurar seu primeiro agente',
         'Welcome back': 'Bem-vindo de volta',
       }),
     },
@@ -1169,7 +1170,110 @@ test('reports an --ids-file that is a directory', async () => {
   );
 });
 
+test('rejects an ids file inside the config dir, including names starting with ..', async () => {
+  for (const name of ['i18n-ids.json', '..ids.json']) {
+    const ctx = createCliTestContext({
+      src: { 'main.tsx': mainTsx },
+      config: {
+        'en.json': JSON.stringify(enCorrectTranslations),
+        'pt.json': JSON.stringify(ptCorrectTranslations),
+      },
+    });
+    ctx.log.clear();
+
+    const result = await validateTranslations({
+      configDir: ctx.configDir,
+      srcDir: ctx.srcDir,
+      fs: ctx.fs,
+      log: ctx.log,
+      noColor: true,
+      fix: true,
+      idsFile: path.join(ctx.configDir, name),
+    });
+
+    expect(result.hasError).toBe(true);
+    expect(ctx.log.errors).toContain(
+      `❌ The ids file ${name} must be outside of the config dir`,
+    );
+    expect(ctx.fs.existsSync(path.join(ctx.configDir, name))).toBe(false);
+  }
+});
+
+test('reports an ids file that cannot be written', async () => {
+  const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'ls-stack-i18n-cli-'));
+  const srcDir = path.join(tmpDir, 'src');
+  const configDir = path.join(tmpDir, 'locales');
+
+  try {
+    await mkdir(srcDir);
+    await mkdir(configDir);
+    await writeFile(path.join(srcDir, 'main.tsx'), mainTsx);
+    await writeFile(
+      path.join(configDir, 'en.json'),
+      JSON.stringify(enCorrectTranslations),
+    );
+
+    const log = createMockLog();
+    const result = await validateTranslations({
+      configDir,
+      srcDir,
+      fix: true,
+      // the CLI doesn't create missing directories
+      idsFile: path.join(tmpDir, 'config/i18n/ids.json'),
+      log,
+    });
+
+    expect(result.hasError).toBe(true);
+    expect(log.errors).toContainEqual(
+      expect.stringContaining('❌ Failed to write the ids file ids.json'),
+    );
+  } finally {
+    await rm(tmpDir, { recursive: true, force: true });
+  }
+});
+
 const isRoot = process.getuid?.() === 0;
+
+// root can read directories without permission
+test.skipIf(isRoot || process.platform === 'win32')(
+  'fails without changing the locales when a locale directory is unreadable',
+  async () => {
+    const tmpDir = await mkdtemp(path.join(os.tmpdir(), 'ls-stack-i18n-cli-'));
+    const srcDir = path.join(tmpDir, 'src');
+    const configDir = path.join(tmpDir, 'locales');
+    const archiveDir = path.join(configDir, 'archive');
+    const ptFile = path.join(configDir, 'pt.json');
+    const ptContent = JSON.stringify({ 'Direct Messages': '' }, null, 2);
+
+    try {
+      await mkdir(srcDir);
+      await mkdir(archiveDir, { recursive: true });
+      await writeFile(
+        path.join(srcDir, 'inbox.ts'),
+        "import { __ } from '@ls-stack/i18n';\nexport const title = __`Direct Messages`;\n",
+      );
+      await writeFile(ptFile, ptContent);
+      await chmod(archiveDir, 0o000);
+
+      const log = createMockLog();
+      const result = await validateTranslations({
+        configDir,
+        srcDir,
+        fix: true,
+        log,
+      });
+
+      expect(result.hasError).toBe(true);
+      expect(log.errors).toContainEqual(
+        expect.stringContaining('❌ Failed to scan the locale files'),
+      );
+      expect(await readFile(ptFile, 'utf-8')).toBe(ptContent);
+    } finally {
+      await chmod(archiveDir, 0o755);
+      await rm(tmpDir, { recursive: true, force: true });
+    }
+  },
+);
 
 // root can read directories without permission
 test.skipIf(isRoot || process.platform === 'win32')(
