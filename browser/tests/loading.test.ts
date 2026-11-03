@@ -52,7 +52,6 @@ describe('loading states', () => {
 
     expect(controller.getLoadedLocale()).toBe('pt');
   });
-
 });
 
 describe('locale switching', () => {
@@ -148,6 +147,193 @@ describe('locale switching', () => {
 
     expect(controller.getLoadedLocale()).toBe('fr');
   });
+
+  test('selecting the loaded locale while another one loads cancels that load', async () => {
+    vi.useFakeTimers();
+
+    const controller = createTestController({
+      locales: { en: { hello: 'hello' }, pt: { hello: 'olá' } },
+      loadingTimes: { en: 50, pt: 200 },
+    });
+    const loadedLocales: string[] = [];
+    controller.onLoad((locale) => loadedLocales.push(locale));
+
+    await vi.advanceTimersByTimeAsync(50);
+    expect(controller.getLoadedLocale()).toBe('en');
+
+    void controller.setLocale('pt');
+    await vi.advanceTimersByTimeAsync(100);
+    await controller.setLocale('en');
+
+    await vi.advanceTimersByTimeAsync(100);
+
+    expect(controller.getLoadedLocale()).toBe('en');
+    expect(__`hello`).toBe('hello');
+    expect(loadedLocales).toEqual(['en']);
+  });
+
+  test('a selection replaced by a newer one resolves to false', async () => {
+    vi.useFakeTimers();
+
+    const controller = createTestController({
+      locales: { en: {}, pt: {}, fr: {} },
+      loadingTimes: { en: 50, pt: 200, fr: 50 },
+    });
+
+    await vi.advanceTimersByTimeAsync(50);
+
+    const ptSelection = controller.setLocale('pt');
+    const frSelection = controller.setLocale('fr');
+
+    await vi.advanceTimersByTimeAsync(200);
+
+    expect(await ptSelection).toBe(false);
+    expect(await frSelection).toBe(true);
+    expect(controller.getLoadedLocale()).toBe('fr');
+  });
+
+  test('a replaced selection settles without waiting for its download', async () => {
+    vi.useFakeTimers();
+
+    const controller = createTestController({
+      locales: { en: { hello: 'hello' }, pt: { hello: 'olá' } },
+      loadingTimes: { en: 50, pt: 2000 },
+    });
+
+    await vi.advanceTimersByTimeAsync(50);
+
+    let ptResult: boolean | null = null;
+    void controller.setLocale('pt').then((result) => {
+      ptResult = result;
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+    await controller.setLocale('en');
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(ptResult).toBe(false);
+    expect(controller.getLoadedLocale()).toBe('en');
+  });
+
+  test('a cancelled selection resolves to false when the same locale is selected again', async () => {
+    vi.useFakeTimers();
+
+    // dynamic imports of the same chunk share the in-flight request
+    let ptImport: Promise<{ default: { hello: string } }> | null = null;
+
+    const controller = i18nitialize({
+      persistenceKey: 'test-reselect',
+      fallbackLocale: 'en',
+      locales: [
+        {
+          id: 'en',
+          loader: async () => {
+            await sleep(10);
+            return { default: { hello: 'hello' } };
+          },
+        },
+        {
+          id: 'pt',
+          loader: () =>
+            (ptImport ??= sleep(200).then(() => ({
+              default: { hello: 'olá' },
+            }))),
+        },
+        {
+          id: 'fr',
+          loader: async () => {
+            await sleep(200);
+            return { default: { hello: 'bonjour' } };
+          },
+        },
+      ],
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+
+    const firstPtSelection = controller.setLocale('pt');
+    const frSelection = controller.setLocale('fr');
+    const secondPtSelection = controller.setLocale('pt');
+
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(await firstPtSelection).toBe(false);
+    expect(await frSelection).toBe(false);
+    expect(await secondPtSelection).toBe(true);
+    expect(controller.getLoadedLocale()).toBe('pt');
+  });
+
+  test('a cancelled failing load is not retried', async () => {
+    vi.useFakeTimers();
+
+    const controller = createTestController({
+      locales: { en: {}, pt: new Error('Network error') },
+      loadingTimes: { en: 50, pt: 200 },
+      retryAttempts: 3,
+      retryDelay: 1000,
+    });
+
+    await vi.advanceTimersByTimeAsync(50);
+
+    const ptSelection = controller.setLocale('pt');
+    await vi.advanceTimersByTimeAsync(100);
+    await controller.setLocale('en');
+
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(await ptSelection).toBe(false);
+    expect(controller.invokedLoaderIds).toEqual(['en', 'pt']);
+    expect(controller.getLoadedLocale()).toBe('en');
+  });
+
+  test('a load cancelled during the retry delay is not retried', async () => {
+    vi.useFakeTimers();
+
+    const controller = createTestController({
+      locales: { en: {}, pt: new Error('Network error') },
+      loadingTimes: { en: 50, pt: 200 },
+      retryAttempts: 3,
+      retryDelay: 1000,
+    });
+
+    await vi.advanceTimersByTimeAsync(50);
+
+    const ptSelection = controller.setLocale('pt');
+    // the first attempt failed and the retry delay is running
+    await vi.advanceTimersByTimeAsync(300);
+    await controller.setLocale('en');
+
+    await vi.advanceTimersByTimeAsync(5000);
+
+    expect(await ptSelection).toBe(false);
+    expect(controller.invokedLoaderIds).toEqual(['en', 'pt']);
+    expect(controller.getLoadedLocale()).toBe('en');
+  });
+
+  test('a load started before resetState does not override a new controller', async () => {
+    vi.useFakeTimers();
+
+    const previousController = createTestController({
+      locales: { en: {}, pt: {} },
+      loadingTimes: { en: 300 },
+    });
+    const previousLoad = previousController.setLocale('en');
+
+    resetState();
+
+    const controller = createTestController({
+      locales: { pt: {}, en: {} },
+      loadingTimes: { pt: 50 },
+    });
+
+    await vi.advanceTimersByTimeAsync(50);
+    expect(controller.getLoadedLocale()).toBe('pt');
+
+    await vi.advanceTimersByTimeAsync(300);
+    await previousLoad;
+
+    expect(controller.getLoadedLocale()).toBe('pt');
+  });
 });
 
 describe('error handling', () => {
@@ -213,7 +399,6 @@ describe('error handling', () => {
     expect(controller.getLoadedLocale()).toBe('en');
   });
 });
-
 
 describe('retry logic', () => {
   test('retries with configured delay before failing', async () => {
