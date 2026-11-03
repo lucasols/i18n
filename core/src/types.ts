@@ -26,7 +26,11 @@ export type CompiledPlural =
       manyLimit: number,
     ];
 
-/** `0` marks a missing `$` translation, rendered as `…` */
+/**
+ * `0` marks a missing `$` plural translation (rendered as `…`) and the free
+ * ids. Missing `$` string translations are compiled to `…`, so the compiled
+ * calls without interpolations can read the strings directly.
+ */
 export type CompiledTranslation = string | 0 | CompiledPlural;
 
 /** Locale compiled by the vite plugin, indexed by translation id */

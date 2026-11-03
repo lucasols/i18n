@@ -5,6 +5,7 @@ import { cleanup, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest';
 import {
   __,
+  __l,
   __p,
   __registerDevFallbacks,
   __timeDuration,
@@ -409,6 +410,147 @@ describe('misconfigured compilation', () => {
 
     expect(__`Direct Messages`).toBe('Direct Messages');
     expect(consoleError).not.toHaveBeenCalled();
+
+    consoleError.mockRestore();
+  });
+});
+
+describe('compiled string reads', () => {
+  const plainHashes = [
+    'Direct Messages',
+    '$terms_of_service',
+    'Export as PDF',
+  ] as const;
+
+  test('before loading, every string is empty', () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const { id } = setup();
+
+    expect(__l[id('Direct Messages')]).toBe('');
+    expect(__l[id('Export as PDF')]).toBe('');
+    expect(consoleError).not.toHaveBeenCalled();
+
+    consoleError.mockRestore();
+  });
+
+  test('read the strings of the active locale', async () => {
+    const { id, controller } = setup();
+
+    await controller.setLocale('pt');
+
+    expect(__l[id('Direct Messages')]).toBe('Mensagens diretas');
+    expect(__l[id('Export as PDF')]).toBe('Export as PDF');
+    expect(__l[id('$terms_of_service')]).toBe('…');
+
+    await controller.setLocale('en');
+
+    expect(__l[id('Direct Messages')]).toBe('Direct Messages');
+    expect(__l[id('$terms_of_service')]).toBe(
+      'By using this app you agree to our terms of service.',
+    );
+  });
+
+  test('render the same strings as the compiled calls', async () => {
+    const { id, controller } = setup();
+
+    for (const locale of ['pt', 'en'] as const) {
+      await controller.setLocale(locale);
+
+      expect(plainHashes.map((hash) => __l[id(hash)])).toEqual(
+        plainHashes.map((hash) => __t(id(hash))),
+      );
+    }
+  });
+
+  test('components remounted with the loaded locale render the new strings', async () => {
+    const { id, controller } = setup();
+    const titleId = id('Direct Messages');
+
+    function Title({ locale }: { locale: string }) {
+      return <h1 key={locale}>{__l[titleId]}</h1>;
+    }
+
+    await controller.setLocale('pt');
+    const { rerender } = render(<Title locale="pt" />);
+
+    expect(screen.getByRole('heading').textContent).toBe('Mensagens diretas');
+
+    await controller.setLocale('en');
+    rerender(<Title locale="en" />);
+
+    expect(screen.getByRole('heading').textContent).toBe('Direct Messages');
+  });
+
+  test('without dev fallbacks, the compiled locale is read without copying it', async () => {
+    const { compile } = createTestCompiler(inboxSource);
+    const compiledPt = compile(pt);
+    const controller = createTestController({ locales: { pt: compiledPt } });
+
+    await controller.setLocale('pt');
+
+    expect(__l).toBe(compiledPt);
+  });
+
+  test('dev fallbacks registered before and after the locale was loaded', async () => {
+    const { id, registry, controller } = setup();
+    const archiveId = registry.add('Archive conversation', false);
+    const privacyId = registry.add('$privacy_policy', false);
+
+    __registerDevFallbacks([
+      [id('Direct Messages'), 'Direct Messages'],
+      [archiveId, 'Archive conversation'],
+    ]);
+    await controller.setLocale('pt');
+
+    expect(__l[id('Direct Messages')]).toBe('Mensagens diretas');
+    expect(__l[archiveId]).toBe('Archive conversation');
+
+    const stringsWithFallbacks = __l;
+    __registerDevFallbacks([[privacyId, '…']]);
+
+    // the modules evaluated after the load fill the same copy
+    expect(__l).toBe(stringsWithFallbacks);
+    expect(__l[privacyId]).toBe('…');
+
+    clearDevFallbacks();
+
+    expect(__l[archiveId]).toBeUndefined();
+    expect(__l[id('Direct Messages')]).toBe('Mensagens diretas');
+  });
+
+  test('dev scope guard blocks the reads until devEnvIsReady is called', async () => {
+    const { id, compile } = createTestCompiler(inboxSource);
+    const controller = createTestController({
+      locales: { pt: compile(pt) },
+      dev: true,
+    });
+
+    await controller.setLocale('pt');
+
+    expect(() => __l[id('Direct Messages')]).toThrowError(/Invalid usage/i);
+
+    controller.devEnvIsReady();
+
+    expect(__l[id('Direct Messages')]).toBe('Mensagens diretas');
+  });
+
+  test('locale loaded without the vite plugin logs an error and renders empty', async () => {
+    const consoleError = vi
+      .spyOn(console, 'error')
+      .mockImplementation(() => {});
+    const { id } = createTestCompiler(inboxSource);
+    const controller = createTestController({ locales: { pt } });
+
+    await controller.setLocale('pt');
+
+    expect(__l[id('Direct Messages')]).toBe('');
+    expect(__t(id('Export as PDF'))).toBe('');
+    expect(consoleError).toHaveBeenCalledOnce();
+    expect(consoleError).toHaveBeenCalledWith(
+      'I18n error: the locale "pt" was not compiled by the vite plugin, the locale loader must import a JSON file from the plugin localesDir',
+    );
 
     consoleError.mockRestore();
   });

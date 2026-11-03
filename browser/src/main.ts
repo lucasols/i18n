@@ -267,7 +267,14 @@ export {
   type RelativeTimeFormat,
   type RelativeTimeUnits,
 } from './formatters';
-export { __registerDevFallbacks, __t, __tjsx, __tp, __tpjsx } from './compiled';
+export {
+  __l,
+  __registerDevFallbacks,
+  __t,
+  __tjsx,
+  __tp,
+  __tpjsx,
+} from './compiled';
 export {
   resetState,
   type I18nState,

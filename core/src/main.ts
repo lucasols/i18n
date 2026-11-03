@@ -1,3 +1,4 @@
+export { MISSING_TRANSLATION } from './constants';
 export { createHashAndFallbackTranslation } from './hash';
 export { interpolate } from './interpolation';
 export { replaceHashWithNum, selectPluralForm } from './pluralization';

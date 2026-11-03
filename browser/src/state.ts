@@ -78,6 +78,7 @@ export function configure<T extends string>(options: {
   retryAttempts = options.retryAttempts ?? 3;
   retryDelay = options.retryDelay ?? 1000;
   devMode = options.dev ?? false;
+  updateCompiledStrings();
 
   preloadRegionLocale = cachedGetter(() => {
     const persistedLocale = getPersistedLocale();
@@ -104,6 +105,7 @@ export function isDevMode(): boolean {
 
 export function devEnvIsReady(): void {
   devEnvReady = true;
+  updateCompiledStrings();
 }
 
 export function assertDevScope(): void {
@@ -118,6 +120,16 @@ export function registerDevFallbacks(
   for (const [id, fallback] of entries) {
     devFallbacks.set(id, fallback);
   }
+
+  if (compiledStringsWithFallbacks) {
+    // each compiled module registers its fallbacks, so the copy is filled in
+    // place instead of copying the locale again
+    for (const [id, fallback] of entries) {
+      compiledStringsWithFallbacks[id] ??= fallback;
+    }
+  } else {
+    updateCompiledStrings();
+  }
 }
 
 export function getDevFallback(id: number): CompiledTranslation | undefined {
@@ -130,6 +142,69 @@ export function getDevFallback(id: number): CompiledTranslation | undefined {
  */
 export function clearDevFallbacks(): void {
   devFallbacks.clear();
+  updateCompiledStrings();
+}
+
+export function reportUncompiledLocale(): void {
+  // renders empty like in production, where there are no dev fallbacks
+  reportErrorOnce(
+    'uncompiled-locale',
+    `I18n error: the locale "${state.activeLocale}" was not compiled by the vite plugin, the locale loader must import a JSON file from the plugin localesDir`,
+  );
+}
+
+/**
+ * Read by the compiled translations without interpolations before a compiled
+ * locale is ready (and in dev mode before `devEnvIsReady`), every translation
+ * renders empty like the compiled calls.
+ */
+const emptyCompiledStrings: readonly CompiledTranslation[] = new Proxy<
+  CompiledTranslation[]
+>([], {
+  get(_target, key) {
+    if (typeof key === 'symbol') return undefined;
+
+    assertDevScope();
+    if (state.translations) reportUncompiledLocale();
+
+    return '';
+  },
+});
+
+/**
+ * Strings of the active compiled locale, read directly by the compiled
+ * translations without interpolations (`__l[id]`). The React Compiler treats
+ * the read of an imported binding as a constant, so these translations don't
+ * get a memoization block each. Exported as a live binding.
+ */
+export let compiledStrings: readonly CompiledTranslation[] =
+  emptyCompiledStrings;
+
+/** Copy of the compiled locale with the dev fallbacks (dev server only) */
+let compiledStringsWithFallbacks: CompiledTranslation[] | null = null;
+
+function updateCompiledStrings(): void {
+  const { compiledTranslations } = state;
+  compiledStringsWithFallbacks = null;
+
+  if (!compiledTranslations || (devMode && !devEnvReady)) {
+    compiledStrings = emptyCompiledStrings;
+    return;
+  }
+
+  if (devFallbacks.size === 0) {
+    compiledStrings = compiledTranslations;
+    return;
+  }
+
+  const strings = compiledTranslations.slice();
+
+  for (const [id, fallback] of devFallbacks) {
+    strings[id] ??= fallback;
+  }
+
+  compiledStringsWithFallbacks = strings;
+  compiledStrings = strings;
 }
 
 /** Logs the error only once per error key, used for misconfigurations */
@@ -175,7 +250,13 @@ function notifyListeners() {
 }
 
 function updateState(newState: Partial<I18nState<string>>) {
+  const previousCompiledTranslations = state.compiledTranslations;
   state = { ...state, ...newState };
+
+  if (state.compiledTranslations !== previousCompiledTranslations) {
+    updateCompiledStrings();
+  }
+
   notifyStateListeners();
 }
 
@@ -441,4 +522,5 @@ export function resetState(): void {
   loadingPromise = null;
   loadedLocaleId = null;
   cancelPendingLoad();
+  updateCompiledStrings();
 }
