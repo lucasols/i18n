@@ -580,16 +580,7 @@ function Root() {
 
 #### Testing with Vitest
 
-When Vitest uses the same vite config, the plugin also compiles the code under test, so components rendered before a locale is loaded get empty strings. Load a locale in a setup file:
-
-```ts
-// vitest.setup.ts
-import { i18n } from './src/i18n';
-
-await i18n.setLocale('en');
-```
-
-Or don't apply the plugin in tests:
+Don't apply the plugin in tests. The code under test then uses the uncompiled runtime, so components render the source strings without loading a locale and the module can be mocked like any other:
 
 ```ts
 // vite.config.ts
@@ -601,13 +592,29 @@ export default defineConfig({
 });
 ```
 
-With the plugin applied, the compiled code imports the compiled functions and strings (`__l`, `__t`, `__tp`, `__tjsx`, `__tpjsx` and `__registerDevFallbacks`) from `@ls-stack/i18n`, so a mock of the module must keep them:
+If the plugin is applied in tests, components rendered before a locale is loaded get empty strings, so load a locale in a setup file:
 
 ```ts
-vi.mock('@ls-stack/i18n', async (importOriginal) => ({
-  ...(await importOriginal<typeof import('@ls-stack/i18n')>()),
-  // mocked functions
-}));
+// vitest.setup.ts
+import { i18n } from './src/i18n';
+
+await i18n.setLocale('en');
+```
+
+The compiled code also imports the compiled functions and strings (`__l`, `__t`, `__tp`, `__tjsx`, `__tpjsx` and `__registerDevFallbacks`) from `@ls-stack/i18n`, so a mock of the module must keep them. `__l` is replaced on each locale load, so read it with a getter, a spread copy keeps the strings of the moment the mock was created:
+
+```ts
+vi.mock('@ls-stack/i18n', async (importOriginal) => {
+  const original = await importOriginal<typeof import('@ls-stack/i18n')>();
+
+  return {
+    ...original,
+    get __l() {
+      return original.__l;
+    },
+    // mocked functions
+  };
+});
 ```
 
 ## CLI Tool
