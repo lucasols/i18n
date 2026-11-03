@@ -30,9 +30,6 @@ const parsed = typeFlag({
     alias: 'f',
     default: false,
   },
-  'ids-file': {
-    type: String,
-  },
   'no-color': {
     type: Boolean,
     default: false,
@@ -131,7 +128,6 @@ const { hasError } = await validateTranslations({
   aiTranslator,
   rules,
   maxTranslationIdSize: parsed.flags['max-id-size'],
-  idsFile: parsed.flags['ids-file'],
 });
 
 if (hasError) {

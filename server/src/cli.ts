@@ -57,12 +57,6 @@ if (srcDir.length === 0) {
   process.exit(1);
 }
 
-// the ids file is only used by the vite plugin of @ls-stack/i18n
-if ('ids-file' in parsed.unknownFlags) {
-  console.error('--ids-file is only supported by the @ls-stack/i18n CLI');
-  process.exit(1);
-}
-
 const configDir = parsed.flags['config-dir'];
 if (!configDir) {
   console.error('--config-dir is required');

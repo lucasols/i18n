@@ -1,6 +1,5 @@
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import path from 'path';
-import type ts from '@typescript/typescript6';
 import { readdirp, type EntryInfo } from 'readdirp';
 import {
   rc_null,
@@ -18,20 +17,7 @@ import {
   type TranslationUsage,
 } from './findMissingTranslations';
 import { createSimilarityIndex, findSimilarFromIndex } from './similarity';
-import {
-  analyzeTranslations,
-  getIdsFileState,
-  IGNORED_DIRS,
-  parseIdsFile,
-  serializeIdsFile,
-  TranslationRegistry,
-  type TranslationKey,
-} from '../compiler';
-import {
-  isTranslationSourceFile,
-  parseSourceFile,
-  QUICK_CHECK_REGEX,
-} from '../scriptKind';
+import { IGNORED_DIRS, isTranslationSourceFile } from '../scriptKind';
 
 type LocaleAITranslationTask = {
   fullPath: string;
@@ -85,11 +71,6 @@ export type ValidationOptions = {
   aiTranslator?: AITranslator;
   rules?: ValidationRuleConfig;
   maxTranslationIdSize?: number;
-  /**
-   * File with the translation ids used by the vite plugin, checked to list the
-   * translations of srcDir and updated with `fix`
-   */
-  idsFile?: string;
 };
 
 const pluralTranslationSchema = rc_object({
@@ -262,103 +243,6 @@ export const defaultFs: FileSystem = {
   },
 };
 
-/**
- * Checks that the ids file lists the translations of srcDir, `fix` updates it
- * keeping the ids of the unchanged translations. Returns false on errors.
- */
-function checkIdsFile({
-  idsPath,
-  configPath,
-  keys,
-  fix,
-  fs,
-  log,
-}: {
-  idsPath: string;
-  configPath: string;
-  keys: TranslationKey[];
-  fix: boolean;
-  fs: FileSystem;
-  log: Logger;
-}): boolean {
-  const name = path.basename(idsPath);
-  const relativeToConfig = path.relative(configPath, idsPath);
-
-  const isOutsideConfig =
-    relativeToConfig === '..' ||
-    relativeToConfig.startsWith(`..${path.sep}`) ||
-    path.isAbsolute(relativeToConfig);
-
-  // it would be read as a locale file, a name like `..ids.json` is inside
-  if (!isOutsideConfig) {
-    log.error(`❌ The ids file ${name} must be outside of the config dir`);
-    return false;
-  }
-
-  let content: string | null = null;
-
-  try {
-    content = fs.existsSync(idsPath) ? fs.readFileSync(idsPath, 'utf-8') : null;
-  } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
-    log.error(`❌ Failed to read the ids file ${name}: ${message}`);
-    return false;
-  }
-
-  let stableIds: Map<string, number> | null = null;
-
-  if (content !== null) {
-    try {
-      stableIds = parseIdsFile(content);
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      log.error(`❌ ${name}: ${message}`);
-      return false;
-    }
-  }
-
-  const registry = TranslationRegistry.fromKeys(keys, stableIds ?? undefined);
-  const updatedContent = serializeIdsFile(registry);
-
-  const state = stableIds ? getIdsFileState(registry, stableIds) : 'outdated';
-
-  function writeIdsFile(): boolean {
-    try {
-      fs.writeFileSync(idsPath, updatedContent);
-      return true;
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      log.error(`❌ Failed to write the ids file ${name}: ${message}`);
-      return false;
-    }
-  }
-
-  if (state === 'up-to-date') {
-    if (fix && content !== updatedContent) return writeIdsFile();
-    return true;
-  }
-
-  if (fix) {
-    if (!writeIdsFile()) return false;
-    log.info(`✅ ${name} translation ids ${stableIds ? 'updated' : 'created'}`);
-    return true;
-  }
-
-  // every build resolves them the same way, so merging branches that added
-  // different translations doesn't fail the check
-  if (state === 'duplicated-ids') {
-    log.info(
-      `🟠 ${name} has ids taken by two translations, run with --fix so the ids of both stay stable`,
-    );
-    return true;
-  }
-
-  log.error(
-    `❌ ${name} ${stableIds ? 'is outdated' : 'not found'}, run with --fix to update the translation ids`,
-  );
-  return false;
-}
-
 function hasInterpolationPlaceholder(hash: string): boolean {
   return /\{[0-9]+\}/.test(hash);
 }
@@ -429,7 +313,6 @@ export async function validateTranslations(
     aiTranslator,
     rules = {},
     maxTranslationIdSize = 80,
-    idsFile,
   } = options;
 
   const getRuleSeverity = (rule: ValidationRuleName): RuleSeverity => {
@@ -454,7 +337,7 @@ export async function validateTranslations(
   }
 
   // a misspelled dir would be scanned as empty and `fix` would remove its
-  // translations from the locale and ids files
+  // translations from the locale files
   const missingSrcDirs = srcDirs.filter(
     (dir) => !fs.existsSync(resolveSrcDir(dir)),
   );
@@ -476,8 +359,6 @@ export async function validateTranslations(
   const globalJsxStringTranslations = new Set<string>();
   const globalJsxPluralTranslations = new Set<string>();
   const globalPrimitiveOnlyJsx = new Set<string>();
-  /** Found with the analysis of the vite plugin, which only compiles some of the calls */
-  const compiledKeys: TranslationKey[] = [];
 
   // an incomplete scan would make `fix` delete the translations of the files
   // it couldn't read
@@ -493,19 +374,9 @@ export async function validateTranslations(
 
         const fileTextContent = fs.readFileSync(fullPath, 'utf-8');
 
-        let sourceFile: ts.SourceFile | undefined;
-
-        if (idsFile && QUICK_CHECK_REGEX.test(fileTextContent)) {
-          sourceFile = parseSourceFile(fullPath, fileTextContent);
-          compiledKeys.push(
-            ...analyzeTranslations(fullPath, fileTextContent, sourceFile).calls,
-          );
-        }
-
         const i18nUsages: I18nUsagesResult = getI18nUsagesInCode(
           getIssuePath(srcPath, fullPath),
           fileTextContent,
-          sourceFile,
         );
 
         for (const hash of i18nUsages.stringTranslations) {
@@ -559,24 +430,6 @@ export async function validateTranslations(
     path.isAbsolute(configDir) ? configDir : (
       path.join(process.cwd(), configDir)
     );
-
-  if (idsFile === '') {
-    // e.g. `--ids-file` without a value, the check would be skipped silently
-    log.error('❌ --ids-file requires a file path');
-    hasError = true;
-  } else if (idsFile !== undefined) {
-    const idsFileResult = checkIdsFile({
-      idsPath:
-        path.isAbsolute(idsFile) ? idsFile : path.join(process.cwd(), idsFile),
-      configPath,
-      keys: compiledKeys,
-      fix,
-      fs,
-      log,
-    });
-
-    if (!idsFileResult) hasError = true;
-  }
 
   const allLocaleTranslations = new Map<
     string,
