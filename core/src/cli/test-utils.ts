@@ -51,6 +51,14 @@ export function createVirtualFs(
   flattenTree(rootPath, tree, files);
 
   const fs: FileSystem = {
+    existsSync(filePath) {
+      if (files.has(filePath)) return true;
+      // directories exist when they contain files
+      for (const file of files.keys()) {
+        if (isSubPath(filePath, file)) return true;
+      }
+      return false;
+    },
     readFileSync(filePath, _encoding) {
       const content = files.get(filePath);
       if (content === undefined) {
@@ -117,9 +125,18 @@ export function createMockLog(): MockLog {
 export function createCliTestContext(fixture: {
   src: VirtualFileTree;
   config: VirtualFileTree;
+  /**
+   * Content of the ids file passed with `--ids-file`, `null` passes a file
+   * that doesn't exist yet
+   */
+  idsFile?: string | null;
+  /** Source of a monorepo package, scanned as a second `--src-dir` */
+  packageSrc?: VirtualFileTree;
 }) {
   const srcDir = '/virtual/src';
   const configDir = '/virtual/config';
+  const idsFilePath = '/virtual/i18n-ids.json';
+  const packageSrcDir = '/virtual/packages/ui/src';
 
   const { fs: srcFs, getFile: getSrcFile } = createVirtualFs(
     srcDir,
@@ -131,7 +148,24 @@ export function createCliTestContext(fixture: {
   );
   const log = createMockLog();
 
+  if (typeof fixture.idsFile === 'string') {
+    configFs.writeFileSync(idsFilePath, fixture.idsFile);
+  }
+
+  if (fixture.packageSrc) {
+    const packageFiles = new Map<string, string>();
+    flattenTree(packageSrcDir, fixture.packageSrc, packageFiles);
+
+    for (const [filePath, content] of packageFiles) {
+      configFs.writeFileSync(filePath, content);
+    }
+  }
+
   const combinedFs: FileSystem = {
+    existsSync(filePath) {
+      if (isSubPath(srcDir, filePath)) return srcFs.existsSync(filePath);
+      return configFs.existsSync(filePath);
+    },
     readFileSync(filePath, encoding) {
       if (isSubPath(srcDir, filePath)) {
         return srcFs.readFileSync(filePath, encoding);
@@ -160,11 +194,18 @@ export function createCliTestContext(fixture: {
     aiTranslator?: AITranslator;
     rules?: ValidationRuleConfig;
     maxTranslationIdSize?: number;
+    /** Scanned after the src dirs of the fixture, e.g. a misspelled dir */
+    extraSrcDirs?: string[];
   }) {
     log.clear();
+    const srcDirs = fixture.packageSrc ? [srcDir, packageSrcDir] : [srcDir];
+    const extraSrcDirs = options?.extraSrcDirs ?? [];
     const result = await validateTranslations({
       configDir,
-      srcDir,
+      srcDir:
+        srcDirs.length === 1 && extraSrcDirs.length === 0 ?
+          srcDir
+        : [...srcDirs, ...extraSrcDirs],
       fix: options?.fix,
       defaultLocale: options?.defaultLocale,
       aiTranslator: options?.aiTranslator,
@@ -173,6 +214,7 @@ export function createCliTestContext(fixture: {
       log,
       rules: options?.rules,
       maxTranslationIdSize: options?.maxTranslationIdSize,
+      idsFile: fixture.idsFile === undefined ? undefined : idsFilePath,
     });
 
     return {
@@ -185,6 +227,7 @@ export function createCliTestContext(fixture: {
 
   return {
     srcDir,
+    packageSrcDir,
     configDir,
     fs: combinedFs,
     log,
@@ -192,6 +235,11 @@ export function createCliTestContext(fixture: {
     getSrcFile,
     getConfigFileRaw(filename: string): string | undefined {
       return getConfigFile(filename);
+    },
+    getIdsFile(): string | undefined {
+      return configFs.existsSync(idsFilePath) ?
+          configFs.readFileSync(idsFilePath, 'utf-8')
+        : undefined;
     },
   };
 }

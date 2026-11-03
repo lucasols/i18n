@@ -7,6 +7,12 @@ const DECLARATION_FILE_REGEX = /\.d\.m?ts$/;
 /** Files without a match have no translation calls and are not parsed */
 export const QUICK_CHECK_REGEX = /\b__(?:p|jsx|pjsx)?\b/;
 
+/** Directories skipped by the CLI and the vite plugin scans, matched by name */
+export const IGNORED_DIRS: ReadonlySet<string> = new Set([
+  'node_modules',
+  '.git',
+]);
+
 /** Files scanned for translations by the CLI and compiled by the vite plugin */
 export function isTranslationSourceFile(fileName: string): boolean {
   return (
@@ -21,4 +27,19 @@ export function getScriptKind(fileName: string): ts.ScriptKind {
   if (ext === '.jsx') return ts.ScriptKind.JSX;
   if (ext === '.ts' || ext === '.mts') return ts.ScriptKind.TS;
   return ts.ScriptKind.JS;
+}
+
+/** Shared by the CLI analyses, so each file is only parsed once */
+export function parseSourceFile(fileName: string, code: string): ts.SourceFile {
+  return ts.createSourceFile(
+    fileName,
+    code,
+    {
+      languageVersion: ts.ScriptTarget.Latest,
+      // translations never read JSDoc, skipping it makes the parse faster
+      jsDocParsingMode: ts.JSDocParsingMode.ParseNone,
+    },
+    false,
+    getScriptKind(fileName),
+  );
 }

@@ -18,7 +18,7 @@ const parsed = typeFlag({
     alias: 'c',
   },
   'src-dir': {
-    type: String,
+    type: [String],
     alias: 'r',
   },
   default: {
@@ -29,6 +29,9 @@ const parsed = typeFlag({
     type: Boolean,
     alias: 'f',
     default: false,
+  },
+  'ids-file': {
+    type: String,
   },
   'no-color': {
     type: Boolean,
@@ -52,7 +55,7 @@ const parsed = typeFlag({
 });
 
 const srcDir = parsed.flags['src-dir'];
-if (!srcDir) {
+if (srcDir.length === 0) {
   console.error('--src-dir is required');
   process.exit(1);
 }
@@ -79,9 +82,7 @@ if (aiProviderInput) {
   const provider: AIProvider = aiProviderInput;
 
   const apiKeyEnvVar =
-    provider === 'google' ?
-      'GOOGLE_GENERATIVE_AI_API_KEY'
-    : 'OPENAI_API_KEY';
+    provider === 'google' ? 'GOOGLE_GENERATIVE_AI_API_KEY' : 'OPENAI_API_KEY';
   const hasApiKey = Boolean(process.env[apiKeyEnvVar]);
 
   if (!hasApiKey) {
@@ -130,6 +131,7 @@ const { hasError } = await validateTranslations({
   aiTranslator,
   rules,
   maxTranslationIdSize: parsed.flags['max-id-size'],
+  idsFile: parsed.flags['ids-file'],
 });
 
 if (hasError) {
