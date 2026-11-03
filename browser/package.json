@@ -53,6 +53,7 @@
     "zod": "catalog:"
   },
   "devDependencies": {
+    "@jridgewell/trace-mapping": "^0.3.31",
     "@ls-stack/i18n-core": "workspace:*",
     "@testing-library/react": "catalog:",
     "typescript": "catalog:",

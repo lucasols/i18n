@@ -168,6 +168,9 @@ importers:
         specifier: 'catalog:'
         version: 4.3.6
     devDependencies:
+      '@jridgewell/trace-mapping':
+        specifier: ^0.3.31
+        version: 0.3.31
       '@ls-stack/i18n-core':
         specifier: workspace:*
         version: link:../core

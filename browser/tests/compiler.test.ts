@@ -2,6 +2,7 @@ import {
   analyzeTranslations,
   compileLocale,
   compileLocaleModule,
+  isTranslationSourceFile,
   transformTranslations,
   TranslationRegistry,
 } from '@ls-stack/i18n-core/compiler';
@@ -355,6 +356,58 @@ describe('analyzeTranslations', () => {
     );
 
     expect(calls.map((call) => call.hash)).toEqual(['Title']);
+  });
+
+  test('optional chain and `new` tagged templates are left untouched', () => {
+    const { calls } = analyzeTranslations(
+      '/app/src/Toolbar.tsx',
+      `
+        export function getToolbarLabels(count: number) {
+          return [
+            __?.\`Undo\`,
+            __p?.(count)\`# changes\`,
+            new __\`Redo\`,
+            __\`Save\`,
+          ];
+        }
+      `,
+    );
+
+    expect(calls.map((call) => call.hash)).toEqual(['Save']);
+  });
+
+  test('enums and namespaces named like the translation functions shadow them', () => {
+    const { calls } = analyzeTranslations(
+      '/app/src/legacy.ts',
+      `
+        export function getLegacyLabels() {
+          enum __ { Saved = 'saved' }
+          return __\`Saved\`;
+        }
+
+        export function getHelpLabels() {
+          namespace __p { export const one = 'help' }
+          return __p(1)\`# articles\`;
+        }
+
+        export const title = __\`Title\`;
+      `,
+    );
+
+    expect(calls.map((call) => call.hash)).toEqual(['Title']);
+  });
+
+  test('declaration files are not translation sources', () => {
+    expect(
+      [
+        'src/Inbox.tsx',
+        'src/utils.mts',
+        'src/legacy.cjs',
+        'src/env.d.ts',
+        'src/env.d.mts',
+        'src/env.d.cts',
+      ].filter((file) => isTranslationSourceFile(file)),
+    ).toEqual(['src/Inbox.tsx', 'src/utils.mts', 'src/legacy.cjs']);
   });
 });
 

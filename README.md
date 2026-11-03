@@ -484,7 +484,7 @@ Behavior differences from the uncompiled runtime:
 - The plugin is for app builds only, the compiled ids only match the locales of the build that compiled them, so library builds (`build.lib`) fail. Packages of a monorepo should be compiled by the app that uses them (add their directories to `srcDir`), every `@ls-stack/i18n` import, including the ones of wrapper packages that call `i18nitialize`, is resolved from the app root so all of them share the runtime configured by the app (imports the app root can't resolve keep the normal resolution).
 - On the dev server, editing a locale file reloads the page, so the active locale is loaded again with the new translations.
 
-Performance: source files without `__`, `__p`, `__jsx` or `__pjsx` in their text aren't parsed, and in the files that are, only the parts that contain these names are analyzed. Source maps of the compiled files are generated on the dev server and in builds with `build.sourcemap` enabled, builds without source maps skip them.
+Performance: source files without `__`, `__p`, `__jsx` or `__pjsx` in their text aren't parsed, and in the files that are, only the parts that contain these names are analyzed. Source maps of the compiled files are generated on the dev server and in builds with source maps enabled (`build.sourcemap`, `build.rollupOptions.output.sourcemap` or the `build` options of an environment), builds without source maps skip them.
 
 #### Rendering with the React Compiler
 
@@ -546,7 +546,7 @@ ls-stack-i18n --config-dir ./locales --src-dir ./src --default en
 ls-stack-i18n --config-dir ./locales --src-dir ./src --default en --fix
 ```
 
-The CLI scans the same files compiled by the vite plugin: `.ts`, `.tsx`, `.js`, `.jsx`, `.mts`, `.cts`, `.mjs` and `.cjs`, excluding `.d.ts` declaration files.
+The CLI scans the same files compiled by the vite plugin: `.ts`, `.tsx`, `.js`, `.jsx`, `.mts`, `.cts`, `.mjs` and `.cjs`, excluding `.d.ts`, `.d.mts` and `.d.cts` declaration files.
 
 ### Options
 

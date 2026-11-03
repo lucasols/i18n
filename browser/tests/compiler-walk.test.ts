@@ -58,15 +58,31 @@ test('only walks the parts of the file that contain translation names', () => {
   expect(visitedWith200Handlers).toBeLessThan(30);
 });
 
-test('code with unicode escapes is fully walked', () => {
-  const code = `
-    const nbsp = '\\u00a0';
+test('code with an escaped underscore is fully walked', () => {
+  const code = (escape: string) => `
+    const separator = '${escape}';
     ${getHandlers(10)}
     export const title = __\`Channels\`;
   `;
 
-  const { calls } = analyzeTranslations('/app/src/ChannelList.tsx', code);
+  for (const escape of ['\\u005f', '\\u005F', '\\u{5f}']) {
+    const { calls } = analyzeTranslations(
+      '/app/src/ChannelList.tsx',
+      code(escape),
+    );
 
-  expect(calls.map((call) => call.hash)).toEqual(['Channels']);
-  expect(countVisitedNodes(code)).toBeGreaterThan(100);
+    expect(calls.map((call) => call.hash)).toEqual(['Channels']);
+    expect(countVisitedNodes(code(escape))).toBeGreaterThan(100);
+  }
+});
+
+test('other unicode escapes keep skipping the code without names', () => {
+  const code = `
+    const nbsp = '\\u00a0';
+    const arrow = '\\u{2192}';
+    ${getHandlers(10)}
+    export const title = __\`Channels\`;
+  `;
+
+  expect(countVisitedNodes(code)).toBeLessThan(30);
 });

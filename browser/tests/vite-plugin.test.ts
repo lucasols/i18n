@@ -1,3 +1,4 @@
+import { originalPositionFor, TraceMap } from '@jridgewell/trace-mapping';
 import { existsSync } from 'node:fs';
 import {
   cp,
@@ -296,6 +297,20 @@ describe('vite dev server', { timeout: 30_000 }, () => {
     await server.close();
   });
 
+  test('only loads the locale files of localesDir', async () => {
+    // e.g. requested as `/@id/__x00__ls-stack-i18n-locale/../../../package`
+    await expect(
+      server.environments.client.pluginContainer.load(
+        '\0ls-stack-i18n-locale/../../../package',
+      ),
+    ).rejects.toThrow('Unknown locale "../../../package"');
+
+    const ptLocale = await server.environments.client.pluginContainer.load(
+      '\0ls-stack-i18n-locale/pt',
+    );
+    expect(JSON.stringify(ptLocale)).toContain('Mensagens diretas');
+  });
+
   test('transforms the translations before other plugins run', async () => {
     const result = await server.transformRequest('/src/chat/chatMenu.tsx');
 
@@ -557,44 +572,67 @@ describe('vite build of a copy of the app', { timeout: 30_000 }, () => {
     }
   });
 
-  test('builds with source maps point to the original translation calls', async () => {
-    const { tmpDir: copyDir, root: copyRoot } = await createFixtureCopy();
+  test.each([
+    {
+      name: 'build.sourcemap',
+      getBuild: (appRoot: string): InlineConfig['build'] => ({
+        ...getBuildOptions(appRoot),
+        sourcemap: true,
+      }),
+    },
+    {
+      name: 'rollupOptions.output.sourcemap',
+      getBuild: (appRoot: string): InlineConfig['build'] => {
+        const buildOptions = getBuildOptions(appRoot);
+        const rollupOptions = buildOptions?.rollupOptions;
+        const output = rollupOptions?.output;
 
-    try {
-      await build({
-        ...getViteConfig(copyRoot),
-        build: { ...getBuildOptions(copyRoot), sourcemap: true },
-      });
+        return {
+          ...buildOptions,
+          rollupOptions: {
+            ...rollupOptions,
+            output: {
+              ...(Array.isArray(output) ? undefined : output),
+              sourcemap: true,
+            },
+          },
+        };
+      },
+    },
+  ])(
+    'builds with source maps enabled by $name point to the original translation calls',
+    async ({ getBuild }) => {
+      const { tmpDir: copyDir, root: copyRoot } = await createFixtureCopy();
 
-      const map: unknown = JSON.parse(
-        await readFile(path.join(copyRoot, 'dist/main.js.map'), 'utf-8'),
-      );
+      try {
+        await build({ ...getViteConfig(copyRoot), build: getBuild(copyRoot) });
 
-      if (
-        typeof map !== 'object' ||
-        map === null ||
-        !('sources' in map) ||
-        !('sourcesContent' in map) ||
-        !Array.isArray(map.sources) ||
-        !Array.isArray(map.sourcesContent)
-      ) {
-        throw new Error('Invalid source map');
+        const distDir = path.join(copyRoot, 'dist');
+        const main = await readFile(path.join(distDir, 'main.js'), 'utf-8');
+        const map = new TraceMap(
+          await readFile(path.join(distDir, 'main.js.map'), 'utf-8'),
+        );
+
+        // `return __\`Export as PDF\`` is on line 9 of legal.ts
+        const exportLabelFn = main.indexOf('function getExportLabel()');
+        const compiledCall = main.indexOf('return ', exportLabelFn) + 7;
+        const linesBefore = main.slice(0, compiledCall).split('\n');
+        const original = originalPositionFor(map, {
+          line: linesBefore.length,
+          column: linesBefore.at(-1)?.length ?? 0,
+        });
+
+        expect(exportLabelFn).not.toBe(-1);
+        expect(original.source).toMatch(/src\/legal\.ts$/);
+        expect({ line: original.line, column: original.column }).toEqual({
+          line: 9,
+          column: 9,
+        });
+      } finally {
+        await rm(copyDir, { recursive: true, force: true });
       }
-
-      const chatMenuIndex = map.sources.findIndex(
-        (source) =>
-          typeof source === 'string' && source.endsWith('chat/chatMenu.tsx'),
-      );
-      const chatMenuContent: unknown = map.sourcesContent[chatMenuIndex];
-
-      expect(chatMenuIndex).not.toBe(-1);
-      expect(chatMenuContent).toContain(
-        '__p(count)`You have # unread messages`',
-      );
-    } finally {
-      await rm(copyDir, { recursive: true, force: true });
-    }
-  });
+    },
+  );
 
   test('scans multiple source directories', async () => {
     const { tmpDir: copyDir, root: copyRoot } = await createFixtureCopy();

@@ -13,7 +13,13 @@ import { createHash } from 'node:crypto';
 import { realpathSync, type Dirent, type Stats } from 'node:fs';
 import { readdir, readFile, stat } from 'node:fs/promises';
 import path from 'node:path';
-import { normalizePath, type Plugin, type ViteDevServer } from 'vite';
+import {
+  normalizePath,
+  type Plugin,
+  type ResolvedBuildEnvironmentOptions,
+  type ResolvedConfig,
+  type ViteDevServer,
+} from 'vite';
 
 export type I18nVitePluginOptions = {
   /** Directory with the locale JSON files, relative to the vite root */
@@ -65,6 +71,34 @@ const UNREADABLE_ENTRY_ERRORS: ReadonlySet<unknown> = new Set([
  */
 function isUnreadableEntryError(error: unknown): boolean {
   return UNREADABLE_ENTRY_ERRORS.has(getErrorCode(error));
+}
+
+/** Source maps can be enabled by `sourcemap` or by the rollup output options */
+function hasSourcemaps(build: ResolvedBuildEnvironmentOptions): boolean {
+  if (build.sourcemap) return true;
+
+  const { output } = build.rollupOptions;
+  const outputs = Array.isArray(output) ? output : [output];
+
+  return outputs.some((outputOptions) => !!outputOptions?.sourcemap);
+}
+
+/**
+ * Builds skip the source maps only when no environment generates them, a map
+ * left out of an enabled build would shift the positions of the compiled files
+ */
+function shouldGenerateSourcemaps(config: ResolvedConfig): boolean {
+  if (config.command !== 'build') return true;
+
+  if (hasSourcemaps(config.build)) return true;
+
+  // vite 5 has no environments
+  return (
+    'environments' in config &&
+    Object.values(config.environments).some((environment) =>
+      hasSourcemaps(environment.build),
+    )
+  );
 }
 
 function hashCode(code: string): string {
@@ -205,6 +239,8 @@ export function i18nVitePlugin({
   let localesPaths: string[] = [];
   /** Real paths of symlinked locale files and their locale names */
   const localeRealPaths = new Map<string, string>();
+  /** Names of the locale files in localesDir, the only ids the plugin loads */
+  const localeNames = new Set<string>();
   let devServer: ViteDevServer | null = null;
   let registry: TranslationRegistry | null = null;
   let registryPromise: Promise<TranslationRegistry> | null = null;
@@ -217,12 +253,11 @@ export function i18nVitePlugin({
 
   const analysisCache = new Map<string, CachedAnalysis>();
   const loadedLocaleIds = new Set<string>();
-  let localeFilesCount = 0;
   let hasCompiledCalls = false;
 
   async function scanLocaleFiles(): Promise<void> {
     localeRealPaths.clear();
-    localeFilesCount = 0;
+    localeNames.clear();
 
     let entries: string[];
     try {
@@ -235,7 +270,7 @@ export function i18nVitePlugin({
     for (const entry of entries) {
       if (!entry.endsWith('.json')) continue;
 
-      localeFilesCount++;
+      localeNames.add(path.posix.basename(entry, '.json'));
 
       const file = `${localesPath}/${entry}`;
       const realPath = getRealPath(file);
@@ -393,7 +428,7 @@ export function i18nVitePlugin({
 
     configResolved(config) {
       isBuild = config.command === 'build';
-      generateSourcemaps = !isBuild || config.build.sourcemap !== false;
+      generateSourcemaps = shouldGenerateSourcemaps(config);
 
       if (isBuild && config.build.lib) {
         throw new Error(
@@ -463,7 +498,7 @@ export function i18nVitePlugin({
     async buildStart() {
       await startScan(isBuild && this.meta.watchMode);
 
-      if (localeFilesCount === 0) {
+      if (localeNames.size === 0) {
         const message = `No locale JSON files found in "${localesPath}", check the localesDir option`;
 
         if (isBuild) this.error(message);
@@ -543,7 +578,19 @@ export function i18nVitePlugin({
           return null;
         }
 
-        const file = `${localesPath}/${id.slice(VIRTUAL_LOCALE_PREFIX.length)}.json`;
+        const localeName = id.slice(VIRTUAL_LOCALE_PREFIX.length);
+
+        // ids are only created from the scanned locale files, other ids (e.g.
+        // `../` paths requested from the dev server) must not read files
+        await waitForLocaleScan();
+
+        if (!localeNames.has(localeName)) {
+          return this.error(
+            `Unknown locale "${localeName}", it is not a locale file of "${localesPath}"`,
+          );
+        }
+
+        const file = `${localesPath}/${localeName}.json`;
 
         this.addWatchFile(file);
         const realPath = getRealPath(file);

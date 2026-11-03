@@ -52,9 +52,20 @@ type FoundCall = { fnName: string; call: TranslationCall };
 
 function getTranslationCall(
   node: ts.TaggedTemplateExpression,
+  parent: ts.Node | undefined,
   sourceFile: ts.SourceFile,
 ): FoundCall | null {
   const { tag, template } = node;
+
+  // tagged templates in optional chains (e.g. `__?.` and `__p?.(n)`) are
+  // syntax errors and `new __` constructs the result, they are left untouched
+  // so they keep their errors and meaning
+  if (
+    (node.flags & ts.NodeFlags.OptionalChain) !== 0 ||
+    (parent && ts.isNewExpression(parent) && parent.expression === node)
+  ) {
+    return null;
+  }
 
   let fnName: string;
   let plural: boolean;
@@ -160,7 +171,9 @@ function getLocalDeclarationName(node: ts.Node): string | null {
       ts.isFunctionDeclaration(node) ||
       ts.isClassDeclaration(node) ||
       ts.isFunctionExpression(node) ||
-      ts.isClassExpression(node)) &&
+      ts.isClassExpression(node) ||
+      ts.isEnumDeclaration(node) ||
+      ts.isModuleDeclaration(node)) &&
     node.name &&
     ts.isIdentifier(node.name)
   ) {
@@ -326,10 +339,13 @@ function getDeclarationScope(
 
 const NAME_OCCURRENCE_REGEX = new RegExp(QUICK_CHECK_REGEX.source, 'g');
 
+/** `_` or `\u{5f}`, the only escape that can hide a translation name */
+const ESCAPED_UNDERSCORE_REGEX = /\\u(?:005[fF]|\{0*5[fF]\})/;
+
 /**
  * Sorted positions of the translation function names in the code, `null` if
- * there are none. Unicode escapes can spell a name without matching the
- * regex (e.g. `__`), so code that has them is fully analyzed (`'all'`)
+ * there are none. An escaped underscore can spell a name without matching the
+ * regex (e.g. `__`), so code that has one is fully analyzed (`'all'`)
  * once it has a plain name, the files without one are skipped like before.
  */
 function findNameOccurrences(code: string): number[] | 'all' | null {
@@ -345,7 +361,7 @@ function findNameOccurrences(code: string): number[] | 'all' | null {
 
   if (occurrences.length === 0) return null;
 
-  return code.includes('\\u') ? 'all' : occurrences;
+  return ESCAPED_UNDERSCORE_REGEX.test(code) ? 'all' : occurrences;
 }
 
 /** Whether a sorted occurrence is inside the node text (including its trivia) */
@@ -412,7 +428,7 @@ export function analyzeTranslations(
 
   function collect(node: ts.Node): void {
     if (ts.isTaggedTemplateExpression(node)) {
-      const found = getTranslationCall(node, sourceFile);
+      const found = getTranslationCall(node, ancestors.at(-1), sourceFile);
       if (found) foundCalls.set(node, found);
     } else {
       const declarationName = getLocalDeclarationName(node);
