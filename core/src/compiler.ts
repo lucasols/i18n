@@ -413,8 +413,6 @@ function hasOccurrenceIn(occurrences: number[], node: ts.Node): boolean {
 export function analyzeTranslations(
   fileName: string,
   code: string,
-  /** Already parsed `code`, avoids parsing it again */
-  parsedSourceFile?: ts.SourceFile,
 ): TranslationAnalysis {
   const foundOccurrences = findNameOccurrences(code);
 
@@ -422,7 +420,7 @@ export function analyzeTranslations(
 
   const occurrences: number[] | 'all' = foundOccurrences;
 
-  const sourceFile = parsedSourceFile ?? parseSourceFile(fileName, code);
+  const sourceFile = parseSourceFile(fileName, code);
 
   const foundCalls = new Map<ts.Node, FoundCall>();
   /** Scope nodes and the translation function names they declare */
@@ -550,68 +548,14 @@ function compareKeys(a: TranslationKey, b: TranslationKey): number {
  * the translation in the compiled locales.
  */
 export class TranslationRegistry {
-  /** Indexed by id, `null` marks the free ids between the stable ids */
-  readonly keys: (TranslationKey | null)[] = [];
+  readonly keys: TranslationKey[] = [];
   private readonly ids = new Map<string, number>();
 
-  /**
-   * Creates a registry with deterministic ids. Without `stableIds` the ids
-   * follow the hash order, with it the listed translations keep their ids and
-   * the new ones take the free ids in hash order.
-   */
-  static fromKeys(
-    keys: Iterable<TranslationKey>,
-    stableIds?: StableIds,
-  ): TranslationRegistry {
+  /** Creates a registry with deterministic ids, sorted by hash */
+  static fromKeys(keys: Iterable<TranslationKey>): TranslationRegistry {
     const registry = new TranslationRegistry();
-
-    if (!stableIds) {
-      registry.addKeys(keys);
-      return registry;
-    }
-
-    const newKeys = new Map<string, TranslationKey>();
-
-    for (const { hash, plural } of keys) {
-      newKeys.set(getRegistryKey(hash, plural), { hash, plural });
-    }
-
-    // in sorted order, not in the order of the file, so an id taken by two
-    // translations (e.g. when merging branches that added different
-    // translations) is resolved the same way everywhere
-    const keptIds = [...stableIds]
-      .flatMap(([registryKey, id]) => {
-        const key = newKeys.get(registryKey);
-        return key ? [{ registryKey, key, id }] : [];
-      })
-      .sort((a, b) => compareKeys(a.key, b.key));
-
-    for (const { registryKey, key, id } of keptIds) {
-      if (registry.keys[id]) continue;
-
-      registry.setId(registryKey, key, id);
-      newKeys.delete(registryKey);
-    }
-
-    let freeId = 0;
-
-    for (const key of [...newKeys.values()].sort(compareKeys)) {
-      while (registry.keys[freeId]) freeId++;
-      registry.setId(getRegistryKey(key.hash, key.plural), key, freeId);
-    }
-
+    registry.addKeys(keys);
     return registry;
-  }
-
-  private setId(registryKey: string, key: TranslationKey, id: number): void {
-    while (this.keys.length < id) this.keys.push(null);
-    this.keys[id] = key;
-    this.ids.set(registryKey, id);
-  }
-
-  /** The ids of the translations, keyed like the `ids` of the ids file */
-  getIds(): ReadonlyMap<string, number> {
-    return this.ids;
   }
 
   /** Appends the new keys sorted by hash, existing ids are kept */
@@ -643,98 +587,6 @@ export class TranslationRegistry {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
-
-/**
- * Ids kept across builds, keyed by `s:<hash>` for simple translations and
- * `p:<hash>` for plurals
- */
-export type StableIds = ReadonlyMap<string, number>;
-
-const IDS_FILE_VERSION = 1;
-const IDS_FILE_KEY_REGEX = /^[sp]:/;
-/**
- * Freed ids are reused, so the ids stay below the largest number of
- * translations the app had, a larger id is a corrupted file that would fill
- * the locales with free ids
- */
-const MAX_TRANSLATION_ID = 1_000_000;
-
-export function parseIdsFile(content: string): Map<string, number> {
-  const data: unknown = JSON.parse(
-    content.charCodeAt(0) === 0xfeff ? content.slice(1) : content,
-  );
-
-  if (
-    !isRecord(data) ||
-    data.version !== IDS_FILE_VERSION ||
-    !isRecord(data.ids)
-  ) {
-    throw new Error(
-      `Invalid ids file, expected { "version": ${IDS_FILE_VERSION}, "ids": { ... } }`,
-    );
-  }
-
-  const ids = new Map<string, number>();
-
-  for (const [registryKey, id] of Object.entries(data.ids)) {
-    if (
-      !IDS_FILE_KEY_REGEX.test(registryKey) ||
-      typeof id !== 'number' ||
-      !Number.isInteger(id) ||
-      id < 0 ||
-      id >= MAX_TRANSLATION_ID
-    ) {
-      throw new Error(`Invalid id of "${registryKey}" in the ids file`);
-    }
-
-    ids.set(registryKey, id);
-  }
-
-  return ids;
-}
-
-/** One sorted entry per line, so most merges of the file don't conflict */
-export function serializeIdsFile(registry: TranslationRegistry): string {
-  const entries = registry.keys.flatMap((key, id) =>
-    key ? [{ key, id }] : [],
-  );
-  const ids: Record<string, number> = {};
-
-  for (const { key, id } of entries.sort((a, b) => compareKeys(a.key, b.key))) {
-    ids[getRegistryKey(key.hash, key.plural)] = id;
-  }
-
-  return `${JSON.stringify({ version: IDS_FILE_VERSION, ids }, null, 2)}\n`;
-}
-
-/**
- * - `up-to-date`: the ids file has the ids of the registry
- * - `outdated`: the ids file doesn't list the same translations
- * - `duplicated-ids`: the same translations, but an id is taken by two of them
- *   (e.g. after merging branches that added different translations). Every
- *   build resolves it the same way, but the id of the translation that lost it
- *   can change with the next changes until the file is updated.
- */
-export type IdsFileState = 'up-to-date' | 'outdated' | 'duplicated-ids';
-
-export function getIdsFileState(
-  registry: TranslationRegistry,
-  stableIds: StableIds,
-): IdsFileState {
-  const ids = registry.getIds();
-
-  if (ids.size !== stableIds.size) return 'outdated';
-
-  let state: IdsFileState = 'up-to-date';
-
-  for (const [registryKey, id] of stableIds) {
-    const registryId = ids.get(registryKey);
-    if (registryId === undefined) return 'outdated';
-    if (registryId !== id) state = 'duplicated-ids';
-  }
-
-  return state;
 }
 
 function getNonEmptyString(value: unknown): string | null {
@@ -800,13 +652,10 @@ export function compileLocale(
   }
 
   return registry.keys.map((key) =>
-    key ?
-      compileTranslation(
-        key,
-        Object.hasOwn(locale, key.hash) ? locale[key.hash] : undefined,
-      )
-      // free ids are never used by the compiled calls
-    : 0,
+    compileTranslation(
+      key,
+      Object.hasOwn(locale, key.hash) ? locale[key.hash] : undefined,
+    ),
   );
 }
 

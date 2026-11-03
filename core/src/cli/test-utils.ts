@@ -125,17 +125,11 @@ export function createMockLog(): MockLog {
 export function createCliTestContext(fixture: {
   src: VirtualFileTree;
   config: VirtualFileTree;
-  /**
-   * Content of the ids file passed with `--ids-file`, `null` passes a file
-   * that doesn't exist yet
-   */
-  idsFile?: string | null;
   /** Source of a monorepo package, scanned as a second `--src-dir` */
   packageSrc?: VirtualFileTree;
 }) {
   const srcDir = '/virtual/src';
   const configDir = '/virtual/config';
-  const idsFilePath = '/virtual/i18n-ids.json';
   const packageSrcDir = '/virtual/packages/ui/src';
 
   const { fs: srcFs, getFile: getSrcFile } = createVirtualFs(
@@ -147,10 +141,6 @@ export function createCliTestContext(fixture: {
     fixture.config,
   );
   const log = createMockLog();
-
-  if (typeof fixture.idsFile === 'string') {
-    configFs.writeFileSync(idsFilePath, fixture.idsFile);
-  }
 
   if (fixture.packageSrc) {
     const packageFiles = new Map<string, string>();
@@ -214,7 +204,6 @@ export function createCliTestContext(fixture: {
       log,
       rules: options?.rules,
       maxTranslationIdSize: options?.maxTranslationIdSize,
-      idsFile: fixture.idsFile === undefined ? undefined : idsFilePath,
     });
 
     return {
@@ -235,11 +224,6 @@ export function createCliTestContext(fixture: {
     getSrcFile,
     getConfigFileRaw(filename: string): string | undefined {
       return getConfigFile(filename);
-    },
-    getIdsFile(): string | undefined {
-      return configFs.existsSync(idsFilePath) ?
-          configFs.readFileSync(idsFilePath, 'utf-8')
-        : undefined;
     },
   };
 }

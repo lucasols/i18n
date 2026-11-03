@@ -89,19 +89,3 @@ test('--src-dir can be repeated', { timeout: 30_000 }, async () => {
   expect(result.output).toContain('✅ pt.json translations are up to date');
   expect(result.exitCode).toBe(0);
 });
-
-test('--ids-file is rejected', { timeout: 30_000 }, async () => {
-  const result = await runCli([
-    '--config-dir',
-    'locales',
-    '--src-dir',
-    'src',
-    '--ids-file',
-    'i18n-ids.json',
-  ]);
-
-  expect(result.exitCode).toBe(1);
-  expect(result.output).toContain(
-    '--ids-file is only supported by the @ls-stack/i18n CLI',
-  );
-});

@@ -110,8 +110,6 @@ function hasOnlyPrimitiveInterpolations(template: ts.TemplateLiteral): boolean {
 export function getI18nUsagesInCode(
   fileName: string,
   code: string,
-  /** Already parsed `code`, avoids parsing it again */
-  parsedSourceFile?: ts.SourceFile,
 ): I18nUsagesResult {
   const checkFile = code.includes('i18n') || QUICK_CHECK_REGEX.test(code);
 
@@ -126,7 +124,7 @@ export function getI18nUsagesInCode(
     };
   }
 
-  const sourceFile = parsedSourceFile ?? parseSourceFile(fileName, code);
+  const sourceFile = parseSourceFile(fileName, code);
 
   const pluralTranslations = new Set<string>();
   const stringTranslations = new Set<string>();
