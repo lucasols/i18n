@@ -192,6 +192,77 @@ describe('locale switching', () => {
     expect(controller.getLoadedLocale()).toBe('fr');
   });
 
+  test('a replaced selection settles without waiting for its download', async () => {
+    vi.useFakeTimers();
+
+    const controller = createTestController({
+      locales: { en: { hello: 'hello' }, pt: { hello: 'olá' } },
+      loadingTimes: { en: 50, pt: 2000 },
+    });
+
+    await vi.advanceTimersByTimeAsync(50);
+
+    let ptResult: boolean | null = null;
+    void controller.setLocale('pt').then((result) => {
+      ptResult = result;
+    });
+
+    await vi.advanceTimersByTimeAsync(100);
+    await controller.setLocale('en');
+    await vi.advanceTimersByTimeAsync(0);
+
+    expect(ptResult).toBe(false);
+    expect(controller.getLoadedLocale()).toBe('en');
+  });
+
+  test('a cancelled selection resolves to false when the same locale is selected again', async () => {
+    vi.useFakeTimers();
+
+    // dynamic imports of the same chunk share the in-flight request
+    let ptImport: Promise<{ default: { hello: string } }> | null = null;
+
+    const controller = i18nitialize({
+      persistenceKey: 'test-reselect',
+      fallbackLocale: 'en',
+      locales: [
+        {
+          id: 'en',
+          loader: async () => {
+            await sleep(10);
+            return { default: { hello: 'hello' } };
+          },
+        },
+        {
+          id: 'pt',
+          loader: () =>
+            (ptImport ??= sleep(200).then(() => ({
+              default: { hello: 'olá' },
+            }))),
+        },
+        {
+          id: 'fr',
+          loader: async () => {
+            await sleep(200);
+            return { default: { hello: 'bonjour' } };
+          },
+        },
+      ],
+    });
+
+    await vi.advanceTimersByTimeAsync(10);
+
+    const firstPtSelection = controller.setLocale('pt');
+    const frSelection = controller.setLocale('fr');
+    const secondPtSelection = controller.setLocale('pt');
+
+    await vi.advanceTimersByTimeAsync(300);
+
+    expect(await firstPtSelection).toBe(false);
+    expect(await frSelection).toBe(false);
+    expect(await secondPtSelection).toBe(true);
+    expect(controller.getLoadedLocale()).toBe('pt');
+  });
+
   test('a cancelled failing load is not retried', async () => {
     vi.useFakeTimers();
 

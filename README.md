@@ -260,7 +260,7 @@ const controller = i18nitialize({
 
 | Method                    | Description                                                                                                                       |
 | ------------------------- | --------------------------------------------------------------------------------------------------------------------------------- |
-| `setLocale(id \| 'auto')` | Load and activate a locale. Returns `Promise<boolean>`, `false` when it used the fallback locale or a newer selection replaced it |
+| `setLocale(id \| 'auto')` | Load and activate a locale. Returns `Promise<boolean>`, `false` when it used the fallback locale or a newer selection replaced it (a replaced selection resolves right away, without waiting for its download) |
 | `getLoadedLocale()`       | Get the currently loaded locale ID                                                                                                |
 | `getRegionLocale()`       | Get the region-specific locale (e.g., `'en-US'`)                                                                                  |
 | `onLoad(callback)`        | Subscribe to locale load events. Returns unsubscribe function                                                                     |
@@ -483,6 +483,7 @@ Behavior differences from the uncompiled runtime:
 - Ids are assigned in the sorted order of the translations, so adding or removing a string changes the ids of the strings after it. The compiled calls change in most chunks, so a deploy that touches a string also changes the hash of most app chunks and returning users download them again.
 - The plugin is for app builds only, the compiled ids only match the locales of the build that compiled them, so library builds (`build.lib`, including the `build.lib` of an environment) fail. Packages of a monorepo should be compiled by the app that uses them (add their directories to `srcDir`), every `@ls-stack/i18n` import, including the ones of wrapper packages that call `i18nitialize`, is resolved from the app root so all of them share the runtime configured by the app (imports the app root can't resolve keep the normal resolution).
 - On the dev server, editing a locale file reloads the page, so the active locale is loaded again with the new translations.
+- Source files must be ES modules. CommonJS files (`.cjs`, `.cts`) are not scanned or compiled, and CommonJS modules with another extension (e.g. a `.js` file using `require` and `module.exports`) are not supported, the import added by the plugin turns them into mixed modules that vite doesn't convert.
 
 Performance: source files without `__`, `__p`, `__jsx` or `__pjsx` in their text aren't parsed, and in the files that are, only the parts that contain these names are analyzed. Source maps of the compiled files are generated on the dev server and in builds with source maps enabled (`build.sourcemap`, `build.rollupOptions.output.sourcemap` or the `build` options of an environment), builds without source maps skip them.
 
@@ -546,7 +547,7 @@ ls-stack-i18n --config-dir ./locales --src-dir ./src --default en
 ls-stack-i18n --config-dir ./locales --src-dir ./src --default en --fix
 ```
 
-The CLI scans the same files compiled by the vite plugin: `.ts`, `.tsx`, `.js`, `.jsx`, `.mts`, `.cts`, `.mjs` and `.cjs`, excluding `.d.ts`, `.d.mts` and `.d.cts` declaration files.
+The CLI scans the same files compiled by the vite plugin: `.ts`, `.tsx`, `.js`, `.jsx`, `.mts` and `.mjs`, excluding `.d.ts` and `.d.mts` declaration files. The library is ESM only, CommonJS files (`.cjs`, `.cts`) are not scanned.
 
 ### Options
 

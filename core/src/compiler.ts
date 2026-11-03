@@ -13,6 +13,8 @@ export const RUNTIME_MODULE = '@ls-stack/i18n';
 
 const LOCAL_PREFIX = '__i18n';
 
+const LINE_FEED = 10;
+
 /** Matches code that may contain translation calls */
 export { QUICK_CHECK_REGEX } from './scriptKind';
 
@@ -507,11 +509,12 @@ export function analyzeTranslations(
 
   if (calls.length === 0) return emptyAnalysis;
 
-  // the runtime import must come after a hashbang and the directives
+  // the runtime import must come after a hashbang and the directives, the
+  // calls come after the hashbang line so it ends with a line break
   let insertPos = 0;
   if (code.startsWith('#!')) {
     const lineEnd = code.indexOf('\n');
-    insertPos = lineEnd === -1 ? code.length : lineEnd;
+    insertPos = lineEnd === -1 ? code.length : lineEnd + 1;
   }
 
   for (const statement of sourceFile.statements) {
@@ -712,6 +715,21 @@ export type TransformOptions = {
 };
 
 /**
+ * Line breaks of the replaced code, kept in the compiled call so the lines
+ * after a multiline translation keep their numbers in builds without source
+ * maps (rollup assumes the positions didn't change)
+ */
+function getLineBreaks(code: string, start: number, end: number): string {
+  let lineBreaks = '';
+
+  for (let i = start; i < end; i++) {
+    if (code.charCodeAt(i) === LINE_FEED) lineBreaks += '\n';
+  }
+
+  return lineBreaks;
+}
+
+/**
  * Replaces the tagged template calls with id based calls, e.g.
  * `` __`Hello ${name}` `` → `__i18n__t(3, name)`
  */
@@ -747,12 +765,20 @@ export function transformTranslations({
 
     for (const range of preserved) {
       text += range.wrap ? ', (' : ', ';
-      s.overwrite(cursor, range.start, text);
+      s.overwrite(
+        cursor,
+        range.start,
+        text + getLineBreaks(code, cursor, range.start),
+      );
       cursor = range.end;
       text = range.wrap ? ')' : '';
     }
 
-    s.overwrite(cursor, call.end, `${text})`);
+    s.overwrite(
+      cursor,
+      call.end,
+      `${text}${getLineBreaks(code, cursor, call.end)})`,
+    );
   }
 
   const specifiers = [...usedFns].map((fn) => `${fn} as ${localPrefix}${fn}`);
@@ -769,10 +795,13 @@ export function transformTranslations({
     header += `${localPrefix}__registerDevFallbacks(${JSON.stringify([...fallbacks])});`;
   }
 
-  s.prependLeft(
-    analysis.insertPos,
-    analysis.insertPos === 0 ? `${header}\n` : `\n${header}`,
-  );
+  // the header is added to an existing line, so the lines keep their numbers
+  // in builds without source maps
+  const charBefore = code[analysis.insertPos - 1];
+  const needsSemicolon =
+    charBefore !== undefined && charBefore !== '\n' && charBefore !== ';';
+
+  s.prependLeft(analysis.insertPos, needsSemicolon ? `;${header}` : header);
 
   return {
     code: s.toString(),

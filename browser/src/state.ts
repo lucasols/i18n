@@ -228,6 +228,12 @@ export function registerClearIntlCache(fn: () => void): void {
   clearIntlCacheFn = fn;
 }
 
+function whenAborted(signal: AbortSignal): Promise<undefined> {
+  return new Promise((resolve) => {
+    signal.addEventListener('abort', () => resolve(undefined), { once: true });
+  });
+}
+
 function cancelPendingLoad(): void {
   loadController?.abort();
   loadController = null;
@@ -269,13 +275,18 @@ export async function setLocale(localeId: string): Promise<void> {
 
   const doLoad = async () => {
     try {
-      const loadedTranslations = await retryOnError(
-        async () => (await localeConfig.loader()).default,
-        retryAttempts,
-        { delayBetweenRetriesMs: retryDelay, signal: controller.signal },
-      );
+      // a replaced selection settles right away instead of waiting for its
+      // obsolete download
+      const loadedTranslations = await Promise.race([
+        retryOnError(
+          async () => (await localeConfig.loader()).default,
+          retryAttempts,
+          { delayBetweenRetriesMs: retryDelay, signal: controller.signal },
+        ),
+        whenAborted(controller.signal),
+      ]);
 
-      if (controller.signal.aborted) {
+      if (controller.signal.aborted || loadedTranslations === undefined) {
         return;
       }
 

@@ -38,7 +38,7 @@ const VIRTUAL_LOCALE_PREFIX = '\0ls-stack-i18n-locale/';
 // handlers keep their own checks for older versions
 const VIRTUAL_LOCALE_ID_REGEX = /^\0ls-stack-i18n-locale\//;
 const RUNTIME_MODULE_REGEX = /^@ls-stack\/i18n$/;
-const SOURCE_ID_REGEX = /\.[cm]?[jt]sx?(?:$|\?)/;
+const SOURCE_ID_REGEX = /\.m?[jt]sx?(?:$|\?)/;
 const JSON_ID_REGEX = /\.json(?:$|\?)/;
 
 function removeQuery(id: string): string {
@@ -274,9 +274,9 @@ export function i18nVitePlugin({
   let srcPaths: string[] = [];
   let localesPaths: string[] = [];
   /** Real paths of symlinked locale files and their locale names */
-  const localeRealPaths = new Map<string, string>();
+  let localeRealPaths = new Map<string, string>();
   /** Names of the locale files in localesDir, the only ids the plugin loads */
-  const localeNames = new Set<string>();
+  let localeNames = new Set<string>();
   let devServer: ViteDevServer | null = null;
   let registry: TranslationRegistry | null = null;
   let registryPromise: Promise<TranslationRegistry> | null = null;
@@ -291,30 +291,35 @@ export function i18nVitePlugin({
   const loadedLocaleIds = new Set<string>();
   let hasCompiledCalls = false;
 
+  /**
+   * The locale sets are replaced only after the directory is read, so a locale
+   * load that runs during a rescan still sees the previous locales
+   */
   async function scanLocaleFiles(): Promise<void> {
-    localeRealPaths.clear();
-    localeNames.clear();
+    const nextRealPaths = new Map<string, string>();
+    const nextNames = new Set<string>();
 
-    let entries: string[];
+    let entries: string[] = [];
     try {
       entries = await readdir(localesPath);
     } catch (error) {
-      if (isMissingFileError(error)) return;
-      throw error;
+      if (!isMissingFileError(error)) throw error;
     }
 
     for (const entry of entries) {
       if (!entry.endsWith('.json')) continue;
 
-      localeNames.add(path.posix.basename(entry, '.json'));
+      const localeName = path.posix.basename(entry, '.json');
+      nextNames.add(localeName);
 
       const file = `${localesPath}/${entry}`;
       const realPath = getRealPath(file);
 
-      if (realPath !== file) {
-        localeRealPaths.set(realPath, path.posix.basename(entry, '.json'));
-      }
+      if (realPath !== file) nextRealPaths.set(realPath, localeName);
     }
+
+    localeRealPaths = nextRealPaths;
+    localeNames = nextNames;
   }
 
   async function scanSourceDir(

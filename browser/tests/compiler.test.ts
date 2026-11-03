@@ -428,17 +428,18 @@ describe('analyzeTranslations', () => {
     ]);
   });
 
-  test('declaration files are not translation sources', () => {
+  test('declaration and CommonJS files are not translation sources', () => {
     expect(
       [
         'src/Inbox.tsx',
         'src/utils.mts',
+        'src/format.mjs',
         'src/legacy.cjs',
+        'src/config.cts',
         'src/env.d.ts',
         'src/env.d.mts',
-        'src/env.d.cts',
       ].filter((file) => isTranslationSourceFile(file)),
-    ).toEqual(['src/Inbox.tsx', 'src/utils.mts', 'src/legacy.cjs']);
+    ).toEqual(['src/Inbox.tsx', 'src/utils.mts', 'src/format.mjs']);
   });
 });
 
@@ -453,7 +454,7 @@ describe('transformTranslations', () => {
     );
 
     expect(code?.split('\n')[0]).toBe(
-      "import { __t as __i18n1__t } from '@ls-stack/i18n';",
+      "import { __t as __i18n1__t } from '@ls-stack/i18n';const __i18\\u006e__t = 42;",
     );
     expect(code).toContain('export const label = __i18n1__t(0);');
   });
@@ -472,8 +473,7 @@ describe('transformTranslations', () => {
 
     expect(code).toBe(
       [
-        `import { __t as __i18n__t, __tp as __i18n__tp, __tjsx as __i18n__tjsx, __tpjsx as __i18n__tpjsx } from '@ls-stack/i18n';`,
-        `import { __, __jsx, __p, __pjsx } from '@ls-stack/i18n';`,
+        `import { __t as __i18n__t, __tp as __i18n__tp, __tjsx as __i18n__tjsx, __tpjsx as __i18n__tpjsx } from '@ls-stack/i18n';import { __, __jsx, __p, __pjsx } from '@ls-stack/i18n';`,
         `export const title = __i18n__t(2);`,
         `export const welcome = (name: string) => __i18n__t(1, name);`,
         `export const unread = (count: number) => __i18n__tp(4, count);`,
@@ -511,7 +511,7 @@ describe('transformTranslations', () => {
     );
 
     expect(code).toBe(
-      `'use client';\nimport { __t as __i18n__t } from '@ls-stack/i18n';\nexport const label = __i18n__t(0);`,
+      `'use client';import { __t as __i18n__t } from '@ls-stack/i18n';\nexport const label = __i18n__t(0);`,
     );
   });
 
@@ -522,7 +522,7 @@ describe('transformTranslations', () => {
     );
 
     expect(code).toBe(
-      `#!/usr/bin/env node\n'use strict';\nimport { __t as __i18n__t } from '@ls-stack/i18n';\nconsole.info(__i18n__t(0));`,
+      `#!/usr/bin/env node\n'use strict';import { __t as __i18n__t } from '@ls-stack/i18n';\nconsole.info(__i18n__t(0));`,
     );
 
     const { code: withoutDirectives } = compileSource(
@@ -531,7 +531,42 @@ describe('transformTranslations', () => {
     );
 
     expect(withoutDirectives).toBe(
-      `#!/usr/bin/env node\nimport { __t as __i18n__t } from '@ls-stack/i18n';\nconsole.info(__i18n__t(0));`,
+      `#!/usr/bin/env node\nimport { __t as __i18n__t } from '@ls-stack/i18n';console.info(__i18n__t(0));`,
+    );
+  });
+
+  test('inserts the runtime import after a directive without a semicolon', () => {
+    const { code } = compileSource(
+      `'use client'\nexport const label = __\`Saved\`;`,
+    );
+
+    expect(code).toBe(
+      `'use client';import { __t as __i18n__t } from '@ls-stack/i18n';\nexport const label = __i18n__t(0);`,
+    );
+  });
+
+  test('keeps the line numbers of the code, multiline translations included', () => {
+    const source = [
+      `'use client';`,
+      `export function getEmptyInbox(name: string, count: number) {`,
+      `  const title = __\`You have no messages,`,
+      `    \${name}\`;`,
+      `  const hint = __p(count)\`# archived conversations`,
+      `    can be restored\`;`,
+      `  return { title, hint, missing: getMissingLabel() };`,
+      `}`,
+    ].join('\n');
+
+    const { code } = compileSource(source, { sourcemap: false });
+    const lines = code?.split('\n') ?? [];
+
+    expect(lines).toHaveLength(8);
+    expect(lines[2]).toBe('  const title = __i18n__t(1, ');
+    expect(lines[3]).toBe('name);');
+    expect(lines[4]).toBe('  const hint = __i18n__tp(0, count');
+    expect(lines[5]).toBe(');');
+    expect(lines[6]).toBe(
+      '  return { title, hint, missing: getMissingLabel() };',
     );
   });
 
@@ -542,8 +577,7 @@ describe('transformTranslations', () => {
 
     expect(code).toBe(
       [
-        `import { __t as __i18n1__t } from '@ls-stack/i18n';`,
-        'const __i18n__t = 1;',
+        `import { __t as __i18n1__t } from '@ls-stack/i18n';const __i18n__t = 1;`,
         'export const label = __i18n1__t(0);',
       ].join('\n'),
     );
@@ -560,7 +594,7 @@ describe('transformTranslations', () => {
     );
 
     expect(code?.split('\n')[0]).toBe(
-      `import { __t as __i18n__t, __registerDevFallbacks as __i18n__registerDevFallbacks } from '@ls-stack/i18n';__i18n__registerDevFallbacks([[1,"Hello {1}, welcome back!"],[0,0]]);`,
+      `import { __t as __i18n__t, __registerDevFallbacks as __i18n__registerDevFallbacks } from '@ls-stack/i18n';__i18n__registerDevFallbacks([[1,"Hello {1}, welcome back!"],[0,0]]);const welcome = __i18n__t(1, name);`,
     );
   });
 

@@ -858,6 +858,45 @@ describe('vite build of a copy of the app', { timeout: 30_000 }, () => {
     );
   });
 
+  test('build errors point to the original line without source maps', async () => {
+    await withFixtureCopy(async (copyRoot) => {
+      await writeFile(
+        path.join(copyRoot, 'src/legal.ts'),
+        [
+          `'use client';`,
+          `import { __ } from '../../../../src/main';`,
+          ``,
+          `export function getTermsOfService() {`,
+          `  return __\`$terms_of_service\`;`,
+          `}`,
+          ``,
+          `export function getExportLabel() {`,
+          `  return __\`Export the`,
+          `    conversation`,
+          `    as PDF\`;`,
+          `}`,
+          ``,
+          `import { getArchiveLabel } from './chat/chatMenu';`,
+          `export const archiveLabel = getArchiveLabel;`,
+        ].join('\n'),
+      );
+
+      const buildError: unknown = await build({
+        ...getViteConfig(copyRoot),
+        build: getBuildOptions(copyRoot),
+      }).then(
+        () => null,
+        (error: unknown) => error,
+      );
+
+      expect(buildError).toBeInstanceOf(Error);
+      expect(buildError instanceof Error && buildError.message).toContain(
+        '"getArchiveLabel" is not exported',
+      );
+      expect(buildError).toMatchObject({ loc: { line: 14 } });
+    });
+  });
+
   test('fails the build when localesDir has no locale files', async () => {
     await expect(
       build({
