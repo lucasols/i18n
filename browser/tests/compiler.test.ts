@@ -9,7 +9,11 @@ import { describe, expect, test } from 'vitest';
 
 function compileSource(
   code: string,
-  { fileName = '/app/src/Inbox.tsx', devFallbacks = false } = {},
+  {
+    fileName = '/app/src/Inbox.tsx',
+    devFallbacks = false,
+    sourcemap = true,
+  } = {},
 ) {
   const analysis = analyzeTranslations(fileName, code);
   const registry = TranslationRegistry.fromKeys(analysis.calls);
@@ -18,6 +22,7 @@ function compileSource(
     code,
     analysis,
     devFallbacks,
+    sourcemap,
     getId: (call) => {
       const id = registry.getId(call.hash, call.plural);
       if (id === undefined) throw new Error(`Missing id for ${call.hash}`);
@@ -320,6 +325,37 @@ describe('analyzeTranslations', () => {
       ),
     ).toEqual({ calls: [], insertPos: 0 });
   });
+
+  test('names in comments and strings do not change the result', () => {
+    const { calls } = analyzeTranslations(
+      '/app/src/Settings.tsx',
+      `
+        // __ is replaced by the vite plugin
+        const docs = 'use __p for plurals';
+        export function Settings() {
+          /* __jsx renders elements */
+          return [docs, __\`Settings\`];
+        }
+      `,
+    );
+
+    expect(calls.map((call) => call.hash)).toEqual(['Settings']);
+  });
+
+  test('declarations spelled with unicode escapes still shadow the translation functions', () => {
+    const { calls } = analyzeTranslations(
+      '/app/src/legacy.ts',
+      `
+        export function legacyLabel(i18n: I18n) {
+          const \\u005f_ = i18n.translate;
+          return __\`Legacy\`;
+        }
+        export const title = __\`Title\`;
+      `,
+    );
+
+    expect(calls.map((call) => call.hash)).toEqual(['Title']);
+  });
 });
 
 describe('transformTranslations', () => {
@@ -434,6 +470,21 @@ describe('transformTranslations', () => {
 
     expect(map?.sources).toEqual(['/app/src/Inbox.tsx']);
     expect(map?.sourcesContent).toEqual(['export const label = __`Saved`;']);
+  });
+
+  test('skips the source map when it is disabled, the code is the same', () => {
+    const source = [
+      'export function getInboxLabels(count: number, name: string) {',
+      '  return [__`Inbox`, __p(count)`# unread messages from ${name}`];',
+      '}',
+    ].join('\n');
+
+    const withMap = compileSource(source);
+    const withoutMap = compileSource(source, { sourcemap: false });
+
+    expect(withoutMap.map).toBeNull();
+    expect(withoutMap.code).toBe(withMap.code);
+    expect(withMap.map).not.toBeNull();
   });
 });
 

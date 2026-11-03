@@ -194,6 +194,8 @@ export function i18nVitePlugin({
   srcDir = 'src',
 }: I18nVitePluginOptions): Plugin {
   let isBuild = false;
+  /** The dev server always uses source maps, builds only when enabled */
+  let generateSourcemaps = true;
   let preserveSymlinks = false;
   /** Scanned source directories */
   let srcRoots: string[] = [];
@@ -391,6 +393,7 @@ export function i18nVitePlugin({
 
     configResolved(config) {
       isBuild = config.command === 'build';
+      generateSourcemaps = !isBuild || config.build.sourcemap !== false;
 
       if (isBuild && config.build.lib) {
         throw new Error(
@@ -590,6 +593,7 @@ export function i18nVitePlugin({
           code,
           analysis,
           devFallbacks: !isBuild,
+          sourcemap: generateSourcemaps,
           getId: (call) => {
             const translationId = currentRegistry.getId(call.hash, call.plural);
             if (translationId !== undefined) return translationId;

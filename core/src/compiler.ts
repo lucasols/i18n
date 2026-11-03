@@ -324,6 +324,47 @@ function getDeclarationScope(
   return findScope(ancestors, parentIndex, isBlockScope);
 }
 
+const NAME_OCCURRENCE_REGEX = new RegExp(QUICK_CHECK_REGEX.source, 'g');
+
+/**
+ * Sorted positions of the translation function names in the code, `null` if
+ * there are none. Unicode escapes can spell a name without matching the
+ * regex (e.g. `__`), so code that has them is fully analyzed (`'all'`)
+ * once it has a plain name, the files without one are skipped like before.
+ */
+function findNameOccurrences(code: string): number[] | 'all' | null {
+  const occurrences: number[] = [];
+
+  NAME_OCCURRENCE_REGEX.lastIndex = 0;
+  let match = NAME_OCCURRENCE_REGEX.exec(code);
+
+  while (match) {
+    occurrences.push(match.index);
+    match = NAME_OCCURRENCE_REGEX.exec(code);
+  }
+
+  if (occurrences.length === 0) return null;
+
+  return code.includes('\\u') ? 'all' : occurrences;
+}
+
+/** Whether a sorted occurrence is inside the node text (including its trivia) */
+function hasOccurrenceIn(occurrences: number[], node: ts.Node): boolean {
+  let low = 0;
+  let high = occurrences.length;
+
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    const occurrence = occurrences[mid];
+
+    if (occurrence !== undefined && occurrence < node.pos) low = mid + 1;
+    else high = mid;
+  }
+
+  const first = occurrences[low];
+  return first !== undefined && first < node.end;
+}
+
 /**
  * Finds the `__`, `__p`, `__jsx` and `__pjsx` tagged template calls in the
  * source code. Only direct identifier calls are considered, member calls like
@@ -334,12 +375,20 @@ export function analyzeTranslations(
   fileName: string,
   code: string,
 ): TranslationAnalysis {
-  if (!QUICK_CHECK_REGEX.test(code)) return emptyAnalysis;
+  const foundOccurrences = findNameOccurrences(code);
+
+  if (foundOccurrences === null) return emptyAnalysis;
+
+  const occurrences: number[] | 'all' = foundOccurrences;
 
   const sourceFile = ts.createSourceFile(
     fileName,
     code,
-    ts.ScriptTarget.Latest,
+    {
+      languageVersion: ts.ScriptTarget.Latest,
+      // the analysis never reads JSDoc, skipping it makes the parse faster
+      jsDocParsingMode: ts.JSDocParsingMode.ParseNone,
+    },
     false,
     getScriptKind(fileName),
   );
@@ -348,6 +397,18 @@ export function analyzeTranslations(
   /** Scope nodes and the translation function names they declare */
   const shadowingScopes = new Map<ts.Node, string[]>();
   const ancestors: ts.Node[] = [];
+
+  /**
+   * Calls and shadowing declarations contain one of the names in their text,
+   * so the subtrees without an occurrence (most of the file) are skipped
+   */
+  function mayContainName(node: ts.Node): boolean {
+    return occurrences === 'all' || hasOccurrenceIn(occurrences, node);
+  }
+
+  function collectChild(child: ts.Node): void {
+    if (mayContainName(child)) collect(child);
+  }
 
   function collect(node: ts.Node): void {
     if (ts.isTaggedTemplateExpression(node)) {
@@ -372,7 +433,7 @@ export function analyzeTranslations(
     }
 
     ancestors.push(node);
-    ts.forEachChild(node, collect);
+    ts.forEachChild(node, collectChild);
     ancestors.pop();
   }
 
@@ -406,7 +467,9 @@ export function analyzeTranslations(
       }
 
       ts.forEachChild(node, (child) => {
-        if (!enclosingScopePartsVisited.has(child)) collectUnshadowed(child);
+        if (!enclosingScopePartsVisited.has(child) && mayContainName(child)) {
+          collectUnshadowed(child);
+        }
       });
 
       if (names) {
@@ -600,6 +663,11 @@ export type TransformOptions = {
    * after the locale was loaded still render (dev server only)
    */
   devFallbacks: boolean;
+  /**
+   * Generates the source map, builds without source maps skip it since it is
+   * most of the transform time
+   */
+  sourcemap: boolean;
 };
 
 /**
@@ -612,7 +680,8 @@ export function transformTranslations({
   analysis,
   getId,
   devFallbacks,
-}: TransformOptions): { code: string; map: SourceMap } | null {
+  sourcemap,
+}: TransformOptions): { code: string; map: SourceMap | null } | null {
   if (analysis.calls.length === 0) return null;
 
   const s = new MagicString(code);
@@ -666,10 +735,13 @@ export function transformTranslations({
 
   return {
     code: s.toString(),
-    map: s.generateMap({
-      source: fileName,
-      hires: 'boundary',
-      includeContent: true,
-    }),
+    map:
+      sourcemap ?
+        s.generateMap({
+          source: fileName,
+          hires: 'boundary',
+          includeContent: true,
+        })
+      : null,
   };
 }

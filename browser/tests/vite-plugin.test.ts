@@ -557,6 +557,45 @@ describe('vite build of a copy of the app', { timeout: 30_000 }, () => {
     }
   });
 
+  test('builds with source maps point to the original translation calls', async () => {
+    const { tmpDir: copyDir, root: copyRoot } = await createFixtureCopy();
+
+    try {
+      await build({
+        ...getViteConfig(copyRoot),
+        build: { ...getBuildOptions(copyRoot), sourcemap: true },
+      });
+
+      const map: unknown = JSON.parse(
+        await readFile(path.join(copyRoot, 'dist/main.js.map'), 'utf-8'),
+      );
+
+      if (
+        typeof map !== 'object' ||
+        map === null ||
+        !('sources' in map) ||
+        !('sourcesContent' in map) ||
+        !Array.isArray(map.sources) ||
+        !Array.isArray(map.sourcesContent)
+      ) {
+        throw new Error('Invalid source map');
+      }
+
+      const chatMenuIndex = map.sources.findIndex(
+        (source) =>
+          typeof source === 'string' && source.endsWith('chat/chatMenu.tsx'),
+      );
+      const chatMenuContent: unknown = map.sourcesContent[chatMenuIndex];
+
+      expect(chatMenuIndex).not.toBe(-1);
+      expect(chatMenuContent).toContain(
+        '__p(count)`You have # unread messages`',
+      );
+    } finally {
+      await rm(copyDir, { recursive: true, force: true });
+    }
+  });
+
   test('scans multiple source directories', async () => {
     const { tmpDir: copyDir, root: copyRoot } = await createFixtureCopy();
 
