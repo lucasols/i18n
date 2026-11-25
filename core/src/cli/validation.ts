@@ -121,6 +121,17 @@ function findMarkerLine(fileContent: string): number | null {
   return null;
 }
 
+/** Line of the `""` key, which must be the last key of the locale files */
+function findEmptyKeyLine(fileContent: string): number | null {
+  const lines = fileContent.split('\n');
+  for (let i = 0; i < lines.length; i++) {
+    if (/^\s*""\s*:/.test(lines[i] ?? '')) {
+      return i + 1;
+    }
+  }
+  return null;
+}
+
 function calculateInsertPosition(totalKeys: number): number {
   if (totalKeys === 0) return 0;
   return Math.floor(Math.random() * totalKeys);
@@ -674,6 +685,12 @@ export async function validateTranslations(
 
     const localeFileHashs = Object.keys(localeTranslations);
 
+    // the `""` key is kept last so new keys are added before it, avoiding
+    // conflicts and trailing comma changes in the last line
+    const emptyKeyIndex = localeFileHashs.indexOf('');
+    const isEmptyKeyMisplaced =
+      emptyKeyIndex !== -1 && emptyKeyIndex !== localeFileHashs.length - 1;
+
     const extraHashs = new Set(localeFileHashs);
     const missingHashs = new Set<string>();
 
@@ -748,7 +765,8 @@ export async function validateTranslations(
       extraHashs.size > 0 ||
       invalidPluralTranslations.length > 0 ||
       invalidSpecialTranslations.length > 0 ||
-      incompletePluralTranslations.length > 0
+      incompletePluralTranslations.length > 0 ||
+      isEmptyKeyMisplaced
     ) {
       if (!fix) {
         hasError = true;
@@ -771,6 +789,16 @@ export async function validateTranslations(
           log.error(
             `❌ ${basename} has invalid special translations (value equals key): `,
             invalidSpecialTranslations,
+          );
+        }
+
+        if (isEmptyKeyMisplaced) {
+          const emptyKeyLine = findEmptyKeyLine(
+            fs.readFileSync(fullPath, 'utf-8'),
+          );
+          const lineInfo = emptyKeyLine ? `:${emptyKeyLine}` : '';
+          log.error(
+            `❌ ${basename}${lineInfo} has the "" key out of place, it must be the last key to avoid merge conflicts. Add new translation keys with the CLI --fix flag instead of editing the file manually, it also moves the "" key back to the end`,
           );
         }
 

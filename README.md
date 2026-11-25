@@ -574,6 +574,10 @@ The CLI scans the same files compiled by the vite plugin: `.ts`, `.tsx`, `.js`, 
 | `--warn-rule`    |       | Set a validation rule to warning (can be used multiple times)                              |
 | `--no-color`     |       | Disable colored output                                                                     |
 
+### Locale File Format
+
+`--fix` writes the locale files with an empty `"": ""` key as the last key, so new translations are always added before it and don't change the previous last line (the trailing comma), avoiding merge conflicts. The CLI reports an error when the `""` key is not the last key, e.g. when a translation is added manually after it. Add new translation keys with `--fix`, which also moves the `""` key back to the end.
+
 ### Validation Rules
 
 The CLI validates translations and reports errors for common issues. Available rules:

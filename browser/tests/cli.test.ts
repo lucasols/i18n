@@ -1060,3 +1060,78 @@ test.skipIf(isRoot || process.platform === 'win32')(
     }
   },
 );
+
+const contactFormTsx = `
+import { __ } from '@ls-stack/i18n';
+
+export function getLabels(step: number) {
+  return [__\`Company name\`, __\`Company size\`, __\`Step \${step}\`];
+}
+`;
+
+test('reports the "" key when it is not the last key', async () => {
+  const ctx = createCliTestContext({
+    src: { 'contact-form.tsx': contactFormTsx },
+    config: {
+      // e.g. a merge added a translation after the `""` key
+      'es.json': JSON.stringify(
+        {
+          'Company name': 'Nombre de la empresa',
+          'Company size': 'Tamaño de la empresa',
+          '': '',
+          'Step {1}': 'Paso {1}',
+        },
+        null,
+        2,
+      ),
+      'pt.json': JSON.stringify(
+        {
+          'Company name': 'Nome da empresa',
+          'Company size': 'Tamanho da empresa',
+          'Step {1}': 'Passo {1}',
+          '': '',
+        },
+        null,
+        2,
+      ),
+    },
+  });
+
+  const result = await ctx.validate({ defaultLocale: 'en' });
+
+  expect(result).toMatchInlineSnapshot(`
+    {
+      "errors": [
+        "❌ es.json:4 has the "" key out of place, it must be the last key to avoid merge conflicts. Add new translation keys with the CLI --fix flag instead of editing the file manually, it also moves the "" key back to the end",
+      ],
+      "hasError": true,
+      "infos": [
+        "✅ pt.json translations are up to date",
+      ],
+      "output": [
+        "✅ pt.json translations are up to date",
+        "❌ es.json:4 has the "" key out of place, it must be the last key to avoid merge conflicts. Add new translation keys with the CLI --fix flag instead of editing the file manually, it also moves the "" key back to the end",
+      ],
+    }
+  `);
+  expect(ctx.getConfigFileRaw('es.json')).toContain(
+    '"": "",\n  "Step {1}": "Paso {1}"',
+  );
+});
+
+test('a locale file without the "" key is valid', async () => {
+  const ctx = createCliTestContext({
+    src: { 'contact-form.tsx': contactFormTsx },
+    config: {
+      'pt.json': JSON.stringify({
+        'Company name': 'Nome da empresa',
+        'Company size': 'Tamanho da empresa',
+        'Step {1}': 'Passo {1}',
+      }),
+    },
+  });
+
+  const result = await ctx.validate({ defaultLocale: 'en' });
+
+  expect(result.hasError).toBe(false);
+});

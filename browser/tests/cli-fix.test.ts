@@ -830,3 +830,57 @@ test('different branches adding different translations get different positions',
   const uniquePositions = new Set(positions);
   expect(uniquePositions.size).toBe(10);
 });
+
+test('fix moves the "" key to the end of the locale file', async () => {
+  const ctx = createCliTestContext({
+    src: {
+      'contact-form.tsx': `
+        import { __ } from '@ls-stack/i18n';
+
+        export function getLabels(step: number) {
+          return [__\`Company name\`, __\`Company size\`, __\`Step \${step}\`];
+        }
+      `,
+    },
+    config: {
+      // e.g. a translation added manually after the `""` key
+      'es.json': JSON.stringify(
+        {
+          'Company name': 'Nombre de la empresa',
+          'Company size': 'Tamaño de la empresa',
+          '': '',
+          'Step {1}': 'Paso {1}',
+        },
+        null,
+        2,
+      ),
+    },
+  });
+
+  const result = await ctx.validate({ fix: true, defaultLocale: 'en' });
+
+  expect(result).toMatchInlineSnapshot(`
+    {
+      "errors": [],
+      "hasError": false,
+      "infos": [
+        "✅ es.json translations fixed",
+      ],
+      "output": [
+        "✅ es.json translations fixed",
+      ],
+    }
+  `);
+  expect(ctx.getConfigFileRaw('es.json')).toMatchInlineSnapshot(`
+    "{
+      "Company name": "Nombre de la empresa",
+      "Company size": "Tamaño de la empresa",
+      "Step {1}": "Paso {1}",
+      "": ""
+    }"
+  `);
+
+  const secondRun = await ctx.validate({ defaultLocale: 'en' });
+
+  expect(secondRun.hasError).toBe(false);
+});
